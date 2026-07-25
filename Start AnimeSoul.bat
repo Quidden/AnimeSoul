@@ -22,6 +22,7 @@ if not exist "node_modules\.bin\vinext.cmd" (
 )
 
 echo Starting AnimeSoul at http://localhost:3001/
+start "AnimeSoul Storage" /min cmd /c "cd /d ""%~dp0"" && node local-storage-server.mjs"
 start "AnimeSoul Server" /min cmd /c "cd /d ""%~dp0"" && npm.cmd run dev -- --port 3001"
 timeout /t 6 /nobreak >nul
 start "" "http://localhost:3001/"
