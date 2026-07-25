@@ -29,9 +29,12 @@ yarn-error.log*
 .pnpm-debug.log*
 .dev-*.log
 /.npm-cache/
+.local-dev.log
+/release-work/
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel

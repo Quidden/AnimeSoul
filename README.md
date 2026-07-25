@@ -1,98 +1,87 @@
-# vinext-starter
+# AnimeSoul
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Локальная аниме-библиотека с каталогом YummyAnime, внешними видеоплеерами, прогрессом просмотра и пользовательскими коллекциями. Видео не сохраняются на компьютере: приложение получает метаданные и ссылки на встроенные плееры через API.
 
-## Prerequisites
+## Основные возможности
 
-- Node.js `>=22.13.0`
+- Каталог с обложками, описаниями, жанрами, рейтингами и поисковыми подсказками.
+- Сезоны, серии, русские озвучки и выбор источника воспроизведения.
+- Продолжение с сохранённой серии и момента просмотра.
+- Прогресс каждой серии, сезона, тайтла и папки.
+- Избранное и пользовательские папки с заметками и ручной сортировкой.
+- Отслеживание новых серий для всех или выбранных озвучек.
+- Автопереключение серии и пропуск опенинга для совместимых плееров Kodik.
+- Настраиваемое расположение панели плеера.
+- Готовые и пользовательские цветовые темы.
+- Экспорт, импорт и переключение локальных профилей конфигурации.
 
-## Quick Start
+## Быстрый запуск в Windows
 
-```bash
+1. Установите [Node.js 22 или новее](https://nodejs.org/).
+2. Скачайте и распакуйте архив из каталога `releases`.
+3. Запустите `Запустить AnimeSoul.bat`.
+4. При первом запуске укажите публичный токен YummyAnime.
+
+Скрипт установит зависимости, запустит сайт и откроет `http://localhost:3001/`.
+
+## Запуск для разработки
+
+```powershell
+Copy-Item .env.example .env.local
+# Укажите публичный YummyAnime-токен в .env.local
 npm install
-npm run dev
+npm run dev -- --port 3001
+```
+
+Проверка production-сборки:
+
+```powershell
 npm run build
+npm run start
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Переменные окружения
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```dotenv
+YUMMYANIME_TOKEN=your_public_application_token
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Токен используется только серверным API-маршрутом и не попадает в браузер. Приватный токен для работы приложения не нужен.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Стек
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- TypeScript
+- React 19
+- Next.js 16 API conventions
+- vinext + Vite
+- Tailwind CSS 4
+- YummyAnime API
+- Kodik и другие iframe-плееры, предоставленные API
+- `localStorage` для локальных профилей, папок, тем и прогресса
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## Структура
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+```text
+app/
+  api/yummy/route.ts   серверный адаптер YummyAnime API
+  page.tsx             каталог, медиатека, профиль и экран просмотра
+  globals.css          темы, сетки, плеер и адаптивный интерфейс
+  layout.tsx           метаданные и корневой layout
+docs/
+  ARCHITECTURE.md      устройство проекта и точки расширения
+public/                статические ресурсы
+releases/              готовые локальные архивы
+Запустить AnimeSoul.bat
+```
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+Подробности об устройстве и расширении проекта находятся в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Useful Commands
+## Ограничения
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+- Доступность видео и озвучек определяется внешними поставщиками.
+- Управление временем, автопропуск и точный прогресс требуют поддержки `postMessage` конкретным iframe-плеером.
+- Данные пользователя локальны для браузера. Для переноса используйте экспорт конфигурации.
 
-## Learn More
+## Правовой статус
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Проект предназначен для личного прототипирования. Перед публичным распространением проверьте условия YummyAnime API, видеопровайдеров и правообладателей.

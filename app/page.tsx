@@ -1,169 +1,107 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-const shows = [
-  { id: 1, title: "Небесный рубеж", meta: "2025 · 12 серий", genre: "Фэнтези", color: "violet", progress: 63, episode: 7 },
-  { id: 2, title: "Эхо Сибуи", meta: "2024 · 24 серии", genre: "Драма", color: "blue", progress: 24, episode: 4 },
-  { id: 3, title: "Сад метеоров", meta: "2026 · 8 серий", genre: "Романтика", color: "rose", progress: 0, episode: 1 },
-  { id: 4, title: "Стальной синто", meta: "2023 · 12 серий", genre: "Экшен", color: "amber", progress: 0, episode: 1 },
-  { id: 5, title: "Последний сёгун", meta: "2025 · 16 серий", genre: "История", color: "red", progress: 0, episode: 1 },
-  { id: 6, title: "Город духов", meta: "2024 · 10 серий", genre: "Мистика", color: "cyan", progress: 0, episode: 1 },
-];
+type Anime={anime_id:number;title:string;description?:string;year?:number;season?:number;poster?:{big?:string;fullsize?:string};rating?:{average?:number};genres?:{title:string;alias:string}[];type?:{name?:string};views?:number};
+type Video={video_id:number;iframe_url:string;number:string;duration?:number;data:{dubbing:string;player:string};skips?:{opening?:{time:number;length:number}|null}};
+type EpisodeState={position:number;duration:number;percent:number;updatedAt:number};
+type AnimeProgress={episode:string;dub:string;episodes:Record<string,EpisodeState>;totalEpisodes?:number;season?:number};
+type Progress=Record<number,AnimeProgress>;
+type Folder={id:string;name:string;animeIds:number[];notes?:Record<number,string>};
+type Tracker={animeId:number;title:string;knownEpisodes:number;newEpisodes:number;dubs?:string[]};
+type ToolbarPosition="top"|"bottom"|"left"|"right";
+type Theme={name:string;accent:string;background:string};
+type SeasonGroup={number:number;entries:Anime[]};
+type ConfigSnapshot={version:number;name:string;createdAt:string;favorites:number[];folders:Folder[];progress:Progress;tracked:Tracker[];theme:Theme;toolbar:ToolbarPosition};
+type ConfigProfile={id:string;name:string;snapshot:ConfigSnapshot};
 
-type Show = (typeof shows)[number];
+const K={favorites:"animesoul:favorites",folders:"animesoul:folders",progress:"animesoul:progress-v2",tracked:"animesoul:tracked",theme:"animesoul:theme",toolbar:"animesoul:toolbar",profiles:"animesoul:profiles",activeProfile:"animesoul:active-profile"};
+const THEMES:Theme[]=[{name:"Аметист",accent:"#9a78ff",background:"#09080d"},{name:"Сакура",accent:"#f078aa",background:"#10090e"},{name:"Океан",accent:"#45b8cf",background:"#071014"},{name:"Манго",accent:"#f0a348",background:"#100d08"}];
+const read=<T,>(key:string,fallback:T):T=>{if(typeof window==="undefined")return fallback;try{return JSON.parse(localStorage.getItem(key)??"") as T}catch{return fallback}};
+const write=<T,>(key:string,value:T)=>localStorage.setItem(key,JSON.stringify(value));
 
-export default function Home() {
-  const [active, setActive] = useState<Show | null>(null);
-  const [episode, setEpisode] = useState(7);
-  const [dub, setDub] = useState("AniSoul");
-  const [autoNext, setAutoNext] = useState(true);
-  const [skipOpening, setSkipOpening] = useState(true);
-  const [progress, setProgress] = useState(63);
-  const [playing, setPlaying] = useState(false);
-  const [notice, setNotice] = useState("");
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("animesoul-progress");
-    if (saved) {
-      const data = JSON.parse(saved);
-      setEpisode(data.episode ?? 7);
-      setProgress(data.progress ?? 63);
-      setDub(data.dub ?? "AniSoul");
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("animesoul-progress", JSON.stringify({ episode, progress, dub }));
-  }, [episode, progress, dub]);
-
-  useEffect(() => {
-    if (playing) {
-      timer.current = setInterval(() => setProgress((value) => value >= 100 ? 0 : value + 0.25), 500);
-    } else if (timer.current) clearInterval(timer.current);
-    return () => { if (timer.current) clearInterval(timer.current); };
-  }, [playing]);
-
-  const openPlayer = (show: Show) => {
-    setActive(show);
-    setEpisode(show.id === 1 ? episode : show.episode);
-    setProgress(show.id === 1 ? progress : show.progress);
-    setPlaying(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const flash = (message: string) => {
-    setNotice(message);
-    setTimeout(() => setNotice(""), 2200);
-  };
-
-  if (active) {
-    return (
-      <main className="app player-page">
-        <Header onLogo={() => setActive(null)} />
-        <section className="watch-shell">
-          <button className="back" onClick={() => setActive(null)}>← К каталогу</button>
-          <div className="watch-grid">
-            <div>
-              <div className={`video-stage art-${active.color}`}>
-                <div className="ambient-orb one" />
-                <div className="ambient-orb two" />
-                <div className="video-copy">
-                  <span>ANIMESOUL ORIGINAL</span>
-                  <h2>{active.title}</h2>
-                  <p>Серия {episode} · демо-режим</p>
-                </div>
-                <button className="play-button" aria-label={playing ? "Пауза" : "Воспроизвести"} onClick={() => setPlaying(!playing)}>
-                  {playing ? "Ⅱ" : "▶"}
-                </button>
-                {skipOpening && progress > 8 && progress < 19 && (
-                  <button className="skip-btn" onClick={() => { setProgress(21); flash("Опенинг пропущен"); }}>Пропустить опенинг →</button>
-                )}
-                <div className="video-controls">
-                  <button onClick={() => setPlaying(!playing)}>{playing ? "Ⅱ" : "▶"}</button>
-                  <span className="time">14:{String(Math.round(progress)).padStart(2, "0")} / 23:48</span>
-                  <div className="seek"><i style={{ width: `${progress}%` }} /></div>
-                  <button onClick={() => flash("Громкость: 80%")}>◖))</button>
-                  <button onClick={() => flash("Качество: Авто 1080p")}>1080</button>
-                  <button onClick={() => flash("Полноэкранный режим")}>⛶</button>
-                </div>
-              </div>
-              <div className="watch-title">
-                <div><span className="eyebrow">СМОТРИТЕ СЕЙЧАС</span><h1>{active.title}</h1><p>Серия {episode}: «За линией горизонта»</p></div>
-                <button className="round-action" onClick={() => flash("Добавлено в избранное")}>♡</button>
-              </div>
-            </div>
-            <aside className="episode-panel">
-              <div className="panel-head"><div><span>СЕЗОН 1</span><h3>Серии</h3></div><span>{episode} / 12</span></div>
-              <div className="episode-list">
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => (
-                  <button key={num} className={num === episode ? "episode active" : "episode"} onClick={() => { setEpisode(num); setProgress(0); }}>
-                    <b>{num}</b><span><strong>{num === 7 ? "За линией горизонта" : ["Новый рассвет", "Знак на воде", "Незнакомый голос"][num % 3]}</strong><small>23 мин.</small></span>
-                    {num < episode && <em>✓</em>}
-                  </button>
-                ))}
-              </div>
-            </aside>
-          </div>
-          <div className="settings-bar">
-            <label><span>Озвучка</span><select value={dub} onChange={(e) => setDub(e.target.value)}><option>AniSoul</option><option>Studio Nova</option><option>Оригинал + субтитры</option></select></label>
-            <Toggle label="Пропускать опенинг" value={skipOpening} onChange={setSkipOpening} />
-            <Toggle label="Следующая серия автоматически" value={autoNext} onChange={setAutoNext} />
-            <div className="saved"><i>✓</i><span>Прогресс сохранён<br/><small>на этом устройстве</small></span></div>
-          </div>
-        </section>
-        {notice && <div className="toast">{notice}</div>}
-      </main>
-    );
-  }
-
-  return (
-    <main className="app">
-      <Header onLogo={() => {}} />
-      <section className="hero">
-        <div className="hero-glow" />
-        <div className="hero-content">
-          <span className="premiere">ПРЕМЬЕРА НЕДЕЛИ</span>
-          <h1>Истории, которые<br/>остаются <i>с тобой</i></h1>
-          <p>Твоя личная аниме-библиотека. Без рекламы, без спешки — только ты и любимые миры.</p>
-          <div className="hero-actions">
-            <button className="primary" onClick={() => openPlayer(shows[0])}>▶ Продолжить смотреть</button>
-            <button className="secondary" onClick={() => document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth" })}>Открыть каталог ↓</button>
-          </div>
-          <div className="continue-note"><span>Серия {episode} из 12</span><div><i style={{ width: `${progress}%` }} /></div><b>{Math.round(progress)}%</b></div>
-        </div>
-        <div className="hero-art"><div className="moon"/><div className="silhouette"/><span>空の境界</span></div>
-      </section>
-      <section className="library" id="catalog">
-        <div className="section-head"><div><span className="eyebrow">ТВОЯ КОЛЛЕКЦИЯ</span><h2>Продолжить просмотр</h2></div><button>Вся история →</button></div>
-        <div className="cards">
-          {shows.slice(0, 4).map((show) => <AnimeCard key={show.id} show={show} onOpen={openPlayer} />)}
-        </div>
-      </section>
-      <section className="library catalog">
-        <div className="section-head"><div><span className="eyebrow">ИССЛЕДУЙ</span><h2>Популярное сейчас</h2></div><div className="filters"><button className="selected">Все</button><button>Онгоинги</button><button>Фильмы</button></div></div>
-        <div className="cards six">
-          {shows.map((show) => <AnimeCard key={show.id} show={show} onOpen={openPlayer} compact />)}
-        </div>
-      </section>
-      <footer><button className="brand"><span>魂</span> AnimeSoul</button><p>Личная библиотека для уютных вечеров.</p><span>Прототип · 2026</span></footer>
-    </main>
-  );
+export default function Home(){
+ const[catalog,setCatalog]=useState<Anime[]>([]),[active,setActive]=useState<Anime|null>(null),[query,setQuery]=useState(""),[genre,setGenre]=useState("Все"),[offset,setOffset]=useState(0);
+ const[loading,setLoading]=useState(true),[error,setError]=useState(""),[favorites,setFavorites]=useState<number[]>([]),[folders,setFolders]=useState<Folder[]>([]),[progress,setProgress]=useState<Progress>({});
+ const[tracked,setTracked]=useState<Tracker[]>([]),[libraryOpen,setLibraryOpen]=useState(false),[folderPicker,setFolderPicker]=useState<Anime|null>(null),[openedFolder,setOpenedFolder]=useState<Folder|null>(null);
+ const[sort,setSort]=useState("rating-desc"),[yearFrom,setYearFrom]=useState(""),[yearTo,setYearTo]=useState(""),[theme,setTheme]=useState(THEMES[0]);
+ const[profiles,setProfiles]=useState<ConfigProfile[]>([]),[activeProfile,setActiveProfile]=useState("default");
+ useEffect(()=>{const loadedFavorites=read<number[]>(K.favorites,[]),loadedFolders=read<Folder[]>(K.folders,[]),loadedProgress=read<Progress>(K.progress,{}),loadedTracked=read<Tracker[]>(K.tracked,[]),loadedTheme=read<Theme>(K.theme,THEMES[0]),loadedToolbar=read<ToolbarPosition>(K.toolbar,"bottom"),active=localStorage.getItem(K.activeProfile)??"default";let loadedProfiles=read<ConfigProfile[]>(K.profiles,[]);if(active==="default"&&!loadedProfiles.some(p=>p.id==="default")){loadedProfiles=[{id:"default",name:"Основной",snapshot:{version:1,name:"Основной",createdAt:new Date().toISOString(),favorites:loadedFavorites,folders:loadedFolders,progress:loadedProgress,tracked:loadedTracked,theme:loadedTheme,toolbar:loadedToolbar}},...loadedProfiles];write(K.profiles,loadedProfiles)}setFavorites(loadedFavorites);setFolders(loadedFolders);setProgress(loadedProgress);setTracked(loadedTracked);setTheme(loadedTheme);setProfiles(loadedProfiles);setActiveProfile(active)},[]);
+ useEffect(()=>{document.documentElement.style.setProperty("--accent",theme.accent);document.documentElement.style.setProperty("--accent-soft",`${theme.accent}33`);document.documentElement.style.setProperty("--bg",theme.background);document.body.style.backgroundColor=theme.background;write(K.theme,theme)},[theme]);
+ const load=async(next=0,append=false,q=query)=>{setLoading(true);setError("");try{const r=await fetch(`/api/yummy?mode=catalog&limit=24&offset=${next}&q=${encodeURIComponent(q)}`),p=await r.json();if(!r.ok)throw Error(p.error);setCatalog(c=>append?[...c,...p.anime]:p.anime);setOffset(next)}catch(e){setError(e instanceof Error?e.message:"Ошибка каталога")}finally{setLoading(false)}};
+ useEffect(()=>{void load(0,false,"")},[]);
+ const storedIds=useMemo(()=>Array.from(new Set([...favorites,...folders.flatMap(f=>f.animeIds)])),[favorites,folders]);
+ useEffect(()=>{const missing=storedIds.filter(id=>!catalog.some(a=>a.anime_id===id));if(!missing.length)return;fetch(`/api/yummy?mode=details&ids=${missing.join(",")}`).then(r=>r.json()).then(p=>setCatalog(current=>[...current,...((p.anime??[]) as Anime[]).filter(a=>!current.some(x=>x.anime_id===a.anime_id))])).catch(()=>{})},[storedIds.join(","),catalog.length]);
+ useEffect(()=>{if(!storedIds.length)return;Promise.all(storedIds.map(async id=>{try{const r=await fetch(`/api/yummy?mode=videos&id=${id}`),p=await r.json();if(!r.ok)return null;return [id,new Set((p.videos as Video[]).map(v=>v.number)).size] as const}catch{return null}})).then(rows=>{setProgress(current=>{const next={...current};let changed=false;for(const row of rows){if(!row)continue;const[id,total]=row;if((next[id]?.totalEpisodes??0)!==total){next[id]={episode:next[id]?.episode??"1",dub:next[id]?.dub??"",season:next[id]?.season??1,episodes:next[id]?.episodes??{},totalEpisodes:total};changed=true}}if(changed)write(K.progress,next);return changed?next:current})})},[storedIds.join(",")]);
+ useEffect(()=>{tracked.forEach(async item=>{try{const r=await fetch(`/api/yummy?mode=videos&id=${item.animeId}`),p=await r.json();if(!r.ok)return;const list=(p.videos as Video[]).filter(v=>!item.dubs?.length||item.dubs.includes(v.data.dubbing));const count=new Set(list.map(v=>v.number)).size;if(count>item.knownEpisodes){setTracked(current=>{const next=current.map(x=>x.animeId===item.animeId?{...x,newEpisodes:count-item.knownEpisodes}:x);write(K.tracked,next);return next})}}catch{}})},[tracked.length]);
+ const saveFav=(v:number[])=>{setFavorites(v);write(K.favorites,v)},saveFolders=(v:Folder[])=>{setFolders(v);write(K.folders,v)},saveProgress=(v:Progress)=>{setProgress(v);write(K.progress,v)};
+ const toggleFavorite=(id:number)=>saveFav(favorites.includes(id)?favorites.filter(x=>x!==id):[...favorites,id]);
+ const createFolder=()=>{const name=prompt("Название новой папки")?.trim();if(name){const next=[...folders,{id:crypto.randomUUID(),name,animeIds:[]}];saveFolders(next);return next.at(-1)}};
+ const toggleFolder=(folder:Folder,id:number)=>saveFolders(folders.map(f=>f.id===folder.id?{...f,animeIds:f.animeIds.includes(id)?f.animeIds.filter(x=>x!==id):[...f.animeIds,id]}:f));
+ const known=(id:number)=>catalog.find(a=>a.anime_id===id);
+ const genres=useMemo(()=>["Все",...Array.from(new Set(catalog.flatMap(a=>a.genres?.map(g=>g.title)??[]))).slice(0,14)],[catalog]);
+ const visible=useMemo(()=>catalog.filter(a=>(genre==="Все"||a.genres?.some(g=>g.title===genre))&&(!yearFrom||(a.year??0)>=+yearFrom)&&(!yearTo||(a.year??9999)<=+yearTo)).sort((a,b)=>sort==="rating-desc"?(b.rating?.average??0)-(a.rating?.average??0):sort==="rating-asc"?(a.rating?.average??0)-(b.rating?.average??0):sort==="year-desc"?(b.year??0)-(a.year??0):sort==="year-asc"?(a.year??0)-(b.year??0):(b.views??0)-(a.views??0)),[catalog,genre,yearFrom,yearTo,sort]);
+ const last=useMemo(()=>Object.entries(progress).sort((a,b)=>Math.max(...Object.values(b[1].episodes).map(x=>x.updatedAt),0)-Math.max(...Object.values(a[1].episodes).map(x=>x.updatedAt),0))[0],[progress]);
+ const lastAnime=last?known(+last[0]):undefined,lastState=last?.[1];
+ const animeProgress=(p?:AnimeProgress)=>{if(!p?.totalEpisodes)return 0;const watched=Object.values(p.episodes).filter(e=>e.percent>=90).length;return Math.min(100,Math.round(watched/p.totalEpisodes*100))};
+ const folderStats=(f:Folder)=>{const total=f.animeIds.reduce((sum,id)=>sum+(progress[id]?.totalEpisodes??0),0);const watched=f.animeIds.reduce((sum,id)=>sum+new Set(Object.entries(progress[id]?.episodes??{}).filter(([,e])=>e.percent>=90).map(([key])=>key)).size,0);return{total,watched,percent:total?Math.min(100,Math.round(watched/total*100)):0}};
+ const makeSnapshot=(name:string):ConfigSnapshot=>({version:1,name,createdAt:new Date().toISOString(),favorites,folders,progress,tracked,theme,toolbar:read(K.toolbar,"bottom")});
+ const exportConfig=()=>{const profileName=profiles.find(p=>p.id===activeProfile)?.name??"Основной";const blob=new Blob([JSON.stringify(makeSnapshot(profileName),null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`AnimeSoul-${profileName.replace(/[^\p{L}\p{N}-]+/gu,"-")}.json`;a.click();URL.revokeObjectURL(url)};
+ const applySnapshot=(s:ConfigSnapshot)=>{write(K.favorites,s.favorites??[]);write(K.folders,s.folders??[]);write(K.progress,s.progress??{});write(K.tracked,s.tracked??[]);write(K.theme,s.theme??THEMES[0]);write(K.toolbar,s.toolbar??"bottom")};
+ const switchProfile=(id:string)=>{if(id===activeProfile)return;const currentName=profiles.find(p=>p.id===activeProfile)?.name??(activeProfile==="default"?"Основной":"Профиль"),savedCurrent={id:activeProfile,name:currentName,snapshot:makeSnapshot(currentName)};const updated=[...profiles.filter(p=>p.id!==activeProfile),savedCurrent];const target=updated.find(p=>p.id===id);if(!target){alert("Этот профиль не найден. Импортируй его заново.");return}write(K.profiles,updated);localStorage.setItem(K.activeProfile,id);applySnapshot(target.snapshot);location.reload()};
+ const importConfig=async(file:File)=>{try{const parsed=JSON.parse(await file.text()) as ConfigSnapshot;if(!parsed||!Array.isArray(parsed.folders)||!parsed.progress)throw Error();const name=prompt("Название импортированного профиля",parsed.name||file.name.replace(/\.json$/i,""))?.trim();if(!name)return;const currentName=profiles.find(p=>p.id===activeProfile)?.name??(activeProfile==="default"?"Основной":"Профиль"),currentProfile={id:activeProfile,name:currentName,snapshot:makeSnapshot(currentName)},profile={id:crypto.randomUUID(),name,snapshot:{...parsed,name}},next=[...profiles.filter(p=>p.id!==activeProfile),currentProfile,profile];setProfiles(next);write(K.profiles,next);if(confirm(`Профиль «${name}» загружен. Переключиться на него сейчас?`)){localStorage.setItem(K.activeProfile,profile.id);applySnapshot(profile.snapshot);location.reload()}}catch{alert("Не удалось загрузить конфигурацию AnimeSoul")}};
+ const openLibrary=()=>{setActive(null);setLibraryOpen(true);setTimeout(()=>document.getElementById("my-library")?.scrollIntoView({behavior:"smooth"}),0)};
+ if(active)return <Watch anime={active} favorite={favorites.includes(active.anime_id)} onFavorite={()=>toggleFavorite(active.anime_id)} onBack={()=>setActive(null)} onLibrary={openLibrary} saved={progress[active.anime_id]} onProgress={v=>saveProgress({...progress,[active.anime_id]:v})} onFolders={()=>setFolderPicker(active)} tracker={tracked.find(t=>t.animeId===active.anime_id)} onTrack={(count,dubs)=>{const next=[...tracked.filter(t=>t.animeId!==active.anime_id),{animeId:active.anime_id,title:active.title,knownEpisodes:count,newEpisodes:0,dubs}];setTracked(next);write(K.tracked,next)}} onUntrack={()=>{const next=tracked.filter(t=>t.animeId!==active.anime_id);setTracked(next);write(K.tracked,next)}} folderPicker={folderPicker} folders={folders} toggleFolder={toggleFolder} createFolder={createFolder} closePicker={()=>setFolderPicker(null)}/>;
+ return <main className="app"><Header query={query} setQuery={setQuery} onSearch={()=>void load(0,false,query)} onCatalog={()=>document.getElementById("catalog")?.scrollIntoView({behavior:"smooth"})} onLibrary={openLibrary} theme={theme} setTheme={setTheme} suggestions={catalog.filter(a=>query.length>1&&a.title.toLowerCase().includes(query.toLowerCase())).slice(0,6)} onSuggestion={a=>{setQuery(a.title);setActive(a)}} profiles={profiles} activeProfile={activeProfile} onSwitchProfile={switchProfile} onExport={exportConfig} onImport={importConfig}/>
+  <section className="hero dashboard-hero"><div className="hero-content"><span className="eyebrow">ПРОДОЛЖИТЬ ПРОСМОТР</span>{lastAnime&&lastState?<><h1>{lastAnime.title}</h1><p>Серия {lastState.episode} · остановились на {formatTime(lastState.episodes[lastState.episode]?.position??0)}</p><button className="primary" onClick={()=>setActive(lastAnime)}>▶ Продолжить просмотр</button></>:<><h1>Твоя коллекция.<br/><i>Твои правила.</i></h1><p>Начни смотреть аниме — последнее появится здесь.</p></>}</div>
+   <div className="hero-widgets"><div className="hero-box"><h3>♥ Избранное <span>{favorites.length}</span></h3><div className="mini-list">{favorites.slice(0,3).map(id=><button key={id} onClick={()=>known(id)&&setActive(known(id)!)}>{known(id)?.title??`Аниме #${id}`}<small>{animeProgress(progress[id])}%</small></button>)}</div></div>
+    <div className="hero-box"><h3>Папки <button onClick={createFolder}>＋</button></h3>{folders.slice(0,3).map(f=>{const s=folderStats(f);return <button className="folder-progress" key={f.id} onClick={()=>setOpenedFolder(f)}><span>{f.name}<small>{s.watched}/{s.total} серий</small></span><i><b style={{width:`${s.percent}%`}}/></i><em>{s.percent}%</em></button>})}</div>
+    <div className="hero-box alerts"><h3>Новые серии <span>{tracked.reduce((s,t)=>s+t.newEpisodes,0)}</span></h3>{tracked.filter(t=>t.newEpisodes).map(t=><button key={t.animeId} onClick={()=>known(t.animeId)&&setActive(known(t.animeId)!)}>{t.title}<b>+{t.newEpisodes}</b></button>)}{!tracked.some(t=>t.newEpisodes)&&<small>Обновлений пока нет</small>}</div></div>
+  </section>
+  <section className="library" id="my-library"><div className="section-head"><div><span className="eyebrow">МОЯ БИБЛИОТЕКА</span><h2>Папки и избранное</h2></div><button className="outline" onClick={createFolder}>＋ Новая папка</button></div>
+   <div className="collection-grid"><div className="collection-card favorites-card"><h3>♥ Избранное</h3><b>{favorites.length} тайтлов · перетащи для сортировки</b><div>{favorites.map(id=><button draggable key={id} onDragStart={e=>e.dataTransfer.setData("text/plain",String(id))} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const from=Number(e.dataTransfer.getData("text/plain"));saveFav(reorder(favorites,from,id))}} onClick={()=>known(id)&&setActive(known(id)!)}><i>⠿</i>{known(id)?.title??`Аниме #${id}`}<span>{animeProgress(progress[id])}%</span></button>)}</div></div>{folders.map(f=>{const s=folderStats(f);return <div className="collection-card" key={f.id} role="button" tabIndex={0} onClick={()=>setOpenedFolder(f)}><h3>{f.name}</h3><b>{f.animeIds.length} тайтлов · {s.watched} из {s.total} серий</b><div className="wide-progress"><i style={{width:`${s.percent}%`}}/></div><div>{f.animeIds.slice(0,4).map(id=><button key={id}>{known(id)?.title??`Аниме #${id}`}</button>)}</div></div>})}</div>
+  </section>
+  <section className="library" id="catalog"><div className="section-head"><div><span className="eyebrow">КАТАЛОГ YUMMYANIME</span><h2>{query?`Результаты: ${query}`:"Все аниме"}</h2></div></div>
+   <div className="filter-panel"><select value={sort} onChange={e=>setSort(e.target.value)}><option value="rating-desc">Рейтинг: высокий</option><option value="rating-asc">Рейтинг: низкий</option><option value="year-desc">Сначала новые</option><option value="year-asc">Сначала старые</option><option value="views">По популярности</option></select><label>Год от <input type="number" value={yearFrom} onChange={e=>setYearFrom(e.target.value)} placeholder="1990"/></label><label>до <input type="number" value={yearTo} onChange={e=>setYearTo(e.target.value)} placeholder="2026"/></label><button onClick={()=>{setYearFrom("");setYearTo("");setSort("rating-desc");setGenre("Все")}}>Сбросить</button></div>
+   <div className="genre-row">{genres.map(g=><button key={g} className={genre===g?"selected":""} onClick={()=>setGenre(g)}>{g}</button>)}</div>{error&&<div className="empty">{error}</div>}<div className="cards">{visible.map(a=><Card key={a.anime_id} anime={a} onOpen={setActive} favorite={favorites.includes(a.anime_id)} onFavorite={()=>toggleFavorite(a.anime_id)} onFolders={()=>setFolderPicker(a)} progress={progress[a.anime_id]}/>)}</div>{loading?<div className="empty">Загрузка…</div>:!query&&<button className="load-more" onClick={()=>void load(offset+24,true,"")}>Показать ещё</button>}</section>
+  <footer><Brand/><span>Видео и каталог: YummyAnime API</span><span>Все настройки хранятся локально</span></footer>
+  {folderPicker&&<FolderPicker anime={folderPicker} folders={folders} onToggle={toggleFolder} onCreate={createFolder} onClose={()=>setFolderPicker(null)}/>}
+  {openedFolder&&<FolderView folder={folders.find(f=>f.id===openedFolder.id)??openedFolder} known={known} progress={progress} onOpen={a=>{setOpenedFolder(null);setActive(a)}} onNote={(id,note)=>saveFolders(folders.map(f=>f.id===openedFolder.id?{...f,notes:{...(f.notes??{}),[id]:note}}:f))} onReorder={(from,to)=>saveFolders(folders.map(f=>f.id===openedFolder.id?{...f,animeIds:reorder(f.animeIds,from,to)}:f))} onDelete={()=>{if(confirm(`Удалить папку «${openedFolder.name}»?`)){saveFolders(folders.filter(f=>f.id!==openedFolder.id));setOpenedFolder(null)}}} onClose={()=>setOpenedFolder(null)}/>}
+  {libraryOpen&&<div className="toast">Библиотека открыта ниже</div>}</main>
 }
 
-function Header({ onLogo }: { onLogo: () => void }) {
-  return <header><button className="brand" onClick={onLogo}><span>魂</span> AnimeSoul</button><nav><a href="#catalog">Каталог</a><a href="#catalog">Моя коллекция</a><a href="#catalog">История</a></nav><div className="header-actions"><button aria-label="Поиск">⌕</button><button className="profile">DK</button></div></header>;
+function Watch({anime,favorite,onFavorite,onBack,onLibrary,saved,onProgress,onFolders,tracker,onTrack,onUntrack,folderPicker,folders,toggleFolder,createFolder,closePicker}:{anime:Anime;favorite:boolean;onFavorite:()=>void;onBack:()=>void;onLibrary:()=>void;saved?:AnimeProgress;onProgress:(v:AnimeProgress)=>void;onFolders:()=>void;tracker?:Tracker;onTrack:(n:number,d:string[])=>void;onUntrack:()=>void;folderPicker:Anime|null;folders:Folder[];toggleFolder:(f:Folder,id:number)=>void;createFolder:()=>unknown;closePicker:()=>void}){
+ const[dub,setDub]=useState(saved?.dub??""),[episode,setEpisode]=useState(saved?.episode??"1"),[player,setPlayer]=useState(""),[autoNext,setAutoNext]=useState(true),[autoSkip,setAutoSkip]=useState(false),[status,setStatus]=useState("Загружаем серии…"),[position,setPosition]=useState<ToolbarPosition>(read(K.toolbar,"bottom")), [autoPlay,setAutoPlay]=useState(false),[seasons,setSeasons]=useState<SeasonGroup[]>([{number:1,entries:[anime]}]),[selectedSeason,setSelectedSeason]=useState(saved?.season??1),[seasonVideos,setSeasonVideos]=useState<Record<number,Video[]>>({}),[trackOpen,setTrackOpen]=useState(false),[trackDubs,setTrackDubs]=useState<string[]>(tracker?.dubs??[]);
+ const iframe=useRef<HTMLIFrameElement>(null);
+ const base=useMemo(()=>anime.title.replace(/\s+\d+(?:\s*\|\s*часть\s*\d+)?$/i,"").replace(/\s*\|\s*часть\s*\d+$/i,"").trim(),[anime.title]);
+ useEffect(()=>{fetch(`/api/yummy?mode=catalog&limit=20&q=${encodeURIComponent(base)}`).then(r=>r.json()).then(p=>{const escaped=base.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");const re=new RegExp(`^${escaped}(?:\\s+(\\d+))?(?:\\s*\\|\\s*Часть\\s*(\\d+))?$`,"i");const map=new Map<number,Anime[]>();for(const a of (p.anime as Anime[]??[])){const m=a.title.match(re);if(!m)continue;const n=Number(m[1]??1);map.set(n,[...(map.get(n)??[]),a])}const groups=[...map].sort((a,b)=>a[0]-b[0]).map(([number,entries])=>({number,entries}));if(groups.length){setSeasons(groups);if(!groups.some(g=>g.number===selectedSeason))setSelectedSeason(groups[0].number)}}).catch(()=>{})},[anime.anime_id,base]);
+ const fetchVideos=async()=>{setStatus("Загружаем сезоны…");try{const loaded=await Promise.all(seasons.map(async group=>{const payloads=await Promise.all(group.entries.map(async entry=>{const r=await fetch(`/api/yummy?mode=videos&id=${entry.anime_id}`),p=await r.json();return r.ok?p.videos as Video[]:[]}));const unique=[...new Map(payloads.flat().map(v=>[v.video_id,v])).values()];return [group.number,unique] as const}));setSeasonVideos(Object.fromEntries(loaded));setStatus("")}catch{setStatus("Не удалось загрузить серии")}};
+ useEffect(()=>{void fetchVideos()},[seasons.map(s=>s.entries.map(e=>e.anime_id).join(",")).join("|")]);
+ const videos=seasonVideos[selectedSeason]??[];
+ useEffect(()=>{if(!videos.length)return;const valid=saved?.dub&&videos.some(v=>v.data.dubbing===saved.dub);const nextDub=valid?saved!.dub:videos[0].data.dubbing;setDub(nextDub);const nums=videos.filter(v=>v.data.dubbing===nextDub).map(v=>v.number);setEpisode(selectedSeason===(saved?.season??1)&&nums.includes(saved?.episode??"")?saved!.episode:nums.sort((a,b)=>+a-+b)[0]??"1");setPlayer("")},[selectedSeason,videos.length]);
+ const dubs=Array.from(new Set(videos.map(v=>v.data.dubbing))),episodes=Array.from(new Set(videos.filter(v=>v.data.dubbing===dub).map(v=>v.number))).sort((a,b)=>+a-+b),sources=videos.filter(v=>v.data.dubbing===dub&&v.number===episode),players=Array.from(new Set(sources.map(v=>v.data.player))),current=sources.find(v=>v.data.player===player)??sources.find(v=>/kodik/i.test(v.data.player))??sources[0]??videos[0],openingEnd=current?.skips?.opening?current.skips.opening.time+current.skips.opening.length:0;
+ useEffect(()=>{if(!sources.length)return;const preferred=sources.find(v=>/kodik/i.test(v.data.player))?.data.player??sources[0].data.player;if(!sources.some(v=>v.data.player===player))setPlayer(preferred)},[dub,episode,sources.length]);
+ const episodeKey=`${selectedSeason}:${episode}`;
+ const totalAcrossSeasons=Object.values(seasonVideos).reduce((sum,list)=>sum+new Set(list.map(v=>v.number)).size,0);
+ const save=(time:number,duration:number)=>{const percent=duration?Math.min(100,Math.round(time/duration*100)):saved?.episodes[episodeKey]?.percent??0;onProgress({episode,dub,season:selectedSeason,totalEpisodes:totalAcrossSeasons||episodes.length,episodes:{...(saved?.episodes??{}),[episodeKey]:{position:time,duration,percent,updatedAt:Date.now()}}})};
+ const command=(method:string,extra={})=>iframe.current?.contentWindow?.postMessage({key:"kodik_player_api",value:{method,...extra}},"*");
+ useEffect(()=>{const fn=(event:MessageEvent)=>{let d=event.data;try{if(typeof d==="string")d=JSON.parse(d)}catch{return}const key=d?.key??d?.type,val=d?.value??d;if(key==="kodik_player_time_update"){const time=Number(val.time??val.currentTime??val),duration=Number(val.duration??current?.duration??0);if(Number.isFinite(time)){save(time,duration);if(autoSkip&&openingEnd&&time>=current!.skips!.opening!.time&&time<openingEnd)command("seek",{seconds:openingEnd})}}if(autoNext&&(key==="kodik_player_video_ended"||key==="ended")){const next=episodes[episodes.indexOf(episode)+1];if(next){setAutoPlay(true);setEpisode(next)}}};window.addEventListener("message",fn);return()=>window.removeEventListener("message",fn)},[episode,dub,autoNext,autoSkip,openingEnd,current?.video_id,saved]);
+ const loaded=()=>{const start=saved?.episodes[episodeKey]?.position??0;setTimeout(()=>{if(start>5)command("seek",{seconds:start});if(autoPlay){command("play");setAutoPlay(false)}},700)};
+ const setToolbar=(p:ToolbarPosition)=>{setPosition(p);write(K.toolbar,p)};
+ return <main className="app"><Header query="" setQuery={()=>{}} onSearch={()=>{}} onCatalog={onBack} onLibrary={onLibrary} compact/>
+  <section className="watch-shell"><button className="back" onClick={onBack}>← Каталог</button><div className="watch-heading"><div><span className="eyebrow">СЕЗОН {selectedSeason} · СЕРИЯ {episode}</span><h1>{base}</h1></div><b>★ {anime.rating?.average?.toFixed(1)??"—"}</b></div><div className="season-tabs">{seasons.map(s=><button className={s.number===selectedSeason?"active":""} key={s.number} onClick={()=>setSelectedSeason(s.number)}>Сезон {s.number}</button>)}</div><div className={`video-layout toolbar-${position}`}><div className="player-frame"><iframe ref={iframe} key={current?.video_id} src={current?.iframe_url} onLoad={loaded} title={`${base}, серия ${episode}`} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen/>{status&&<div className="player-status">{status}</div>}</div>
+   <div className="player-toolbar"><label>Озвучка<select value={dub} onChange={e=>{setDub(e.target.value);setEpisode(videos.find(v=>v.data.dubbing===e.target.value)?.number??"1");setPlayer("")}}>{dubs.map(x=><option key={x}>{x}</option>)}</select></label><label>Серия<select value={episode} onChange={e=>{setEpisode(e.target.value);setPlayer("")}}>{episodes.map(x=><option key={x}>{x}</option>)}</select></label><label>Источник<select value={current?.data.player??player} onChange={e=>setPlayer(e.target.value)}>{players.map(x=><option key={x}>{x}</option>)}</select></label><button disabled={!openingEnd} onClick={()=>command("seek",{seconds:openingEnd})}>{openingEnd?`Пропустить опенинг → ${formatTime(openingEnd)}`:"Без таймкода"}</button><Toggle label="Автопропуск" value={autoSkip} onChange={setAutoSkip}/><Toggle label="Автосерия" value={autoNext} onChange={setAutoNext}/><label>Панель<select value={position} onChange={e=>setToolbar(e.target.value as ToolbarPosition)}><option value="bottom">Снизу</option><option value="top">Сверху</option><option value="left">Слева</option><option value="right">Справа</option></select></label></div></div>
+   <div className="watch-info"><div><div className="tags">{anime.genres?.slice(0,8).map(g=><span key={g.alias}>{g.title}</span>)}</div><p>{anime.description}</p><div className="facts"><span>{seasons.length} сезонов</span><span>{totalAcrossSeasons} серий всего</span><span>{durationRange(Object.values(seasonVideos).flat())}</span></div></div><aside><button onClick={onFavorite}>{favorite?"♥ В избранном":"♡ В избранное"}</button><button onClick={onFolders}>＋ Добавить в папку</button><button onClick={()=>setTrackOpen(!trackOpen)}>{tracker?"◉ Настроить отслеживание":"◎ Следить за сериями"}</button>{trackOpen&&<div className="track-settings"><b>Озвучки</b><label><input type="checkbox" checked={!trackDubs.length} onChange={()=>setTrackDubs([])}/> Все озвучки</label>{dubs.map(d=><label key={d}><input type="checkbox" checked={trackDubs.includes(d)} onChange={()=>setTrackDubs(v=>v.includes(d)?v.filter(x=>x!==d):[...v,d])}/>{d}</label>)}<button onClick={()=>{onTrack(totalAcrossSeasons,trackDubs);setTrackOpen(false)}}>Сохранить</button>{tracker&&<button className="danger" onClick={onUntrack}>Отключить</button>}</div>}<button className="danger" onClick={()=>{if(confirm("Обнулить весь прогресс этого аниме?"))onProgress({episode:"1",dub,season:1,totalEpisodes:totalAcrossSeasons,episodes:{}})}}>↺ Обнулить прогресс</button></aside></div>
+   <div className="all-seasons">{seasons.map(group=>{const list=seasonVideos[group.number]??[],nums=Array.from(new Set(list.map(v=>v.number))).sort((a,b)=>+a-+b),watched=nums.filter(e=>(saved?.episodes[`${group.number}:${e}`]?.percent??0)>=90).length;return <section className="season-panel" key={group.number}><div><h2>Сезон {group.number}</h2><span>{watched} из {nums.length} просмотрено</span></div><div className="season-progress"><i style={{width:`${nums.length?watched/nums.length*100:0}%`}}/></div><div className="episode-grid">{nums.map(e=>{const ep=saved?.episodes[`${group.number}:${e}`];return <button className={group.number===selectedSeason&&e===episode?"active":""} key={e} onClick={()=>{setSelectedSeason(group.number);setEpisode(e)}}><b>{e}</b><span>Серия {e}<small>{ep?.percent??0}% · {formatTime(ep?.position??0)}</small></span></button>})}</div></section>})}</div>
+  </section>{folderPicker&&<FolderPicker anime={folderPicker} folders={folders} onToggle={toggleFolder} onCreate={createFolder} onClose={closePicker}/>}</main>
 }
 
-function AnimeCard({ show, onOpen, compact = false }: { show: Show; onOpen: (s: Show) => void; compact?: boolean }) {
-  return <article className={compact ? "anime-card compact" : "anime-card"} onClick={() => onOpen(show)}>
-    <div className={`poster art-${show.color}`}><div className="poster-mark">魂</div><span>{show.genre}</span><button aria-label={`Смотреть ${show.title}`}>▶</button></div>
-    <h3>{show.title}</h3><p>{show.meta}</p>
-    {show.progress > 0 && <div className="card-progress"><i style={{ width: `${show.progress}%` }}/><span>{show.progress}%</span></div>}
-  </article>;
-}
-
-function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return <label className="toggle-row"><button className={value ? "toggle on" : "toggle"} onClick={() => onChange(!value)} aria-label={label}><i /></button><span>{label}</span></label>;
-}
+function Card({anime,onOpen,favorite,onFavorite,onFolders,progress}:{anime:Anime;onOpen:(a:Anime)=>void;favorite:boolean;onFavorite:()=>void;onFolders:()=>void;progress?:AnimeProgress}){const state=progress?.episodes[`${progress.season??1}:${progress.episode}`]??Object.values(progress?.episodes??{}).sort((a,b)=>b.updatedAt-a.updatedAt)[0];return <article className="anime-card"><div className="poster" onClick={()=>onOpen(anime)}>{anime.poster?.big&&<img src={anime.poster.big} alt="" loading="lazy"/>}<span className="rating">★ {anime.rating?.average?.toFixed(1)??"—"}</span><button className="play">▶</button><div className="card-actions"><button onClick={e=>{e.stopPropagation();onFavorite()}}>{favorite?"♥":"♡"}</button><button title="Добавить в папку" onClick={e=>{e.stopPropagation();onFolders()}}>＋</button></div></div><h3 onClick={()=>onOpen(anime)}>{anime.title}</h3><p>{anime.year??"—"} · {anime.type?.name??"Аниме"} · сезон {anime.season??1}{progress?.totalEpisodes?` · ${progress.totalEpisodes} серий`:""}</p><div className="tagline">{anime.genres?.slice(0,3).map(g=><span key={g.alias}>{g.title}</span>)}</div>{state&&<div className="card-progress"><i style={{width:`${state.percent}%`}}/><small>Серия {progress!.episode} · {state.percent}%</small></div>}</article>}
+function FolderPicker({anime,folders,onToggle,onCreate,onClose}:{anime:Anime;folders:Folder[];onToggle:(f:Folder,id:number)=>void;onCreate:()=>unknown;onClose:()=>void}){return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal small" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><h2>Папки</h2><p>Куда добавить «{anime.title}»?</p><div className="folder-checks">{folders.map(f=><label key={f.id}><input type="checkbox" checked={f.animeIds.includes(anime.anime_id)} onChange={()=>onToggle(f,anime.anime_id)}/><span>{f.name}</span><b>{f.animeIds.includes(anime.anime_id)?"Добавлено":"Добавить"}</b></label>)}{!folders.length&&<p>Сначала создай папку — например, «Смотреть вечером».</p>}</div><div className="modal-actions"><button className="outline" onClick={onCreate}>＋ Новая папка</button><button className="primary" onClick={onClose}>Готово</button></div></div></div>}
+function FolderView({folder,known,progress,onOpen,onNote,onReorder,onDelete,onClose}:{folder:Folder;known:(id:number)=>Anime|undefined;progress:Progress;onOpen:(a:Anime)=>void;onNote:(id:number,note:string)=>void;onReorder:(from:number,to:number)=>void;onDelete:()=>void;onClose:()=>void}){return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal folder-view" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="folder-view-head"><div><span className="eyebrow">ПАПКА · ПЕРЕТАЩИ ДЛЯ СОРТИРОВКИ</span><h2>{folder.name}</h2></div><button className="danger outline" onClick={onDelete}>Удалить папку</button></div><div className="folder-anime-list">{folder.animeIds.map(id=>{const a=known(id),p=progress[id],state=p?.episodes[`${p.season??1}:${p.episode}`]??Object.values(p?.episodes??{}).sort((x,y)=>y.updatedAt-x.updatedAt)[0];return <article draggable onDragStart={e=>e.dataTransfer.setData("text/plain",String(id))} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();onReorder(Number(e.dataTransfer.getData("text/plain")),id)}} key={id}><span className="drag">⠿</span>{a?.poster?.big&&<img className="folder-anime-link" src={a.poster.big} alt="" onClick={()=>onOpen(a)}/>}<div><h3 className={a?"folder-anime-link":""} onClick={()=>a&&onOpen(a)}>{a?.title??`Загружаем аниме #${id}…`}</h3><p>{p?.totalEpisodes??"—"} серий · сезон {p?.season??1} · {state?.percent??0}%</p><div className="wide-progress"><i style={{width:`${state?.percent??0}%`}}/></div><textarea value={folder.notes?.[id]??""} onChange={e=>onNote(id,e.target.value)} placeholder="Своя заметка об аниме…"/></div><aside><small>Остановились: {formatTime(state?.position??0)}</small>{a&&<button className="primary" onClick={()=>onOpen(a)}>▶ Продолжить</button>}</aside></article>})}{!folder.animeIds.length&&<div className="empty">В этой папке пока нет аниме</div>}</div></div></div>}
+function Header({query,setQuery,onSearch,onCatalog,onLibrary,theme,setTheme,compact=false,suggestions=[],onSuggestion,profiles=[],activeProfile="default",onSwitchProfile,onExport,onImport}:{query:string;setQuery:(v:string)=>void;onSearch:()=>void;onCatalog:()=>void;onLibrary:()=>void;theme?:Theme;setTheme?:(t:Theme)=>void;compact?:boolean;suggestions?:Anime[];onSuggestion?:(a:Anime)=>void;profiles?:ConfigProfile[];activeProfile?:string;onSwitchProfile?:(id:string)=>void;onExport?:()=>void;onImport?:(file:File)=>void}){return <header><Brand/><nav><button onClick={onCatalog}>Каталог</button><button onClick={onLibrary}>Моя библиотека</button></nav>{!compact&&<div className="search-wrap"><form className="header-search" onSubmit={e=>{e.preventDefault();onSearch()}}><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск…"/><button>⌕</button></form>{suggestions.length>0&&<div className="suggestions">{suggestions.map(a=><button key={a.anime_id} onClick={()=>onSuggestion?.(a)}>{a.poster?.big&&<img src={a.poster.big} alt=""/>}<span>{a.title}<small>{a.year} · ★ {a.rating?.average?.toFixed(1)}</small></span></button>)}</div>}</div>}{theme&&setTheme&&<div className="theme-palette"><label title="Основной цвет"><input type="color" value={theme.background} onChange={e=>setTheme({...theme,name:"Своя",background:e.target.value})}/></label><label title="Акцентный цвет"><input type="color" value={theme.accent} onChange={e=>setTheme({...theme,name:"Своя",accent:e.target.value})}/></label>{THEMES.map(t=><button key={t.name} title={t.name} style={{background:`linear-gradient(135deg,${t.background} 50%,${t.accent} 50%)`}} onClick={()=>setTheme(t)}/>)}</div>}{!compact&&onExport&&onImport&&<div className="config-tools"><select value={activeProfile} onChange={e=>onSwitchProfile?.(e.target.value)}><option value="default">Основной</option>{profiles.filter(p=>p.id!=="default").map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button title="Выгрузить конфиг" onClick={onExport}>⇩</button><label title="Загрузить конфиг">⇧<input type="file" accept=".json,application/json" onChange={e=>{const file=e.target.files?.[0];if(file)onImport(file);e.currentTarget.value=""}}/></label></div>}</header>}
+function Brand(){return <button className="brand" onClick={()=>location.href="/"}><span>魂</span> AnimeSoul</button>}
+function Toggle({label,value,onChange}:{label:string;value:boolean;onChange:(v:boolean)=>void}){return <label className="toggle-row"><button type="button" className={value?"toggle on":"toggle"} onClick={()=>onChange(!value)}><i/></button><span>{label}</span></label>}
+function formatTime(s:number){return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`}
+function durationRange(videos:Video[]){const values=videos.map(v=>v.duration??0).filter(Boolean);if(!values.length)return "Длительность не указана";return `${formatTime(Math.min(...values))}–${formatTime(Math.max(...values))} серия`}
+function reorder(items:number[],from:number,to:number){if(from===to||!items.includes(from)||!items.includes(to))return items;const next=items.filter(id=>id!==from),index=next.indexOf(to);next.splice(index,0,from);return next}
