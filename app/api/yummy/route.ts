@@ -45,6 +45,13 @@ export async function GET(request: Request) {
       return NextResponse.json(normalize({ anime: detailPayload.response, videos: videosPayload.response ?? [] }));
     }
 
+    if (mode === "schedule") {
+      const response = await fetch(`${API}/anime/schedule`, { headers, cache: "no-store" });
+      if (!response.ok) throw new Error("schedule");
+      const payload = await response.json() as { response?: unknown[] };
+      return NextResponse.json(normalize({ schedule: payload.response ?? [] }));
+    }
+
     const limit = Math.min(Math.max(Number(params.get("limit")) || 24, 1), 48);
     const offset = Math.max(Number(params.get("offset")) || 0, 0);
     const query = params.get("q")?.trim();
