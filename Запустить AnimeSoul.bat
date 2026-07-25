@@ -1,40 +1,39 @@
 @echo off
-chcp 65001 >nul
+setlocal EnableExtensions
 cd /d "%~dp0"
+title AnimeSoul Launcher
 
 if not exist ".env.local" (
-  echo Для AnimeSoul нужен публичный токен YummyAnime.
-  echo Получить его можно в кабинете разработчика YummyAnime.
-  set /p YUMMY_TOKEN="Введите публичный токен: "
-  if "%YUMMY_TOKEN%"=="" (
-    echo Токен не указан.
-    pause
-    exit /b 1
-  )
-  >".env.local" echo YUMMYANIME_TOKEN=%YUMMY_TOKEN%
+  echo YUMMYANIME_TOKEN=1ha--f8b1x84w_75>".env.local"
+)
+
+where npm.cmd >nul 2>nul
+if errorlevel 1 (
+  echo Node.js is not installed.
+  echo Install Node.js 22 or newer from https://nodejs.org/
+  pause
+  exit /b 1
 )
 
 if not exist "node_modules" (
-  echo Первая установка AnimeSoul...
+  echo Installing AnimeSoul dependencies...
   call npm.cmd install
-  if errorlevel 1 (
-    echo Не удалось установить зависимости.
-    pause
-    exit /b 1
-  )
+  if errorlevel 1 goto :error
 )
 
 if not exist "dist" (
-  echo Сборка AnimeSoul...
+  echo Building AnimeSoul...
   call npm.cmd run build
-  if errorlevel 1 (
-    echo Не удалось собрать AnimeSoul.
-    pause
-    exit /b 1
-  )
+  if errorlevel 1 goto :error
 )
 
+echo Starting AnimeSoul at http://localhost:3001/
 start "AnimeSoul Server" /min cmd /c "cd /d ""%~dp0"" && npm.cmd run start -- --port 3001"
-timeout /t 3 /nobreak >nul
+timeout /t 4 /nobreak >nul
 start "" "http://localhost:3001/"
-exit
+exit /b 0
+
+:error
+echo AnimeSoul could not be started.
+pause
+exit /b 1
