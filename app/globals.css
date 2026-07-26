@@ -175,3 +175,4 @@ html[data-color-scheme="light"] .section-inline-actions .outline{border-color:va
 html[data-color-scheme="light"] .stats-grid article,html[data-color-scheme="light"] .statistics-panel{background:#fff;border-color:#dcd6e1}
 @media(max-width:1000px){.stats-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,1fr)}.statistics-columns{grid-template-columns:1fr}}
 @media(max-width:600px){.section-head-actions{align-items:flex-end;flex-direction:column}.collapse-toggle span{display:none}.collapse-toggle{width:38px;justify-content:center;padding:0}.section-collapse-control .collapse-toggle{width:100%;padding:12px 48px}.section-collapse-control .collapse-toggle span{display:inline}}
+.video-layout{scroll-margin-top:88px}
