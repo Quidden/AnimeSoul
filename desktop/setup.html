@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Первый запуск AnimeSoul</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#0b0911;color:#f7f3ff;font:15px/1.5 system-ui,sans-serif}
+    main{max-width:560px;margin:28px auto;padding:28px;border:1px solid #463b58;border-radius:24px;background:#14111a}
+    h1{margin:0 0 6px;font-size:28px}p{color:#aaa2b6}label{display:block;margin:22px 0 7px;font-weight:700}
+    input,select{width:100%;padding:14px 16px;border:1px solid #463b58;border-radius:12px;background:#211b29;color:#fff;font:inherit}
+    button{width:100%;margin-top:24px;padding:14px;border:0;border-radius:12px;background:#936bff;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}.hint{font-size:13px}.error{min-height:24px;color:#ff7f93;font-weight:700}
+    code{word-break:break-all;color:#c9b8ff}
+  </style>
+</head>
+<body><main>
+  <h1>Первый запуск AnimeSoul</h1>
+  <p>Эти параметры сохранятся и больше запрашиваться не будут.</p>
+  <p>
+    Огромная благодарность разработчикам YummyAnime за предоставленный API. В наше время открытый API для
+    подобных проектов встречается редко, и только благодаря их работе стало возможным создание AnimeSoul.
+    Автор проекта от всей души благодарит команду YummyAnime.
+  </p>
+  <form id="form">
+    <label for="port">Порт сайта</label>
+    <input id="port" type="number" min="1024" max="65534" value="3001" required>
+    <p class="hint">По умолчанию 3001. Следующий порт (3002) используется локальным хранилищем.</p>
+    <label for="token">Публичный ключ API YummyAnime</label>
+    <input id="token" type="password" autocomplete="off" required>
+    <p class="hint">
+      Где взять ключ: откройте
+      <a href="https://api.yani.tv/swagger" target="_blank" rel="noreferrer">официальную документацию YummyAnime API</a>,
+      в разделе <b>Introduction</b> нажмите ссылку <b>here</b>, авторизуйтесь и создайте новое приложение.
+      Скопируйте его <b>Public token</b> — приватный токен AnimeSoul не нужен.
+    </p>
+    <p class="hint">Ключ будет проверен запросом к API перед сохранением. API разрешён только для личного использования.</p>
+    <p class="hint">
+      Мы не знаем, разрешено ли безопасно распространять один публичный ключ внутри open-source проекта и
+      как общая нагрузка повлияет на его работу. Поэтому AnimeSoul не содержит общего ключа: каждый пользователь
+      создаёт собственный. При личном использовании вы можете поделиться своим ключом с несколькими друзьями,
+      принимая во внимание общую нагрузку и правила YummyAnime.
+    </p>
+    <label for="mode">Где запускать AnimeSoul</label>
+    <select id="mode">
+      <option value="desktop">Отдельное desktop-приложение</option>
+      <option value="browser">В обычном браузере</option>
+    </select>
+    <p class="hint">Позже параметры можно вручную поменять в:<br><code id="path"></code></p>
+    <div class="error" id="error"></div>
+    <button id="submit">Проверить и сохранить</button>
+  </form>
+  <script>
+    const query = new URLSearchParams(location.search);
+    document.querySelector("#path").textContent = query.get("configFile") || "animesoul.config.json";
+    document.querySelector("#port").value = query.get("defaultPort") || "3001";
+    document.querySelector("#form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = document.querySelector("#submit");
+      const error = document.querySelector("#error");
+      if (!window.animeSoulSetup?.save) {
+        error.textContent = "Этот мастер нельзя открывать как обычный HTML-файл. Запустите AnimeSoul.exe или «Запустить AnimeSoul.bat».";
+        button.disabled = false;
+        return;
+      }
+      button.disabled = true;
+      error.textContent = "Проверяем порт и ключ…";
+      try {
+        const result = await window.animeSoulSetup.save({
+          sitePort: Number(document.querySelector("#port").value),
+          yummyAnimeToken: document.querySelector("#token").value.trim(),
+          launchMode: document.querySelector("#mode").value,
+        });
+        if (!result.ok) {
+          error.textContent = result.error;
+          button.disabled = false;
+        }
+      } catch {
+        error.textContent = "Мастер потерял связь с AnimeSoul. Закройте это окно и снова запустите AnimeSoul.exe.";
+        button.disabled = false;
+      }
+    });
+    if (!window.animeSoulSetup?.save) {
+      document.querySelector("#error").textContent =
+        "Страница открыта вне AnimeSoul. Для настройки запустите AnimeSoul.exe или «Запустить AnimeSoul.bat».";
+    }
+  </script>
+</main></body></html>

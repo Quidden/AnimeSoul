@@ -35,6 +35,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+/animesoul.config.json
 
 # vercel
 .vercel
@@ -45,5 +46,10 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/desktop-dist/
+/desktop-dist-carousel/
+/desktop-release/
+/desktop-stage*/
+/release-*/
 /data/animesoul-storage.json
 /data/animesoul-storage.tmp.json
