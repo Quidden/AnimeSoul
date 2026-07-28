@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/production/node_modules
+/python-react/frontend/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -14,9 +16,9 @@
 /coverage
 
 # next.js
-/.next/
-/.vinext/
-/out/
+/production/.next/
+/production/.vinext/
+/production/out/
 
 # misc
 .DS_Store
@@ -28,28 +30,39 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .dev-*.log
-/.npm-cache/
+/production/.npm-cache/
 .local-dev.log
-/release-work/
+/production/release-work/
 
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
-/animesoul.config.json
+/production/animesoul.config.json
+/python-react/animesoul.python.json
 
 # vercel
 .vercel
 
 # typescript
 next-env.d.ts
-/dist/
-/.wrangler/
-/outputs/
-/work/
-/desktop-dist/
+/production/dist/
+/production/.wrangler/
+/production/outputs/
+/production/work/
+/production/desktop-dist/
+/production/desktop-dist-carousel/
+/production/desktop-release/
+/production/desktop-stage*/
+/production/release-*/
+/production/data/animesoul-storage.json
+/production/data/animesoul-storage.tmp.json
+/python-react/frontend/dist/
+/python-react/.venv/
+/python-react/data/
+
+# Old generated folders can remain locked by Windows during a one-time
+# migration. They are not source code and may be removed after a reboot.
 /desktop-dist-carousel/
 /desktop-release/
-/desktop-stage*/
-/release-*/
-/data/animesoul-storage.json
-/data/animesoul-storage.tmp.json
+/release-0.1.6/
+/release-build/

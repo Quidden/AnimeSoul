@@ -1,0 +1,5 @@
+{
+  "port": 8000,
+  "yummy_public_token": "paste-your-own-public-token-here",
+  "data_directory": "data"
+}

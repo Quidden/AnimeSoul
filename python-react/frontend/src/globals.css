@@ -1,0 +1,7 @@
+/* Global stylesheet entry point.
+ * Feature styles stay separate so the player, library and shared layout can
+ * evolve independently without turning this file into a monolith.
+ */
+@import "./styles/base.css";
+@import "./styles/library.css";
+@import "./styles/player.css";
