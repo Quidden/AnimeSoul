@@ -144,7 +144,9 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     }
     const hostNow = host.playing ? host.position + Math.max(0, (Date.now() - host.updatedAt) / 1000) : host.position;
     if (force || (initialPrefs.watchPartyAutoCatchUp && Math.abs(hostNow - partyTime) > 5)) command("seek", { seconds: hostNow });
-    if (lastHostPlaying.current !== host.playing) {
+    // A local pause/play does not change lastHostPlaying. Compare with the
+    // actual player state too, otherwise a remote resume can be skipped.
+    if (partyPlaying !== host.playing || lastHostPlaying.current !== host.playing) {
       command(host.playing ? "play" : "pause");
       lastHostPlaying.current = host.playing;
     }

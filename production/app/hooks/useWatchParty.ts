@@ -5,6 +5,7 @@ import type { PartyPlayback, PartyState } from "../lib/types";
 
 export type WatchPartySession = { roomId: string; token: string; role: "host" | "guest" };
 export const WATCH_PARTY_SESSION_KEY = "animesoul:watch-party-session";
+const WATCH_PARTY_PROTOCOL = 2;
 
 const endpoint = (server: string, path: string) => `${server.replace(/\/+$/, "")}${path}`;
 const readSession = () => {
@@ -47,6 +48,13 @@ const normalizeParty = (value: PartyState) => ({
   ...value,
   roomMode: value.roomMode === "shared" ? "shared" as const : "host" as const,
 });
+const assertCompatibleProtocol = (value: { protocol?: number }) => {
+  if (value.protocol !== WATCH_PARTY_PROTOCOL) {
+    const error = new Error("Сервер совместного просмотра запущен из старой версии AnimeSoul. Полностью закройте старый сервер и запустите приложение заново.") as PartyRequestError;
+    error.code = "UNSUPPORTED_PROTOCOL";
+    throw error;
+  }
+};
 const playbackChangedByUser = (previous: PartyPlayback | null, current: PartyPlayback) => {
   if (!previous) return false;
   if (
@@ -61,6 +69,26 @@ const playbackChangedByUser = (previous: PartyPlayback | null, current: PartyPla
     ? previous.position + Math.max(0, (current.updatedAt - previous.updatedAt) / 1000)
     : previous.position;
   return Math.abs(current.position - expectedPosition) > 3;
+};
+const playbackReachedTarget = (target: PartyPlayback | null, current: PartyPlayback) => Boolean(
+  target
+  && target.animeId === current.animeId
+  && target.season === current.season
+  && target.episode === current.episode
+  && target.playing === current.playing
+);
+const roomPlaybackRevision = (party: PartyState) => {
+  const playback = party.playback;
+  if (!playback) return "empty";
+  return [
+    party.lastControllerId ?? "",
+    playback.sentAt ?? playback.updatedAt ?? 0,
+    playback.animeId,
+    playback.season,
+    playback.episode,
+    playback.playing ? 1 : 0,
+    Math.round(playback.position * 10),
+  ].join(":");
 };
 
 export function useWatchParty({ enabled, server, name, mode, roomMode, playback, onHostState }: {
@@ -78,6 +106,7 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
   const playbackRef = useRef(playback);
   const hostHandlerRef = useRef(onHostState);
   const lastLocalPlayback = useRef<PartyPlayback | null>(null);
+  const lastRoomRevision = useRef("");
   const suppressControlUntil = useRef(0);
   playbackRef.current = playback;
   hostHandlerRef.current = onHostState;
@@ -90,6 +119,7 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
     setError("");
     try {
       const result = await post(server, "/watch-party/create", { name, roomMode });
+      assertCompatibleProtocol(result);
       remember(result as WatchPartySession);
     } catch (reason) {
       setError(roomError(reason, "Не удалось создать комнату"));
@@ -103,6 +133,7 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
         name,
         mode,
       });
+      assertCompatibleProtocol(result);
       remember(result as WatchPartySession);
     } catch (reason) {
       setError(roomError(reason, "Не удалось подключиться"));
@@ -138,13 +169,21 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
       const startedAt = performance.now();
       try {
         const currentPlayback = playbackRef.current;
+        let suppressingRemotePlayback = Date.now() < suppressControlUntil.current;
+        if (suppressingRemotePlayback && playbackReachedTarget(lastLocalPlayback.current, currentPlayback)) {
+          suppressControlUntil.current = 0;
+          suppressingRemotePlayback = false;
+        }
         const control = mode === "follow"
-          && Date.now() >= suppressControlUntil.current
+          && !suppressingRemotePlayback
           && (
             (lastLocalPlayback.current === null && session.role === "host")
             || playbackChangedByUser(lastLocalPlayback.current, currentPlayback)
           );
-        lastLocalPlayback.current = { ...currentPlayback };
+        // Keep the remote target while its command is settling. If the user
+        // acts during this window, the difference is still published later
+        // instead of being silently consumed by the polling loop.
+        if (!suppressingRemotePlayback) lastLocalPlayback.current = { ...currentPlayback };
         await post(server, "/watch-party/update", {
           ...session,
           name,
@@ -163,6 +202,7 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
           stateError.status = response.status;
           throw stateError;
         }
+        assertCompatibleProtocol(payload);
         if (!cancelled) {
           const next = normalizeParty(payload as PartyState);
           setParty(next);
@@ -176,12 +216,16 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
           }));
           const self = next.participants.find(participant => participant.id === session.token);
           if (self?.role && self.role !== session.role) remember({ ...session, role: self.role });
+          const revision = roomPlaybackRevision(next);
+          const hasNewRoomCommand = revision !== lastRoomRevision.current;
+          lastRoomRevision.current = revision;
           const mustFollow = mode === "follow"
             && next.playback
             && next.lastControllerId !== session.token
+            && hasNewRoomCommand
             && (next.roomMode === "shared" || session.role === "guest");
           if (mustFollow && next.playback) {
-            suppressControlUntil.current = Date.now() + 2500;
+            suppressControlUntil.current = Date.now() + 1200;
             lastLocalPlayback.current = { ...next.playback };
             hostHandlerRef.current(next.playback);
           }

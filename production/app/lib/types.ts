@@ -120,6 +120,7 @@ export type PartyPlayback = {
   duration: number;
   playing: boolean;
   updatedAt: number;
+  sentAt?: number;
 };
 export type PartyParticipant = {
   id: string;
@@ -131,6 +132,7 @@ export type PartyParticipant = {
   online: boolean;
 };
 export type PartyState = {
+  protocol?: number;
   roomId: string;
   roomMode: "host" | "shared";
   playback: PartyPlayback | null;
