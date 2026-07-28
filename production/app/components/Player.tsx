@@ -5,14 +5,14 @@ import type { ReactNode } from "react";
 import type { Anime, AnimeProgress, Folder, PartyPlayback, PlayerPrefs, ScheduleEntry, SeasonGroup, ToolbarPosition, Tracker, Video } from "../lib/types";
 import { DEFAULT_PLAYER_PREFS, STORAGE_KEYS as K } from "../lib/settings";
 import { readLocal as read, writeLocal as write } from "../lib/storage";
-import { byViewingOrder, durationRange, episodeDuration, fetchFamily, formatCalendarDate, formatDuration, formatTime, franchiseName, isEpisodeWatched, isExtraAnime, isMovieAnime, isOvaAnime, releaseStatus, shortEntryTitle, stripPart } from "../lib/anime";
+import { byViewingOrder, durationRange, episodeDuration, fetchFamily, formatCalendarDate, formatDuration, formatTime, franchiseName, isEpisodeWatched, isExtraAnime, isMovieAnime, isOvaAnime, releaseStatus, shortEntryTitle, stripPart, toggleEpisodeWatched } from "../lib/anime";
 import { EpisodeSlideshow, episodePreviewImages } from "./EpisodeSlideshow";
 import { EpisodeHoverPreview } from "./EpisodeHoverPreview";
 import { FolderPicker } from "./FolderPicker";
 import { Toggle } from "./Toggle";
 import { useWatchParty } from "../hooks/useWatchParty";
 
-export function Watch({ header, anime, resumeRequested, newEpisodeRequested, favorite, onFavorite, onBack, onLibrary, onGenre, saved, onProgress, onPlayerPrefsChange, onFolders, tracker, onTrack, onUntrack, folderPicker, folders, toggleFolder, createFolder, closePicker }: { header: ReactNode; anime: Anime; resumeRequested: boolean; newEpisodeRequested: boolean; favorite: boolean; onFavorite: () => void; onBack: () => void; onLibrary: () => void; onGenre: (genre: string) => void; saved?: AnimeProgress; onProgress: (v: AnimeProgress, originEpisodeKey?: string) => void; onPlayerPrefsChange: (prefs: PlayerPrefs) => void; onFolders: () => void; tracker?: Tracker; onTrack: (n: number, d: string[], ids: number[], title: string) => void; onUntrack: () => void; folderPicker: Anime | null; folders: Folder[]; toggleFolder: (f: Folder, id: number) => void; createFolder: () => unknown; closePicker: () => void ;}) {
+export function Watch({ header, anime, resumeRequested, newEpisodeRequested, favorite, onFavorite, onBack, onLibrary, onGenre, saved, onProgress, onPlayerPrefsChange, onFolders, tracker, onTrack, onUntrack, folderPicker, folders, toggleFolder, createFolder, closePicker }: { header: ReactNode; anime: Anime; resumeRequested: boolean; newEpisodeRequested: boolean; favorite: boolean; onFavorite: () => void; onBack: () => void; onLibrary: () => void; onGenre: (genre: string) => void; saved?: AnimeProgress; onProgress: (v: AnimeProgress, originEpisodeKey?: string | string[], changedEpisodeKey?: string | string[]) => void; onPlayerPrefsChange: (prefs: PlayerPrefs) => void; onFolders: () => void; tracker?: Tracker; onTrack: (n: number, d: string[], ids: number[], title: string) => void; onUntrack: () => void; folderPicker: Anime | null; folders: Folder[]; toggleFolder: (f: Folder, id: number) => void; createFolder: () => unknown; closePicker: () => void ;}) {
   const initialPrefs = { ...DEFAULT_PLAYER_PREFS, ...read<Partial<PlayerPrefs>>(K.playerPrefs, {}) };
   const latestSavedEntry = Object.entries(saved?.episodes ?? {}).sort((a, b) => b[1].updatedAt - a[1].updatedAt)[0], latestSavedSeparator = latestSavedEntry?.[0].indexOf(":") ?? -1, resumeSeason = latestSavedSeparator > 0 ? Number(latestSavedEntry![0].slice(0, latestSavedSeparator)) || saved?.season || 1 : saved?.season ?? 1, resumeEpisode = latestSavedSeparator > 0 ? latestSavedEntry![0].slice(latestSavedSeparator + 1) || saved?.episode || "1" : saved?.episode ?? "1";
   const [dub, setDub] = useState(saved?.dub ?? ""), [episode, setEpisode] = useState(resumeEpisode), [player, setPlayer] = useState(""), [autoNext, setAutoNextState] = useState(initialPrefs.autoNext), [autoSkip, setAutoSkipState] = useState(initialPrefs.autoSkipOpening), [autoSkipEnding, setAutoSkipEndingState] = useState(initialPrefs.autoSkipEnding), [autoPlayResume, setAutoPlayResumeState] = useState(initialPrefs.autoPlayResume), [autoScrollPlayer, setAutoScrollPlayerState] = useState(initialPrefs.autoScrollPlayer), [episodeCarousel, setEpisodeCarousel] = useState(initialPrefs.playerEpisodeCarousel), [status, setStatus] = useState("Загружаем серии…"), [position, setPosition] = useState<ToolbarPosition>(read(K.toolbar, "bottom")), [autoPlay, setAutoPlay] = useState(false), [seasons, setSeasons] = useState<SeasonGroup[]>([{ number: 1, entries: [anime] }]), [selectedSeason, setSelectedSeason] = useState(resumeSeason), [seasonVideos, setSeasonVideos] = useState<Record<number, Video[]>>({}), [schedule, setSchedule] = useState<Record<number, ScheduleEntry>>({}), [trackOpen, setTrackOpen] = useState(false), [trackDubs, setTrackDubs] = useState<string[]>(tracker?.dubs ?? []), [showUpcoming, setShowUpcoming] = useState(false), [carouselMotion, setCarouselMotion] = useState<"" | "previous" | "next">("");
@@ -196,13 +196,79 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   };
   const save = (time: number, duration: number, completed = false) => {
     const snapshot = savedRef.current, previous = snapshot?.episodes[episodeKey], percent = duration ? Math.min(100, Math.round(time / duration * 100)) : previous?.percent ?? 0, reachedEnd = completed || percent >= 100 || (endingStart > 0 && time >= endingStart), startedAgain = Boolean(previous?.completed && time < 60 && time < (previous.position ?? 0)), rewatchArmed = startedAgain || previous?.rewatchArmed === true, firstCompletion = reachedEnd && !previous?.completed, repeatCompletion = reachedEnd && rewatchArmed, delta = previous && time >= previous.position && time - previous.position <= 90 ? time - previous.position : 0, originEpisodeKey = current?.originAnimeId && current.originNumber ? `${current.originAnimeId}:${current.originNumber}` : undefined;
-    const value: AnimeProgress = { episode, dub, season: selectedSeason, seasonLabel: selectedGroup?.label, originAnimeId: current?.originAnimeId, originEpisode: current?.originNumber, totalEpisodes: totalAcrossSeasons || episodes.length, totalDuration: totalDurationAcrossSeasons || snapshot?.totalDuration, episodes: { ...(snapshot?.episodes ?? {}), [episodeKey]: { position: time, duration, percent, completed: previous?.completed || reachedEnd, completions: (previous?.completions ?? (previous?.completed ? 1 : 0)) + (firstCompletion || repeatCompletion ? 1 : 0), rewatchArmed: repeatCompletion ? false : rewatchArmed, watchedSeconds: (previous?.watchedSeconds ?? Math.min(previous?.position ?? 0, previous?.duration || previous?.position || 0)) + Math.max(0, delta), updatedAt: Date.now() } } };
+    const completedNow = firstCompletion || repeatCompletion, updatedAt = Date.now();
+    const value: AnimeProgress = { episode, dub, season: selectedSeason, seasonLabel: selectedGroup?.label, originAnimeId: current?.originAnimeId, originEpisode: current?.originNumber, totalEpisodes: totalAcrossSeasons || episodes.length, totalDuration: totalDurationAcrossSeasons || snapshot?.totalDuration, episodes: { ...(snapshot?.episodes ?? {}), [episodeKey]: { position: time, duration, percent, completed: previous?.completed || reachedEnd, completions: (previous?.completions ?? (previous?.completed ? 1 : 0)) + (completedNow ? 1 : 0), completionHistory: completedNow ? [...(previous?.completionHistory ?? []), updatedAt] : previous?.completionHistory, rewatchArmed: repeatCompletion ? false : rewatchArmed, watchedSeconds: (previous?.watchedSeconds ?? Math.min(previous?.position ?? 0, previous?.duration || previous?.position || 0)) + Math.max(0, delta), updatedAt } } };
     savedRef.current = value;
     const entry = { value, originEpisodeKey: reachedEnd ? originEpisodeKey : undefined };
     pendingProgress.current = entry;
     const elapsed = Date.now() - lastProgressCommit.current;
     if (completed || reachedEnd || elapsed >= 5000) commitProgress(entry);
     else if (!progressTimer.current) progressTimer.current = setTimeout(() => { if (pendingProgress.current) commitProgress(pendingProgress.current) ;}, 5000 - elapsed);
+  };
+  const toggleWatched = (targetSeason: number, targetEpisode: string, duration: number, video?: Video) => {
+    if (pendingProgress.current) commitProgress(pendingProgress.current);
+    const snapshot = savedRef.current;
+    const key = `${targetSeason}:${targetEpisode}`;
+    const nextEpisodeState = toggleEpisodeWatched(snapshot?.episodes[key], duration);
+    const value: AnimeProgress = {
+      ...(snapshot ?? {
+        episode,
+        dub,
+        season: selectedSeason,
+        seasonLabel: selectedGroup?.label,
+        episodes: {},
+      }),
+      totalEpisodes: totalAcrossSeasons || snapshot?.totalEpisodes,
+      totalDuration: totalDurationAcrossSeasons || snapshot?.totalDuration,
+      episodes: {
+        ...(snapshot?.episodes ?? {}),
+        [key]: nextEpisodeState,
+      },
+    };
+    savedRef.current = value;
+    const originEpisodeKey = isEpisodeWatched(nextEpisodeState) && video?.originAnimeId && video.originNumber
+      ? `${video.originAnimeId}:${video.originNumber}`
+      : undefined;
+    onProgress(value, originEpisodeKey, key);
+  };
+  const toggleSeasonWatched = (targetSeason: number, targetEpisodes: string[], list: Video[]) => {
+    if (!targetEpisodes.length) return;
+    if (pendingProgress.current) commitProgress(pendingProgress.current);
+    const snapshot = savedRef.current;
+    const allWatched = targetEpisodes.every(targetEpisode => isEpisodeWatched(snapshot?.episodes[`${targetSeason}:${targetEpisode}`]));
+    const episodes = { ...(snapshot?.episodes ?? {}) };
+    const changedEpisodeKeys: string[] = [];
+    const originEpisodeKeys: string[] = [];
+
+    targetEpisodes.forEach(targetEpisode => {
+      const key = `${targetSeason}:${targetEpisode}`;
+      const previous = episodes[key];
+      // Marking a season keeps already watched episodes untouched, so their
+      // completion counters are not incremented a second time.
+      if (!allWatched && isEpisodeWatched(previous)) return;
+      const video = list.find(item => item.number === targetEpisode);
+      const next = toggleEpisodeWatched(previous, episodeDuration(list, targetEpisode));
+      episodes[key] = next;
+      changedEpisodeKeys.push(key);
+      if (!allWatched && video?.originAnimeId && video.originNumber) {
+        originEpisodeKeys.push(`${video.originAnimeId}:${video.originNumber}`);
+      }
+    });
+
+    const value: AnimeProgress = {
+      ...(snapshot ?? {
+        episode,
+        dub,
+        season: selectedSeason,
+        seasonLabel: selectedGroup?.label,
+        episodes: {},
+      }),
+      totalEpisodes: totalAcrossSeasons || snapshot?.totalEpisodes,
+      totalDuration: totalDurationAcrossSeasons || snapshot?.totalDuration,
+      episodes,
+    };
+    savedRef.current = value;
+    onProgress(value, originEpisodeKeys, changedEpisodeKeys);
   };
   useEffect(() => () => {
     if (progressTimer.current) clearTimeout(progressTimer.current);
@@ -346,8 +412,22 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       {initialPrefs.watchPartyPanelPosition === "bottom" && partyPanel}
       <div className="watch-info"><div><div className="tags">{anime.genres?.slice(0, 8).map(g => <button type="button" key={g.alias} onClick={() => onGenre(g.title)}>{g.title}</button>)}</div><p>{anime.description}</p><div className="facts"><span>{seasons.length > 1 ? "◆ Франшиза · всё собрано" : "◇ Отдельный тайтл"}</span><span>{seasons.filter(s => s.kind === "season").length} сезонов</span><span>{seasons.flatMap(s => s.entries).filter(isExtraAnime).length} OVA/ONA/спешлов</span><span>{seasons.filter(s => s.kind === "movie").length} фильмов</span><span>{totalAcrossSeasons} видео всего</span><span>{durationRange(Object.values(seasonVideos).flat())}</span></div></div><aside><button onClick={onFavorite}>{favorite ? "♥ В избранном" : "♡ В избранное"}</button><button onClick={onFolders}>＋ Добавить в папку</button><button onClick={() => setTrackOpen(!trackOpen)}>{tracker ? "◉ Настроить отслеживание" : "◎ Следить за франшизой"}</button>{trackOpen && <div className="track-settings"><b>Озвучки всей франшизы</b><label><input type="checkbox" checked={!trackDubs.length} onChange={() => setTrackDubs([])} /> Все озвучки</label>{dubs.map(d => <label key={d}><input type="checkbox" checked={trackDubs.includes(d)} onChange={() => setTrackDubs(v => v.includes(d) ? v.filter(x => x !== d) : [...v, d])} />{d}</label>)}<button onClick={() => { onTrack(totalAcrossSeasons, trackDubs, seasons.flatMap(s => s.entries.map(e => e.anime_id)), familyRoot); setTrackOpen(false) ;}}>Сохранить</button>{tracker && <button className="danger" onClick={onUntrack}>Отключить</button>}</div>}<button className="danger" onClick={() => { if (confirm("Обнулить весь прогресс этого аниме?")) onProgress({ episode: "1", dub, season: 1, totalEpisodes: totalAcrossSeasons, totalDuration: totalDurationAcrossSeasons, episodes: {} }) ;}}>↺ Обнулить прогресс</button></aside></div>
       {scheduleRows.length > 0 && <section className="release-schedule"><div><span className="eyebrow">ГРАФИК ВЫХОДА</span><h2>Следующие серии</h2></div>{scheduleRows.map(({ group, entry, item }) => { const aired = item.episodes?.aired ?? 0, total = item.episodes?.count ?? 0; return <article key={entry.anime_id}><span><b>{group.label}</b><small>{aired} из {total || "—"} серий вышло · следующая — серия {aired + 1}{total ? ` из ${total}` : ""}</small></span><time>{formatCalendarDate(item.episodes!.next_date!)}</time></article> ;})}</section>}
-      <div className="all-seasons">{seasons.map(group => { const list = seasonVideos[group.number] ?? [], nums = Array.from(new Set(list.map(v => v.number))).sort((a, b) => +a - +b), watched = nums.filter(e => isEpisodeWatched(saved?.episodes[`${group.number}:${e}`])).length, entry = group.entries[0], planned = releaseStatus(entry).kind === "planned", airing = releaseStatus(entry).kind === "airing", scheduleItem = group.entries.map(e => schedule[e.anime_id]).find(Boolean), date = scheduleItem?.episodes?.next_date, collapsed = collapsedSeasons.includes(group.number), emptyMessage = planned ? `Запланировано${entry.year ? ` · ${entry.year}` : ""}` : airing ? date ? `Следующая серия · ${formatCalendarDate(date)}` : "Сейчас выходит · дата следующей серии не указана" : "Видео пока не добавлено"; return <section className={`season-panel ${collapsed ? "collapsed " : ""}${group.kind === "special" ? "extra-panel" : ""}`.trim()} key={group.number}><button type="button" className="season-summary" onClick={() => toggleSeason(group.number)} aria-expanded={!collapsed}><h2>{group.label ?? `Сезон ${group.number}`}</h2><span>{watched} из {nums.length} просмотрено</span><b>{collapsed ? "⌄" : "⌃"}</b></button><div className="season-progress"><i style={{ width: `${nums.length ? watched / nums.length * 100 : 0}%` }} /></div><div className="season-content"><div>{!nums.length && <div className={`release-empty ${planned ? "planned" : airing ? "airing" : ""}`}><i />{emptyMessage}</div>}<div className="episode-grid">{nums.map(e => { const key = `${group.number}:${e}`, ep = saved?.episodes[key], isWatched = isEpisodeWatched(ep), isActive = group.number === selectedSeason && e === episode, isNew = newEpisodeKeys.has(key) && !isWatched, duration = episodeDuration(list, e), video = list.find(v => v.number === e), originEntry = group.entries.find(item => item.anime_id === video?.originAnimeId) ?? entry, previewAnime = previewAnimeById[originEntry.anime_id] ?? originEntry, unit = video?.contentKind ?? (group.kind === "movie" ? "Фильм" : "Серия"); return <EpisodeHoverPreview key={e} enabled={episodeHoverPreview} images={episodePreviewImages(previewAnime, video?.originNumber ?? e)} fallback={previewAnime.poster?.fullsize ?? previewAnime.poster?.big} label={`${group.label ?? `Сезон ${group.number}`} · ${unit} ${e}`}>
-  <button className={`${isActive ? "active " : ""}${isWatched ? "watched " : ""}${isNew ? "new-episode " : ""}${unit !== "Серия" && unit !== "Фильм" ? "extra-episode" : ""}`.trim()} onClick={() => chooseEpisode(e, group.number)}><b>{e}{isWatched && <i>✓</i>}</b><span>{unit} {e}{isNew && <em>НОВАЯ</em>}<small>{duration ? formatDuration(duration) : "Длительность неизвестна"} · {isWatched ? "Просмотрено" : `${ep?.percent ?? 0}% · ${formatTime(ep?.position ?? 0)}`}</small></span></button>
+      <div className="all-seasons">{seasons.map(group => { const list = seasonVideos[group.number] ?? [], nums = Array.from(new Set(list.map(v => v.number))).sort((a, b) => +a - +b), watched = nums.filter(e => isEpisodeWatched(saved?.episodes[`${group.number}:${e}`])).length, allWatched = nums.length > 0 && watched === nums.length, entry = group.entries[0], planned = releaseStatus(entry).kind === "planned", airing = releaseStatus(entry).kind === "airing", scheduleItem = group.entries.map(e => schedule[e.anime_id]).find(Boolean), date = scheduleItem?.episodes?.next_date, collapsed = collapsedSeasons.includes(group.number), emptyMessage = planned ? `Запланировано${entry.year ? ` · ${entry.year}` : ""}` : airing ? date ? `Следующая серия · ${formatCalendarDate(date)}` : "Сейчас выходит · дата следующей серии не указана" : "Видео пока не добавлено"; return <section className={`season-panel ${collapsed ? "collapsed " : ""}${group.kind === "special" ? "extra-panel" : ""}`.trim()} key={group.number}><div className="season-summary-row"><button type="button" className="season-summary" onClick={() => toggleSeason(group.number)} aria-expanded={!collapsed}><h2>{group.label ?? `Сезон ${group.number}`}</h2><span>{watched} из {nums.length} просмотрено</span><b>{collapsed ? "⌄" : "⌃"}</b></button><button type="button" className={`season-watch-toggle ${allWatched ? "active" : ""}`} disabled={!nums.length} aria-label={allWatched ? `Снять отметку «просмотрено» со всех серий: ${group.label ?? `Сезон ${group.number}`}` : `Отметить все серии просмотренными: ${group.label ?? `Сезон ${group.number}`}`} title={allWatched ? "Снять отметку со всего сезона" : "Отметить весь сезон просмотренным и учесть длительность серий в статистике"} onClick={() => toggleSeasonWatched(group.number, nums, list)}><span className="eye-glyph" /></button></div><div className="season-progress"><i style={{ width: `${nums.length ? watched / nums.length * 100 : 0}%` }} /></div><div className="season-content"><div>{!nums.length && <div className={`release-empty ${planned ? "planned" : airing ? "airing" : ""}`}><i />{emptyMessage}</div>}<div className="episode-grid">{nums.map(e => { const key = `${group.number}:${e}`, ep = saved?.episodes[key], isWatched = isEpisodeWatched(ep), isActive = group.number === selectedSeason && e === episode, isNew = newEpisodeKeys.has(key) && !isWatched, duration = episodeDuration(list, e), video = list.find(v => v.number === e), originEntry = group.entries.find(item => item.anime_id === video?.originAnimeId) ?? entry, previewAnime = previewAnimeById[originEntry.anime_id] ?? originEntry, unit = video?.contentKind ?? (group.kind === "movie" ? "Фильм" : "Серия"); return <EpisodeHoverPreview key={e} enabled={episodeHoverPreview} images={episodePreviewImages(previewAnime, video?.originNumber ?? e)} fallback={previewAnime.poster?.fullsize ?? previewAnime.poster?.big} label={`${group.label ?? `Сезон ${group.number}`} · ${unit} ${e}`}>
+  <div className="episode-card-shell">
+    <button className={`episode-entry ${isActive ? "active " : ""}${isWatched ? "watched " : ""}${isNew ? "new-episode " : ""}${unit !== "Серия" && unit !== "Фильм" ? "extra-episode" : ""}`.trim()} onClick={() => chooseEpisode(e, group.number)}><b>{e}{isWatched && <i>✓</i>}</b><span>{unit} {e}{isNew && <em>НОВАЯ</em>}<small>{duration ? formatDuration(duration) : "Длительность неизвестна"} · {isWatched ? "Просмотрено" : `${ep?.percent ?? 0}% · ${formatTime(ep?.position ?? 0)}`}</small></span></button>
+    <button
+      type="button"
+      className={`episode-watch-toggle ${isWatched ? "active" : ""}`}
+      aria-label={isWatched ? `Снять отметку «просмотрено» с ${unit.toLowerCase()} ${e}` : `Отметить ${unit.toLowerCase()} ${e} просмотренной`}
+      title={isWatched ? "Снять отметку «просмотрено»" : "Отметить просмотренной и учесть полную длительность в статистике"}
+      onClick={(event) => {
+        event.stopPropagation();
+        toggleWatched(group.number, e, duration, video);
+      }}
+    >
+      <span className="eye-glyph" aria-hidden="true" />
+    </button>
+  </div>
 </EpisodeHoverPreview> ;})}</div></div></div></section> ;})}</div>
     </section>{folderPicker && <FolderPicker anime={folderPicker} folders={folders} onToggle={toggleFolder} onCreate={createFolder} onClose={closePicker} />}</main>;
 }

@@ -52,6 +52,29 @@ header{justify-content:flex-start;gap:24px}.search-wrap{position:absolute!import
 @media(max-width:600px){.hero-track-card{grid-template-columns:1fr}.hero-track-actions{grid-column:1}}
 .hero-box.alerts{padding:14px 16px}
 .hero-box.alerts h3{margin-bottom:8px}
+.hero-box{display:flex;flex-direction:column;min-width:0}
+.hero-box>.hero-scroll{width:100%;flex:1}
+.hero-box>.hero-scroll>button,.hero-box>.hero-scroll>article{width:100%}
+.hero-box:not(.alerts) .hero-scroll{max-height:210px}
+.hero-box .folder-progress{grid-template-columns:minmax(0,1fr) 34px;grid-template-rows:auto 4px}
+.hero-mini-row{display:grid;grid-template-columns:minmax(0,1fr) 25px;align-items:center;gap:7px;min-height:52px;border-bottom:1px solid #28232d}
+.hero-mini-row:last-child{border-bottom:0}
+.hero-mini-main{display:grid!important;grid-template-columns:minmax(0,1fr) 34px!important;align-items:start!important;gap:8px!important;min-width:0;width:100%!important;padding:7px 2px!important}
+.hero-mini-main>span{display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:3px;overflow:hidden;line-height:1.28}
+.hero-mini-main>span:first-child{overflow:hidden}
+.hero-mini-main>small{align-self:start;justify-self:end;margin:1px 0 0!important;white-space:nowrap}
+.hero-mini-delete{display:grid!important;place-items:center;align-self:center;justify-self:center;width:23px!important;height:23px;padding:0!important;border:0!important;border-radius:6px;background:transparent!important;color:#817681!important;font-size:11px!important;filter:grayscale(1);opacity:.45;transition:.18s}
+.hero-mini-row:hover .hero-mini-delete,.hero-mini-delete:focus-visible{background:#321d25!important;color:#f28da0!important;opacity:1}
+.hero-folder-row .folder-progress{align-items:center;gap:5px 8px;margin:2px 0;padding:7px 2px}
+.hero-folder-row .folder-progress>span{display:grid;min-width:0;justify-content:initial;gap:3px;line-height:1.25}
+.hero-folder-row .folder-progress>span small{margin:0;color:#77717c;white-space:nowrap}
+.hero-folder-row .folder-progress>i{grid-column:1/-1;grid-row:2;width:100%}
+.hero-folder-row .folder-progress>em{grid-column:2;grid-row:1;align-self:start;justify-self:end;margin-top:1px;white-space:nowrap}
+.hero-folder-actions{display:flex!important;align-items:center!important;gap:7px}
+.hero-folder-actions button{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--accent);font-size:15px}
+.hero-folder-actions button:hover{background:var(--accent-soft)}
+.section-inline-actions{gap:9px}
+.restore-folder{max-width:min(430px,60vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hero-tracking-list{gap:3px}
 .hero-track-card{min-height:28px;padding:4px 7px;gap:8px;border-radius:7px}
 .hero-track-main{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:1px 8px}

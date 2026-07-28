@@ -14,6 +14,21 @@ export function writeLocal<T>(key: string, value: T) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+/**
+ * Device UI state takes priority over an asynchronously loaded profile copy.
+ * This prevents an older storage-server snapshot from reopening a section that
+ * the user has already collapsed in the current browser or desktop app.
+ */
+export function resolveStoredBoolean(
+  localValue: unknown,
+  snapshotValue: unknown,
+  fallback: boolean,
+): boolean {
+  if (typeof localValue === "boolean") return localValue;
+  if (typeof snapshotValue === "boolean") return snapshotValue;
+  return fallback;
+}
+
 export function migrateSnapshot(
   input: Partial<ConfigSnapshot> | null | undefined,
   name = "Основной",

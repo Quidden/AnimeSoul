@@ -54,8 +54,21 @@ export type EpisodeState = {
   updatedAt: number;
   completed?: boolean;
   completions?: number;
+  completionHistory?: number[];
   rewatchArmed?: boolean;
   watchedSeconds?: number;
+  manuallyCompleted?: boolean;
+  manualPrevious?: {
+    position: number;
+    duration: number;
+    percent: number;
+    updatedAt: number;
+    completed?: boolean;
+    completions?: number;
+    completionHistory?: number[];
+    rewatchArmed?: boolean;
+    watchedSeconds?: number;
+  };
 };
 
 export type AnimeProgress = {
@@ -192,7 +205,11 @@ export type WatchProps = {
   onLibrary: () => void;
   onGenre: (genre: string) => void;
   saved?: AnimeProgress;
-  onProgress: (value: AnimeProgress, originEpisodeKey?: string) => void;
+  onProgress: (
+    value: AnimeProgress,
+    originEpisodeKey?: string | string[],
+    changedEpisodeKey?: string | string[],
+  ) => void;
   onPlayerPrefsChange: (prefs: PlayerPrefs) => void;
   onFolders: () => void;
   tracker?: Tracker;

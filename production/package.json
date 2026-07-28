@@ -1,7 +1,7 @@
 {
   "name": "animesoul",
-  "version": "0.1.8-beta.2",
-  "displayVersion": "0.1.8.2",
+  "version": "0.1.8-beta.3",
+  "displayVersion": "0.1.8.3",
   "description": "Локальный аниме-каталог и плеер с прогрессом просмотра",
   "author": "Quidden",
   "private": true,
@@ -53,7 +53,7 @@
   "build": {
     "appId": "com.quidden.animesoul",
     "productName": "AnimeSoul",
-    "buildVersion": "0.1.8.2",
+    "buildVersion": "0.1.8.3",
     "asar": false,
     "npmRebuild": false,
     "directories": {
@@ -91,10 +91,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "AnimeSoul",
-      "artifactName": "AnimeSoul-Setup-0.1.8.2-${arch}.${ext}"
+      "artifactName": "AnimeSoul-Setup-0.1.8.3-${arch}.${ext}"
     },
     "portable": {
-      "artifactName": "AnimeSoul-Portable-0.1.8.2-${arch}.${ext}"
+      "artifactName": "AnimeSoul-Portable-0.1.8.3-${arch}.${ext}"
     }
   }
 }

@@ -17,6 +17,8 @@ let storageProcess;
 let zoomFactor = 1;
 let zoomFile;
 let launchMode = "desktop";
+let launcherWindow;
+let isStarting = true;
 
 function getConfigFile(root) {
   if (process.env.PORTABLE_EXECUTABLE_DIR) return path.join(process.env.PORTABLE_EXECUTABLE_DIR, CONFIG_NAME);
@@ -70,6 +72,95 @@ async function ensureDesktopConfig(root) {
     });
     void setupWindow.loadFile(path.join(root, "desktop", "setup.html"), {
       query: { configFile, defaultPort: "3001" },
+    });
+  });
+}
+
+async function chooseLaunchMode(root, preferredMode = "desktop") {
+  if (IS_SMOKE_TEST) return preferredMode === "browser" ? "browser" : "desktop";
+
+  return new Promise((resolve, reject) => {
+    launcherWindow = new BrowserWindow({
+      width: 650,
+      height: 620,
+      resizable: false,
+      autoHideMenuBar: true,
+      backgroundColor: "#0b0911",
+      icon: path.join(root, "public", "og.png"),
+      webPreferences: {
+        preload: path.join(root, "desktop", "launcher-preload.mjs"),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    let completed = false;
+    const channel = "animesoul:choose-launch-mode";
+    const readChannel = "animesoul:get-launch-config";
+    const saveChannel = "animesoul:update-launch-config";
+    const removeHandlers = () => {
+      ipcMain.removeHandler(channel);
+      ipcMain.removeHandler(readChannel);
+      ipcMain.removeHandler(saveChannel);
+    };
+    ipcMain.handle(readChannel, async () => {
+      const config = await readConfig(getConfigFile(root));
+      return {
+        ok: true,
+        config: {
+          sitePort: config?.sitePort ?? 3001,
+          yummyAnimeToken: config?.yummyAnimeToken ?? "",
+        },
+      };
+    });
+    ipcMain.handle(saveChannel, async (_event, input) => {
+      const sitePort = Number(input?.sitePort);
+      if (!Number.isInteger(sitePort) || sitePort < 1024 || sitePort > 65534) {
+        return { ok: false, error: "Порт должен быть целым числом от 1024 до 65534." };
+      }
+      if (!siteServer) {
+        const portResult = await validatePort(sitePort);
+        if (!portResult.ok) return portResult;
+      }
+      const tokenResult = await validateYummyToken(input?.yummyAnimeToken);
+      if (!tokenResult.ok) return tokenResult;
+      const configFile = getConfigFile(root);
+      const previous = await readConfig(configFile);
+      const config = await saveConfig(configFile, {
+        ...previous,
+        sitePort,
+        yummyAnimeToken: String(input?.yummyAnimeToken ?? "").trim(),
+        launchMode: previous?.launchMode ?? preferredMode,
+      });
+      const restartRequired = Boolean(siteServer)
+        && (config.sitePort !== SITE_PORT || config.yummyAnimeToken !== process.env.YUMMYANIME_TOKEN);
+      return { ok: true, restartRequired };
+    });
+    ipcMain.handle(channel, (_event, requestedMode) => {
+      const selectedMode = requestedMode === "browser"
+        ? "browser"
+        : requestedMode === "desktop"
+          ? "desktop"
+          : null;
+      if (!selectedMode) return { ok: false, error: "Выбери способ запуска AnimeSoul." };
+
+      completed = true;
+      removeHandlers();
+      const currentWindow = launcherWindow;
+      launcherWindow = undefined;
+      currentWindow?.close();
+      resolve(selectedMode);
+      return { ok: true };
+    });
+
+    launcherWindow.on("closed", () => {
+      launcherWindow = undefined;
+      removeHandlers();
+      if (!completed) reject(new Error("Запуск AnimeSoul отменён."));
+    });
+    void launcherWindow.loadFile(path.join(root, "desktop", "launcher.html"), {
+      query: { preferredMode: preferredMode === "browser" ? "browser" : "desktop" },
     });
   });
 }
@@ -197,7 +288,33 @@ function createWindow() {
       if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     }
   });
+  mainWindow.on("closed", () => {
+    mainWindow = undefined;
+  });
   void mainWindow.loadURL(SITE_URL);
+}
+
+async function rememberLaunchMode(root, selectedMode) {
+  if (IS_SMOKE_TEST) return;
+  const configFile = getConfigFile(root);
+  const config = await readConfig(configFile);
+  if (config?.yummyAnimeToken && config.launchMode !== selectedMode) {
+    await saveConfig(configFile, { ...config, launchMode: selectedMode });
+  }
+}
+
+function openLaunchTarget(selectedMode) {
+  launchMode = selectedMode;
+  if (selectedMode === "browser") {
+    void shell.openExternal(SITE_URL);
+    return;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    return;
+  }
+  createWindow();
 }
 
 async function runPlayerSmokeTest() {
@@ -239,12 +356,18 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    } else if (launchMode === "browser" && siteServer) {
-      void shell.openExternal(SITE_URL);
+    if (launcherWindow) {
+      if (launcherWindow.isMinimized()) launcherWindow.restore();
+      launcherWindow.focus();
+      return;
     }
+    const root = app.getAppPath();
+    void chooseLaunchMode(root, launchMode)
+      .then(async selectedMode => {
+        await rememberLaunchMode(root, selectedMode);
+        openLaunchTarget(selectedMode);
+      })
+      .catch(() => {});
   });
 
   app.whenReady().then(async () => {
@@ -254,8 +377,12 @@ if (!app.requestSingleInstanceLock()) {
       session.defaultSession.setUserAgent(
         `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion} Safari/537.36`,
       );
-      const launchConfig = await ensureDesktopConfig(root);
-      launchMode = launchConfig.launchMode;
+      let launchConfig = await ensureDesktopConfig(root);
+      launchMode = await chooseLaunchMode(root, launchConfig.launchMode);
+      if (!IS_SMOKE_TEST) {
+        await rememberLaunchMode(root, launchMode);
+        launchConfig = await readConfig(getConfigFile(root)) ?? launchConfig;
+      }
       if (!IS_SMOKE_TEST) {
         const portResult = await validatePort(launchConfig.sitePort);
         if (!portResult.ok) throw new Error(`${portResult.error}\n\nИзмени порт в ${getConfigFile(root)}`);
@@ -292,12 +419,10 @@ if (!app.requestSingleInstanceLock()) {
         app.quit();
         return;
       }
-      if (launchConfig.launchMode === "browser") {
-        await shell.openExternal(SITE_URL);
-      } else {
-        createWindow();
-      }
+      openLaunchTarget(launchMode);
+      isStarting = false;
     } catch (error) {
+      isStarting = false;
       console.error("[AnimeSoul desktop]", error);
       dialog.showErrorBox(
         "AnimeSoul",
@@ -309,10 +434,14 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0 && siteServer) createWindow();
+  if (BrowserWindow.getAllWindows().length !== 0 || !siteServer) return;
+  if (launchMode === "browser") void shell.openExternal(SITE_URL);
+  else createWindow();
 });
 
 app.on("window-all-closed", () => {
+  if (isStarting) return;
+  if (launchMode === "browser" && siteServer) return;
   if (process.platform !== "darwin") app.quit();
 });
 

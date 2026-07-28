@@ -88,6 +88,49 @@ export function shortEntryTitle(title: string, root: string) {
 export function isEpisodeWatched(state?: EpisodeState) {
   return Boolean(state?.completed || state?.percent === 100);
 }
+export function toggleEpisodeWatched(state: EpisodeState | undefined, duration: number, updatedAt = Date.now()) {
+  const resolvedDuration = Math.max(0, duration || state?.duration || 0);
+  if (isEpisodeWatched(state)) {
+    if (state?.manuallyCompleted && state.manualPrevious) {
+      return { ...state.manualPrevious, updatedAt } satisfies EpisodeState;
+    }
+    return {
+      position: 0,
+      duration: resolvedDuration,
+      percent: 0,
+      updatedAt,
+      completed: false,
+      completions: Math.max(0, (state?.completions ?? 1) - 1),
+      completionHistory: state?.completionHistory?.slice(0, -1),
+      rewatchArmed: false,
+      watchedSeconds: 0,
+    } satisfies EpisodeState;
+  }
+  const manualPrevious = state ? {
+    position: state.position,
+    duration: state.duration,
+    percent: state.percent,
+    updatedAt: state.updatedAt,
+    completed: state.completed,
+      completions: state.completions,
+      completionHistory: state.completionHistory,
+      rewatchArmed: state.rewatchArmed,
+    watchedSeconds: state.watchedSeconds,
+  } : undefined;
+  return {
+    position: resolvedDuration,
+    duration: resolvedDuration,
+    percent: 100,
+    updatedAt,
+    completed: true,
+      completions: (state?.completions ?? 0) + 1,
+      completionHistory: [...(state?.completionHistory ?? []), updatedAt],
+      rewatchArmed: false,
+    watchedSeconds: resolvedDuration,
+    manuallyCompleted: true,
+    manualPrevious,
+  } satisfies EpisodeState;
+}
 export function watchTimeProgress(progress?: AnimeProgress) {
   if (!progress) return 0;
   const watched = Object.values(progress.episodes).reduce(

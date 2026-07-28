@@ -65,6 +65,14 @@ test("состояние сворачиваемых секций сохраня�
   assert.equal(migrated.historyExpanded, false);
 });
 
+test("локальное состояние секции не перезаписывается устаревшим снимком профиля", async () => {
+  const { storage } = await loadLibModules();
+
+  assert.equal(storage.resolveStoredBoolean(false, true, true), false);
+  assert.equal(storage.resolveStoredBoolean(undefined, false, true), false);
+  assert.equal(storage.resolveStoredBoolean(undefined, undefined, true), true);
+});
+
 test("поиск оставляет только аниме, соответствующие всем словам запроса", async () => {
   const { anime } = await loadLibModules();
   const healer = {
@@ -149,4 +157,39 @@ test("отслеживание создаёт базу, не дублирует 
   const acknowledged = tracking.acknowledgeTrackedEpisode(repeated, "10:3");
   assert.equal(acknowledged.newEpisodes, 0);
   assert.deepEqual(acknowledged.pendingEpisodeKeys, []);
+});
+
+test("manual watched toggle records full duration and restores partial progress", async () => {
+  const { anime } = await loadLibModules();
+  const partial = {
+    position: 300,
+    duration: 1200,
+    percent: 25,
+    watchedSeconds: 300,
+    updatedAt: 10,
+  };
+  const completed = anime.toggleEpisodeWatched(partial, 1200, 20);
+
+  assert.equal(anime.isEpisodeWatched(completed), true);
+  assert.equal(completed.position, 1200);
+  assert.equal(completed.watchedSeconds, 1200);
+  assert.equal(completed.completions, 1);
+  assert.deepEqual(completed.completionHistory, [20]);
+  assert.equal(
+    anime.watchTimeProgress({
+      episode: "1",
+      dub: "",
+      totalEpisodes: 1,
+      totalDuration: 1200,
+      episodes: { "1:1": completed },
+    }),
+    100,
+  );
+
+  const restored = anime.toggleEpisodeWatched(completed, 1200, 30);
+  assert.equal(anime.isEpisodeWatched(restored), false);
+  assert.equal(restored.position, 300);
+  assert.equal(restored.watchedSeconds, 300);
+  assert.equal(restored.percent, 25);
+  assert.deepEqual(restored.completionHistory ?? [], []);
 });

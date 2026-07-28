@@ -41,11 +41,6 @@
       создаёт собственный. При личном использовании вы можете поделиться своим ключом с несколькими друзьями,
       принимая во внимание общую нагрузку и правила YummyAnime.
     </p>
-    <label for="mode">Где запускать AnimeSoul</label>
-    <select id="mode">
-      <option value="desktop">Отдельное desktop-приложение</option>
-      <option value="browser">В обычном браузере</option>
-    </select>
     <p class="hint">Позже параметры можно вручную поменять в:<br><code id="path"></code></p>
     <div class="error" id="error"></div>
     <button id="submit">Проверить и сохранить</button>
@@ -69,7 +64,6 @@
         const result = await window.animeSoulSetup.save({
           sitePort: Number(document.querySelector("#port").value),
           yummyAnimeToken: document.querySelector("#token").value.trim(),
-          launchMode: document.querySelector("#mode").value,
         });
         if (!result.ok) {
           error.textContent = result.error;

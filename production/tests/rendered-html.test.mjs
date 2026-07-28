@@ -43,3 +43,60 @@ test("ключевые подсистемы находятся в отдельн
   assert.match(files[3], /upcoming-layout/);
   assert.match(files[4], /episode-carousel/);
 });
+
+test("desktop shortcut asks where to launch and can edit startup settings", async () => {
+  const [main, launcher, preload] = await Promise.all([
+    readFile(new URL("../desktop/main.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/launcher.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/launcher-preload.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(main, /chooseLaunchMode/);
+  assert.match(main, /openLaunchTarget\(launchMode\)/);
+  assert.doesNotMatch(main, /if \(launchConfig\.launchMode === "browser"\)/);
+  assert.match(main, /animesoul:update-launch-config/);
+  assert.match(launcher, /data-mode="desktop"/);
+  assert.match(launcher, /data-mode="browser"/);
+  assert.match(launcher, /id="site-port"/);
+  assert.match(launcher, /id="api-token"/);
+  assert.match(preload, /getSettings/);
+  assert.match(preload, /saveSettings/);
+});
+
+test("collapsible home sections restore their device state after hydration", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /\[libraryExpanded, setLibraryExpanded\] = useState\(false\)/);
+  assert.match(page, /setLibraryExpanded\(read\(K\.libraryExpanded, true\)\)/);
+  assert.match(page, /setWatchingExpanded\(read\(K\.watchingExpanded, true\)\)/);
+  assert.match(page, /setHistoryExpanded\(read\(K\.historyExpanded, true\)\)/);
+  assert.match(page, /write\(K\.libraryExpanded, next\)/);
+  assert.match(page, /write\(K\.historyExpanded, next\)/);
+});
+
+test("home mini library can delete items and restore the last deleted folder", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/styles/base.css", import.meta.url), "utf8");
+
+  assert.match(page, /lastDeletedFolder/);
+  assert.match(page, /restoreLastFolder/);
+  assert.match(page, /Удалить из избранного/);
+  assert.match(page, /Удалить папку/);
+  assert.match(page, /animesoul:last-deleted-folder/);
+  assert.match(styles, /\.hero-mini-delete/);
+});
+
+test("statistics includes completion history and GitHub-style activity views", async () => {
+  const [page, styles] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/library.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /completionHistory/);
+  assert.match(page, /activity-grid/);
+  assert.match(page, /activity-year-switcher/);
+  assert.match(page, /activity-months/);
+  assert.match(page, /Последние 12 месяцев/);
+  assert.match(page, /По дням недели/);
+  assert.match(styles, /\.activity-cell/);
+  assert.match(styles, /\.month-chart/);
+});

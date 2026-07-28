@@ -27,6 +27,22 @@
 @keyframes hover-preview-in{from{opacity:0;transform:translate(14px,calc(-100% - 6px)) scale(.97)}to{opacity:1;transform:translate(14px,calc(-100% - 12px)) scale(1)}}
 @media(max-width:720px),(hover:none){.episode-hover-preview{display:none}}
 
+/* Отдельная кнопка просмотра не открывает серию и оставляет всю карточку кликабельной. */
+.episode-hover-anchor,.episode-card-shell{height:100%;min-width:0}
+.episode-card-shell{position:relative}
+.episode-card-shell>.episode-entry{width:100%;height:100%;padding-right:34px}
+.episode-grid .episode-watch-toggle{position:absolute;z-index:3;right:9px;top:50%;display:grid;place-items:center;width:19px;height:22px;min-width:19px;padding:0;gap:0;transform:translateY(-50%);border:0;border-radius:0;background:transparent;color:#8f8797;cursor:pointer;transition:color .18s ease,filter .18s ease,transform .18s ease}
+.episode-grid .episode-watch-toggle:hover{transform:translateY(-50%) scale(1.08);color:var(--accent);background:transparent}
+.episode-grid .episode-watch-toggle.active{color:#65d695;background:transparent;filter:drop-shadow(0 0 5px #65d69555)}
+.eye-glyph{position:relative;display:block;width:13px;height:8px;border:1.5px solid currentColor;border-radius:75% 15%;transform:rotate(45deg)}
+.eye-glyph:after{content:"";position:absolute;left:50%;top:50%;width:3.5px;height:3.5px;border-radius:50%;background:currentColor;transform:translate(-50%,-50%)}
+.season-summary-row{display:grid;grid-template-columns:minmax(0,1fr) 24px;align-items:center;gap:9px}
+.season-watch-toggle{display:grid;place-items:center;width:24px;height:28px;padding:0;border:0;border-radius:0;background:transparent;color:#918a98;transition:color .18s ease,filter .18s ease,transform .18s ease}
+.season-watch-toggle:hover{color:var(--accent);transform:scale(1.08)}
+.season-watch-toggle.active{color:#65d695;filter:drop-shadow(0 0 5px #65d69555)}
+.season-watch-toggle:disabled{opacity:.25;cursor:not-allowed;transform:none}
+@media(max-width:600px){.episode-card-shell>.episode-entry{padding-right:31px}.episode-grid .episode-watch-toggle{right:7px;width:18px;min-width:18px}.eye-glyph{width:12px;height:7px}.season-summary-row{grid-template-columns:minmax(0,1fr) 21px;gap:6px}.season-watch-toggle{width:21px}}
+
 /* Настройки просмотра всегда открываются поверх плеера независимо от положения панели. */
 .video-layout .player-options[open]{position:relative!important;inset:auto!important;width:auto!important;max-width:none!important;margin:8px 0 0!important;padding:0!important;background:transparent!important;overflow:visible!important}
 .video-layout .player-options[open]>summary{position:relative!important;top:auto!important}

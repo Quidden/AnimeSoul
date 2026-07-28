@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Запуск AnimeSoul</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#0b0911;color:#f7f3ff;font:15px/1.5 system-ui,sans-serif}
+    main{max-width:590px;margin:18px auto;padding:26px;border:1px solid #463b58;border-radius:24px;background:#14111a}
+    h1{margin:0 0 6px;font-size:28px}
+    p{margin:0;color:#aaa2b6}
+    .choices{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:28px}
+    .launch-choice{min-height:150px;padding:20px;border:1px solid #463b58;border-radius:18px;background:#211b29;color:#fff;text-align:left;cursor:pointer;transition:.18s ease}
+    .launch-choice:hover,.launch-choice:focus-visible{border-color:#936bff;background:#2b2238;transform:translateY(-2px);outline:none}
+    .launch-choice.preferred{box-shadow:inset 0 0 0 1px #936bff}
+    strong{display:block;margin-bottom:10px;font-size:21px}
+    span{display:block;color:#b9b0c5;line-height:1.45}
+    small{display:block;margin-top:12px;color:#936bff;font-weight:700}
+    .error{min-height:24px;margin-top:14px;color:#ff7f93;font-weight:700}
+    .settings-toggle,.save-settings{width:100%;padding:12px 16px;border:1px solid #6f55a6;border-radius:12px;background:#1b1622;color:#fff;font:inherit;font-weight:750;cursor:pointer}
+    .settings-toggle{margin-top:18px}
+    .launch-settings{display:none;margin-top:14px;padding:16px;border:1px solid #382f46;border-radius:16px;background:#100d15}
+    .launch-settings.open{display:block}
+    label{display:block;margin:12px 0 6px;color:#d8d1e1;font-weight:700}
+    input{width:100%;padding:11px 13px;border:1px solid #463b58;border-radius:10px;background:#211b29;color:#fff;font:inherit}
+    .settings-hint{margin-top:10px;font-size:12px;color:#8f879b}
+    .settings-result{min-height:22px;margin-top:10px;color:#74dfa4;font-size:13px;font-weight:700}
+    .save-settings{margin-top:10px;background:#6f4fd0}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Как запустить AnimeSoul?</h1>
+    <p>Порт, API-ключ, библиотека и прогресс общие для обоих вариантов.</p>
+    <div class="choices">
+      <button class="launch-choice" type="button" data-mode="desktop">
+        <strong>Десктоп</strong>
+        <span>Открыть AnimeSoul в отдельном окне приложения с масштабированием и полноэкранным режимом.</span>
+        <small class="recommendation"></small>
+      </button>
+      <button class="launch-choice" type="button" data-mode="browser">
+        <strong>Сайт</strong>
+        <span>Запустить локальный сервер и открыть AnimeSoul в браузере по сохранённому порту.</span>
+        <small class="recommendation"></small>
+      </button>
+    </div>
+    <button class="settings-toggle" id="settings-toggle" type="button">⚙ Настройки запуска</button>
+    <section class="launch-settings" id="launch-settings">
+      <label for="site-port">Порт сайта</label>
+      <input id="site-port" type="number" min="1024" max="65534" value="3001">
+      <label for="api-token">Публичный API-ключ YummyAnime</label>
+      <input id="api-token" type="password" autocomplete="off">
+      <p class="settings-hint">Изменения сохраняются в animesoul.config.json. Если AnimeSoul уже запущен, новый порт или ключ применится после полного перезапуска.</p>
+      <button class="save-settings" id="save-settings" type="button">Проверить и сохранить</button>
+      <div class="settings-result" id="settings-result"></div>
+    </section>
+    <div class="error" id="error"></div>
+  </main>
+  <script>
+    const preferredMode = new URLSearchParams(location.search).get("preferredMode") || "desktop";
+    const error = document.querySelector("#error");
+    const settings = document.querySelector("#launch-settings");
+    const settingsResult = document.querySelector("#settings-result");
+    const preferred = document.querySelector(`[data-mode="${preferredMode}"]`);
+    preferred?.classList.add("preferred");
+    if (preferred) preferred.querySelector(".recommendation").textContent = "Последний выбор";
+
+    document.querySelector("#settings-toggle").addEventListener("click", async () => {
+      settings.classList.toggle("open");
+      if (!settings.classList.contains("open")) return;
+      settingsResult.textContent = "Загружаем настройки…";
+      try {
+        const result = await window.animeSoulLauncher?.getSettings();
+        if (!result?.ok) throw new Error(result?.error || "Не удалось прочитать настройки.");
+        document.querySelector("#site-port").value = result.config.sitePort || 3001;
+        document.querySelector("#api-token").value = result.config.yummyAnimeToken || "";
+        settingsResult.textContent = "";
+      } catch (reason) {
+        settingsResult.textContent = reason instanceof Error ? reason.message : "Не удалось прочитать настройки.";
+      }
+    });
+
+    document.querySelector("#save-settings").addEventListener("click", async () => {
+      const button = document.querySelector("#save-settings");
+      button.disabled = true;
+      settingsResult.textContent = "Проверяем порт и ключ…";
+      try {
+        const result = await window.animeSoulLauncher?.saveSettings({
+          sitePort: Number(document.querySelector("#site-port").value),
+          yummyAnimeToken: document.querySelector("#api-token").value.trim(),
+        });
+        if (!result?.ok) {
+          settingsResult.textContent = result?.error || "Не удалось сохранить настройки.";
+        } else {
+          settingsResult.textContent = result.restartRequired
+            ? "Сохранено. Полностью перезапусти AnimeSoul, чтобы применить изменения."
+            : "Настройки проверены и сохранены.";
+        }
+      } catch {
+        settingsResult.textContent = "Лаунчер потерял связь с AnimeSoul. Запусти приложение заново.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    for (const button of document.querySelectorAll("[data-mode]")) {
+      button.addEventListener("click", async () => {
+        error.textContent = "";
+        for (const item of document.querySelectorAll("[data-mode]")) item.disabled = true;
+        try {
+          const result = await window.animeSoulLauncher?.choose(button.dataset.mode);
+          if (!result?.ok) {
+            error.textContent = result?.error || "Не удалось выбрать способ запуска.";
+            for (const item of document.querySelectorAll("[data-mode]")) item.disabled = false;
+          }
+        } catch {
+          error.textContent = "Лаунчер потерял связь с AnimeSoul. Запусти приложение заново.";
+          for (const item of document.querySelectorAll("[data-mode]")) item.disabled = false;
+        }
+      });
+    }
+  </script>
+</body>
+</html>
