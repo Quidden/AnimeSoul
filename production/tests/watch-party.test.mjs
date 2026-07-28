@@ -38,6 +38,8 @@ test("watch party respects room authority, free mode, and host transfer", async 
   });
   context.after(() => server.kill());
   await waitUntilReady(server);
+  const health = await request("/health");
+  assert.equal(health.payload.watchPartyProtocol, 2);
 
   const hostPlayback = { animeId: 10, season: 1, episode: 1, time: 12, playing: true };
   const guestPlayback = { animeId: 10, season: 1, episode: 2, time: 3, playing: true };
@@ -101,6 +103,29 @@ test("watch party respects room authority, free mode, and host transfer", async 
   assert.equal(state.playback.episode, 2);
   assert.equal(state.lastControllerId, guestToken);
 
+  const guestPause = { ...guestPlayback, time: 18, playing: false };
+  await request("/watch-party/update", {
+    roomId,
+    token: guestToken,
+    mode: "follow",
+    playback: guestPause,
+    control: true,
+  });
+  state = (await request(`/watch-party/state?room=${roomId}`)).payload;
+  assert.equal(state.playback.playing, false, "desktop guest can pause a web host in shared mode");
+  assert.equal(state.lastControllerId, guestToken);
+
+  const guestPlay = { ...guestPause, time: 18, playing: true };
+  await request("/watch-party/update", {
+    roomId,
+    token: guestToken,
+    mode: "follow",
+    playback: guestPlay,
+    control: true,
+  });
+  state = (await request(`/watch-party/state?room=${roomId}`)).payload;
+  assert.equal(state.playback.playing, true, "desktop guest can resume a web host in shared mode");
+
   await request("/watch-party/update", {
     roomId,
     token: guestToken,
@@ -114,6 +139,14 @@ test("watch party respects room authority, free mode, and host transfer", async 
     state.participants.find((participant) => participant.id === guestToken)?.mode,
     "free",
   );
+
+  const staleTransfer = await request("/watch-party/transfer-host", {
+    roomId,
+    token: hostToken,
+    participantId: "offline-participant",
+  });
+  assert.equal(staleTransfer.status, 404);
+  assert.equal(staleTransfer.payload.code, "PARTICIPANT_NOT_FOUND");
 
   const transferred = await request("/watch-party/transfer-host", {
     roomId,

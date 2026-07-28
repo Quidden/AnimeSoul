@@ -22,7 +22,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const [previewAnimeById, setPreviewAnimeById] = useState<Record<number, Anime>>({});
   const collapsedSeasonsKey = `animesoul:collapsed-seasons:${anime.anime_id}`;
   const [collapsedSeasons, setCollapsedSeasons] = useState<number[]>(read(collapsedSeasonsKey, []));
-  const iframe = useRef<HTMLIFrameElement>(null), playerShell = useRef<HTMLDivElement>(null), newEpisodeOpened = useRef(false), videoLoadId = useRef(0), lastPartyTime = useRef(0), lastHostPlaying = useRef<boolean | null>(null), pendingPartyPlayback = useRef<PartyPlayback | null>(null), dismissedHostDub = useRef<string | null>(null), latestHostPlayback = useRef<PartyPlayback | null>(null);
+  const iframe = useRef<HTMLIFrameElement>(null), playerShell = useRef<HTMLDivElement>(null), newEpisodeOpened = useRef(false), videoLoadId = useRef(0), lastPartyTime = useRef(0), lastPartyMotionAt = useRef(0), partyPauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null), lastHostPlaying = useRef<boolean | null>(null), pendingPartyPlayback = useRef<PartyPlayback | null>(null), dismissedHostDub = useRef<string | null>(null), latestHostPlayback = useRef<PartyPlayback | null>(null);
   const savedRef = useRef(saved), pendingProgress = useRef<{ value: AnimeProgress; originEpisodeKey?: string } | null>(null), progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null), lastProgressCommit = useRef(0);
   const pendingResumeSeek = useRef<{ episodeKey: string; target: number; expiresAt: number; lastAttemptAt: number } | null>(null);
   useEffect(() => { savedRef.current = saved ;}, [saved]);
@@ -232,7 +232,75 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     }
     return true;
   };
-  useEffect(() => { const fn = (event: MessageEvent) => { if (event.source !== iframe.current?.contentWindow) return; let d = event.data; try { if (typeof d === "string") d = JSON.parse(d) ;} catch { return ;} const key = d?.key ?? d?.type, eventKey = String(key ?? "").toLowerCase(), val = d?.value ?? d; if (key === "kodik_player_time_update") { const time = Number(val.time ?? val.currentTime ?? val), duration = Number(val.duration ?? current?.duration ?? 0); if (Number.isFinite(time)) { if (initialPrefs.watchPartyEnabled) { setPartyPlaying(time > lastPartyTime.current + .08); lastPartyTime.current = time; setPartyTime(time); setPartyDuration(duration) ;} const restoring = restoreSavedPosition(time); if (!restoring) save(time, duration); if (autoSkip && openingEnd && time >= current!.skips!.opening!.time && time < openingEnd) command("seek", { seconds: openingEnd }); if (autoSkipEnding && endingStart && time >= endingStart && time < endingEnd) { save(endingStart, duration, true); command("seek", { seconds: endingEnd }) ;} } } else if (eventKey.includes("ready") || eventKey.includes("loaded")) restoreSavedPosition(); if (eventKey === "play" || eventKey.endsWith("_play") || eventKey.includes("video_play")) { restoreSavedPosition(); if (initialPrefs.watchPartyEnabled) setPartyPlaying(true) ;} else if (initialPrefs.watchPartyEnabled && eventKey.includes("pause")) setPartyPlaying(false); if (key === "kodik_player_video_ended" || key === "ended") { if (initialPrefs.watchPartyEnabled) setPartyPlaying(false); save(Number(current?.duration ?? 0), Number(current?.duration ?? 0), true); if (autoNext) { const next = carouselIndex >= 0 ? carouselItems[carouselIndex + 1] : undefined; if (next) activateCarouselItem(next, "next", true, false) ;} } }; window.addEventListener("message", fn); return () => window.removeEventListener("message", fn) ;}, [episode, dub, autoNext, autoSkip, autoSkipEnding, openingEnd, endingStart, endingEnd, current?.video_id, carouselIndex, carouselItems.length, initialPrefs.watchPartyEnabled]);
+  useEffect(() => {
+    const stopPartyMotionTimer = () => {
+      if (partyPauseTimer.current) clearTimeout(partyPauseTimer.current);
+      partyPauseTimer.current = null;
+    };
+    const markPartyPaused = () => {
+      stopPartyMotionTimer();
+      setPartyPlaying(false);
+    };
+    const fn = (event: MessageEvent) => {
+      if (event.source !== iframe.current?.contentWindow) return;
+      let d = event.data;
+      try { if (typeof d === "string") d = JSON.parse(d); } catch { return; }
+      const key = d?.key ?? d?.type;
+      const eventKey = String(key ?? "").toLowerCase();
+      const val = d?.value ?? d;
+      if (key === "kodik_player_time_update") {
+        const time = Number(val.time ?? val.currentTime ?? val);
+        const duration = Number(val.duration ?? current?.duration ?? 0);
+        if (Number.isFinite(time)) {
+          if (initialPrefs.watchPartyEnabled) {
+            const moved = time > lastPartyTime.current + .04;
+            lastPartyTime.current = time;
+            setPartyTime(time);
+            setPartyDuration(duration);
+            if (moved) {
+              lastPartyMotionAt.current = Date.now();
+              setPartyPlaying(true);
+              stopPartyMotionTimer();
+              partyPauseTimer.current = setTimeout(() => {
+                if (Date.now() - lastPartyMotionAt.current >= 2_100) setPartyPlaying(false);
+              }, 2_200);
+            }
+          }
+          const restoring = restoreSavedPosition(time);
+          if (!restoring) save(time, duration);
+          if (autoSkip && openingEnd && time >= current!.skips!.opening!.time && time < openingEnd) command("seek", { seconds: openingEnd });
+          if (autoSkipEnding && endingStart && time >= endingStart && time < endingEnd) {
+            save(endingStart, duration, true);
+            command("seek", { seconds: endingEnd });
+          }
+        }
+      } else if (eventKey.includes("ready") || eventKey.includes("loaded")) {
+        restoreSavedPosition();
+      }
+      if (eventKey === "play" || eventKey.endsWith("_play") || eventKey.includes("video_play")) {
+        restoreSavedPosition();
+        if (initialPrefs.watchPartyEnabled) {
+          lastPartyMotionAt.current = Date.now();
+          setPartyPlaying(true);
+        }
+      } else if (initialPrefs.watchPartyEnabled && eventKey.includes("pause")) {
+        markPartyPaused();
+      }
+      if (key === "kodik_player_video_ended" || key === "ended") {
+        if (initialPrefs.watchPartyEnabled) markPartyPaused();
+        save(Number(current?.duration ?? 0), Number(current?.duration ?? 0), true);
+        if (autoNext) {
+          const next = carouselIndex >= 0 ? carouselItems[carouselIndex + 1] : undefined;
+          if (next) activateCarouselItem(next, "next", true, false);
+        }
+      }
+    };
+    window.addEventListener("message", fn);
+    return () => {
+      window.removeEventListener("message", fn);
+      stopPartyMotionTimer();
+    };
+  }, [episode, dub, autoNext, autoSkip, autoSkipEnding, openingEnd, endingStart, endingEnd, current?.video_id, carouselIndex, carouselItems.length, initialPrefs.watchPartyEnabled]);
   const loaded = () => {
     const synchronized = pendingPartyPlayback.current;
     const start = synchronized?.position ?? savedRef.current?.episodes[episodeKey]?.position ?? 0;
@@ -250,7 +318,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const partyPanel = initialPrefs.watchPartyEnabled ? <section className={`watch-party-panel party-${initialPrefs.watchPartyPanelPosition} ${party.session ? "connected" : ""}`}>
     <div className="watch-party-head"><b>Совместный просмотр</b>{party.session && <span>Комната <strong>{party.session.roomId}</strong> · {party.session.role === "host" ? "вы хост" : "участник"} · {initialPrefs.watchPartyMode === "follow" ? (party.party?.roomMode === "shared" ? "общее управление" : "следуете за хостом") : "свободный просмотр / медленный интернет"}</span>}</div>
     {!party.session ? <div className="watch-party-connect"><button onClick={() => void party.createRoom()}>Создать комнату</button><label><input value={partyRoomCode} onChange={event => setPartyRoomCode(event.target.value.toUpperCase())} placeholder="Код комнаты" maxLength={8} /><button disabled={!partyRoomCode.trim()} onClick={() => void party.joinRoom(partyRoomCode)}>Подключиться</button></label></div> :
-      <><div className="watch-party-room-rule">{party.session.role === "host" ? <label title="Только хост: управляет всеми один хост. Общее управление: любой синхронизированный участник может поставить паузу, запустить или переключить серию.">Правило комнаты<select value={initialPrefs.watchPartyRoomMode} onChange={event => persistPrefs({ ...initialPrefs, watchPartyRoomMode: event.target.value as "host" | "shared" })}><option value="host">Все следуют за хостом</option><option value="shared">Все управляют на равных</option></select></label> : <small>Правило комнаты: <b>{party.party?.roomMode === "shared" ? "все управляют на равных" : "все следуют за хостом"}</b></small>}<small>Личный свободный режим можно включить в любой момент — он не меняет режим всей комнаты.</small></div><div className="party-participants">{party.party?.participants.map(participant => <article key={participant.id} className={participant.online ? "" : "offline"}><i /><span><b>{participant.name}{participant.role === "host" ? " · Хост" : ""}</b><small>{participant.playback ? `Сезон ${participant.playback.season} · серия ${participant.playback.episode} · ${formatTime(participant.playback.position)}` : "Подключается…"} · {participant.mode === "follow" ? "синхронизирован" : "свободно"}</small></span>{participant.buffering && <em>Загрузка</em>}{party.session?.role === "host" && participant.role !== "host" && <button type="button" onClick={() => void party.transferHost(participant.id)}>Передать хоста</button>}</article>)}</div><div className="watch-party-actions">{initialPrefs.watchPartyMode === "free" && <button onClick={party.catchUp}>Перейти к общему таймкоду</button>}<button className="danger" onClick={() => void party.leaveRoom()}>Покинуть</button></div></>}
+      <><div className="watch-party-room-rule">{party.session.role === "host" ? <label title="Только хост: управляет всеми один хост. Общее управление: любой синхронизированный участник может поставить паузу, запустить или переключить серию.">Правило комнаты<select value={initialPrefs.watchPartyRoomMode} onChange={event => persistPrefs({ ...initialPrefs, watchPartyRoomMode: event.target.value as "host" | "shared" })}><option value="host">Все следуют за хостом</option><option value="shared">Все управляют на равных</option></select></label> : <small>Правило комнаты: <b>{party.party?.roomMode === "shared" ? "все управляют на равных" : "все следуют за хостом"}</b></small>}<small>Личный свободный режим можно включить в любой момент — он не меняет режим всей комнаты.</small></div><div className="party-participants">{party.party?.participants.map(participant => <article key={participant.id} className={participant.online ? "" : "offline"}><i /><span><b>{participant.name}{participant.role === "host" ? " · Хост" : ""}</b><small>{participant.playback ? `Сезон ${participant.playback.season} · серия ${participant.playback.episode} · ${formatTime(participant.playback.position)}` : "Подключается…"} · {participant.mode === "follow" ? "синхронизирован" : "свободно"}</small></span>{participant.buffering && <em>Загрузка</em>}{party.session?.role === "host" && participant.role !== "host" && participant.online && <button type="button" onClick={() => void party.transferHost(participant.id)}>Передать хоста</button>}</article>)}</div><div className="watch-party-actions">{initialPrefs.watchPartyMode === "free" && <button onClick={party.catchUp}>Перейти к общему таймкоду</button>}<button className="danger" onClick={() => void party.leaveRoom()}>Покинуть</button></div></>}
     {suggestedHostDub && <div className="party-dub-suggestion"><span>Хост смотрит в озвучке <b>{suggestedHostDub}</b>. Переключиться?</span><button onClick={acceptHostDub}>Переключиться</button><button onClick={() => { dismissedHostDub.current = suggestedHostDub; setSuggestedHostDub(null); }}>Оставить мою</button></div>}
     {partyDubNotice && <small className="watch-party-notice">{partyDubNotice}</small>}
     {party.session && !/kodik/i.test(current?.data.player ?? player) && <small className="watch-party-notice">Для этого источника синхронизация серии и озвучки работает, но точные таймкоды, пауза и перемотка могут не поддерживаться. Для полной синхронизации выбери Kodik.</small>}

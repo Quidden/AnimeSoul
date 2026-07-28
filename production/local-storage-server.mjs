@@ -11,6 +11,9 @@ const STORAGE_FILE = path.join(DATA_DIR, "animesoul-storage.json");
 const TEMP_FILE = path.join(DATA_DIR, "animesoul-storage.tmp.json");
 const PORT = Number(process.env.ANIMESOUL_STORAGE_PORT || 3002);
 const rooms = new Map();
+const WATCH_PARTY_PROTOCOL = 2;
+const PARTICIPANT_RETENTION_MS = 5 * 60_000;
+const PARTICIPANT_ONLINE_MS = 8_000;
 const headers = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, PUT, OPTIONS",
@@ -35,7 +38,7 @@ async function readBody(request) {
 
 const server = createServer(async (request, response) => {
   if (request.method === "OPTIONS") return reply(response, 204, {});
-  if (request.url === "/health" && request.method === "GET") return reply(response, 200, { ok: true });
+  if (request.url === "/health" && request.method === "GET") return reply(response, 200, { ok: true, watchPartyProtocol: WATCH_PARTY_PROTOCOL });
   if (request.url?.startsWith("/watch-party")) {
     try {
       const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
@@ -58,26 +61,28 @@ const server = createServer(async (request, response) => {
             updatedAt: Date.now(),
           }]]),
         });
-        return reply(response, 200, { roomId: id, token, role: "host" });
+        return reply(response, 200, { roomId: id, token, role: "host", protocol: WATCH_PARTY_PROTOCOL });
       }
       if (request.method === "POST" && url.pathname === "/watch-party/join") {
         const body = await readBody(request), room = rooms.get(String(body.roomId || "").toUpperCase());
-        if (!room) return reply(response, 404, { error: "Комната не найдена" });
+        if (!room) return reply(response, 404, { error: "Комната не найдена", code: "ROOM_NOT_FOUND" });
         const token = crypto.randomUUID();
         room.participants.set(token, { id: token, name: String(body.name || "Участник").slice(0, 32), role: "guest", mode: body.mode === "free" ? "free" : "follow", updatedAt: Date.now() });
         room.updatedAt = Date.now();
-        return reply(response, 200, { roomId: room.id, token, role: "guest" });
+        return reply(response, 200, { roomId: room.id, token, role: "guest", protocol: WATCH_PARTY_PROTOCOL });
       }
       if (request.method === "POST" && url.pathname === "/watch-party/update") {
         const body = await readBody(request), room = rooms.get(String(body.roomId || "").toUpperCase()), participant = room?.participants.get(body.token);
-        if (!room || !participant) return reply(response, 404, { error: "Подключение к комнате потеряно" });
+        if (!room) return reply(response, 404, { error: "Комната не найдена", code: "ROOM_NOT_FOUND" });
+        if (!participant) return reply(response, 404, { error: "Подключение участника потеряно", code: "PARTICIPANT_NOT_FOUND" });
         Object.assign(participant, { name: String(body.name || participant.name).slice(0, 32), mode: body.mode === "free" ? "free" : "follow", playback: body.playback ?? participant.playback, buffering: Boolean(body.buffering), updatedAt: Date.now() });
         if (body.token === room.hostToken && (body.roomMode === "host" || body.roomMode === "shared")) {
           room.roomMode = body.roomMode;
         }
         const hostControls = room.roomMode === "host" && body.token === room.hostToken && participant.mode === "follow";
         const sharedControl = room.roomMode === "shared" && participant.mode === "follow" && body.control === true;
-        if ((hostControls || sharedControl) && body.playback) {
+        const seedSharedRoom = room.roomMode === "shared" && !room.playback && body.token === room.hostToken;
+        if ((hostControls || sharedControl || seedSharedRoom) && body.playback) {
           room.playback = { ...body.playback, sentAt: Date.now() };
           room.lastControllerId = body.token;
           if (body.action) room.actionSeq += 1;
@@ -88,10 +93,11 @@ const server = createServer(async (request, response) => {
       }
       if (request.method === "POST" && url.pathname === "/watch-party/transfer-host") {
         const body = await readBody(request), room = rooms.get(String(body.roomId || "").toUpperCase());
-        if (!room || body.token !== room.hostToken) return reply(response, 403, { error: "Передать роль может только хост" });
+        if (!room) return reply(response, 404, { error: "Комната не найдена", code: "ROOM_NOT_FOUND" });
+        if (body.token !== room.hostToken) return reply(response, 403, { error: "Передать роль может только хост", code: "NOT_HOST" });
         const nextHost = room.participants.get(body.participantId);
         const currentHost = room.participants.get(room.hostToken);
-        if (!nextHost) return reply(response, 404, { error: "Участник не найден" });
+        if (!nextHost) return reply(response, 404, { error: "Участник не найден", code: "PARTICIPANT_NOT_FOUND" });
         if (currentHost) currentHost.role = "guest";
         nextHost.role = "host";
         room.hostToken = nextHost.id;
@@ -100,16 +106,17 @@ const server = createServer(async (request, response) => {
       }
       if (request.method === "GET" && url.pathname === "/watch-party/state") {
         const room = rooms.get(roomId);
-        if (!room) return reply(response, 404, { error: "Комната не найдена" });
+        if (!room) return reply(response, 404, { error: "Комната не найдена", code: "ROOM_NOT_FOUND" });
         const now = Date.now();
-        for (const [token, participant] of room.participants) if (now - participant.updatedAt > 15000 && token !== room.hostToken) room.participants.delete(token);
+        for (const [token, participant] of room.participants) if (now - participant.updatedAt > PARTICIPANT_RETENTION_MS && token !== room.hostToken) room.participants.delete(token);
         return reply(response, 200, {
+          protocol: WATCH_PARTY_PROTOCOL,
           roomId: room.id,
           roomMode: room.roomMode,
           playback: room.playback,
           lastControllerId: room.lastControllerId,
           lastAction: room.lastAction,
-          participants: [...room.participants.values()].map(({ id, name, role, mode, playback, buffering, updatedAt }) => ({ id, name, role, mode, playback, buffering, online: now - updatedAt < 6000 })),
+          participants: [...room.participants.values()].map(({ id, name, role, mode, playback, buffering, updatedAt }) => ({ id, name, role, mode, playback, buffering, online: now - updatedAt < PARTICIPANT_ONLINE_MS })),
         });
       }
       if (request.method === "POST" && url.pathname === "/watch-party/leave") {

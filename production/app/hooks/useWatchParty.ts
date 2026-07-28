@@ -19,20 +19,26 @@ const saveSession = (session: WatchPartySession | null) => {
   if (session) sessionStorage.setItem(WATCH_PARTY_SESSION_KEY, JSON.stringify(session));
   else sessionStorage.removeItem(WATCH_PARTY_SESSION_KEY);
 };
-const roomError = (reason: unknown, fallback: string) =>
-  (reason as { status?: number })?.status === 404
-    ? "Сервер совместного просмотра не запущен или устарел — перезапусти AnimeSoul"
-    : reason instanceof Error ? reason.message : fallback;
+type PartyRequestError = Error & { status?: number; code?: string };
+const roomError = (reason: unknown, fallback: string) => {
+  const error = reason as PartyRequestError;
+  if (error.code === "PARTICIPANT_NOT_FOUND") return "Участник отключился от комнаты. Подождите его переподключения и попробуйте снова.";
+  if (error.code === "ROOM_NOT_FOUND") return "Комната больше не существует. Создайте новую комнату.";
+  if (error.code === "NOT_HOST") return "Передать роль может только текущий хост.";
+  if (error.status === 404) return error.message || "Команда не поддерживается сервером совместного просмотра. Перезапустите AnimeSoul у хоста.";
+  return reason instanceof Error ? reason.message : fallback;
+};
 const post = async (server: string, path: string, body: unknown) => {
   const response = await fetch(endpoint(server, path), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  const payload = await response.json();
+  const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.error || "Ошибка комнаты") as Error & { status?: number };
+    const error = new Error(payload.error || "Ошибка комнаты") as PartyRequestError;
     error.status = response.status;
+    error.code = payload.code;
     throw error;
   }
   return payload;
@@ -42,7 +48,7 @@ const normalizeParty = (value: PartyState) => ({
   roomMode: value.roomMode === "shared" ? "shared" as const : "host" as const,
 });
 const playbackChangedByUser = (previous: PartyPlayback | null, current: PartyPlayback) => {
-  if (!previous) return true;
+  if (!previous) return false;
   if (
     previous.animeId !== current.animeId
     || previous.season !== current.season
@@ -134,7 +140,10 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
         const currentPlayback = playbackRef.current;
         const control = mode === "follow"
           && Date.now() >= suppressControlUntil.current
-          && playbackChangedByUser(lastLocalPlayback.current, currentPlayback);
+          && (
+            (lastLocalPlayback.current === null && session.role === "host")
+            || playbackChangedByUser(lastLocalPlayback.current, currentPlayback)
+          );
         lastLocalPlayback.current = { ...currentPlayback };
         await post(server, "/watch-party/update", {
           ...session,
