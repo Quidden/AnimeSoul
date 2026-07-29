@@ -15,10 +15,11 @@ import threading
 import urllib.error
 import urllib.request
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import (
     BooleanVar,
-    Button,
+    Canvas,
     Entry,
     Frame,
     Label,
@@ -33,6 +34,274 @@ from tkinter import (
 APP_NAME = "AnimeSoul"
 DEFAULT_PORT = 3001
 API_DOCUMENTATION_URL = "https://api.yani.tv/swagger"
+
+
+def _draw_rounded_rectangle(
+    canvas: Canvas,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    radius: float,
+    *,
+    fill: str,
+    outline: str = "",
+    width: int = 1,
+    tags: tuple[str, ...] = (),
+) -> int:
+    """Draw a scalable rounded rectangle using a smooth canvas polygon."""
+
+    radius = max(0.0, min(radius, (x2 - x1) / 2, (y2 - y1) / 2))
+    points = (
+        x1 + radius,
+        y1,
+        x2 - radius,
+        y1,
+        x2,
+        y1,
+        x2,
+        y1 + radius,
+        x2,
+        y2 - radius,
+        x2,
+        y2,
+        x2 - radius,
+        y2,
+        x1 + radius,
+        y2,
+        x1,
+        y2,
+        x1,
+        y2 - radius,
+        x1,
+        y1 + radius,
+        x1,
+        y1,
+    )
+    return canvas.create_polygon(
+        points,
+        smooth=True,
+        splinesteps=24,
+        fill=fill,
+        outline=outline,
+        width=width,
+        tags=tags,
+    )
+
+
+class RoundedPanel(Canvas):
+    """Rounded container whose ``content`` frame hosts regular Tk widgets."""
+
+    def __init__(
+        self,
+        parent: Frame,
+        *,
+        background: str,
+        parent_background: str,
+        border: str,
+        radius: int = 18,
+        padding: int = 18,
+    ) -> None:
+        super().__init__(
+            parent,
+            background=parent_background,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self.panel_background = background
+        self.border = border
+        self.radius = radius
+        self.padding = padding
+        self.content = Frame(self, background=background)
+        self.content_window = self.create_window(
+            padding,
+            padding,
+            anchor="nw",
+            window=self.content,
+        )
+        self.bind("<Configure>", self._redraw)
+
+    def _redraw(self, event: object) -> None:
+        width = max(1, event.width)
+        height = max(1, event.height)
+        self.delete("panel-shape")
+        _draw_rounded_rectangle(
+            self,
+            1,
+            1,
+            width - 1,
+            height - 1,
+            self.radius,
+            fill=self.panel_background,
+            outline=self.border,
+            tags=("panel-shape",),
+        )
+        self.tag_lower("panel-shape")
+        self.coords(self.content_window, self.padding, self.padding)
+        self.itemconfigure(
+            self.content_window,
+            width=max(1, width - self.padding * 2),
+            height=max(1, height - self.padding * 2),
+        )
+
+
+class RoundedEntry(Frame):
+    """Entry field with a real rounded canvas border."""
+
+    def __init__(
+        self,
+        parent: Frame,
+        variable: StringVar,
+        *,
+        show: str = "",
+        height: int = 43,
+    ) -> None:
+        super().__init__(parent, background="#17131f", height=height)
+        self.pack_propagate(False)
+        self.canvas = Canvas(
+            self,
+            background="#17131f",
+            highlightthickness=0,
+            borderwidth=0,
+            height=height,
+        )
+        self.canvas.pack(fill="both", expand=True)
+        self.entry = Entry(
+            self.canvas,
+            textvariable=variable,
+            show=show,
+            background="#211c2b",
+            foreground="#ffffff",
+            insertbackground="#ffffff",
+            selectbackground="#8f63ff",
+            selectforeground="#ffffff",
+            disabledbackground="#211c2b",
+            disabledforeground="#7d7488",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            font=("Segoe UI", 11),
+        )
+        self.entry_window = self.canvas.create_window(
+            13,
+            height / 2,
+            anchor="w",
+            window=self.entry,
+        )
+        self.canvas.bind("<Configure>", self._redraw)
+        self.entry.bind("<FocusIn>", lambda _event: self._redraw_border(True))
+        self.entry.bind("<FocusOut>", lambda _event: self._redraw_border(False))
+
+    def _redraw(self, event: object) -> None:
+        self.canvas.delete("entry-shape")
+        _draw_rounded_rectangle(
+            self.canvas,
+            1,
+            1,
+            max(2, event.width - 1),
+            max(2, event.height - 1),
+            11,
+            fill="#211c2b",
+            outline="#514360",
+            tags=("entry-shape",),
+        )
+        self.canvas.tag_lower("entry-shape")
+        self.canvas.coords(self.entry_window, 13, event.height / 2)
+        self.canvas.itemconfigure(self.entry_window, width=max(1, event.width - 26))
+
+    def _redraw_border(self, focused: bool) -> None:
+        self.canvas.itemconfigure(
+            "entry-shape",
+            outline="#9d78ff" if focused else "#514360",
+        )
+
+    def configure(self, **kwargs: object) -> None:
+        self.entry.configure(**kwargs)
+
+
+class RoundedButton(Canvas):
+    """Canvas button with rounded corners and a small Button-compatible API."""
+
+    def __init__(
+        self,
+        parent: Frame,
+        text: str,
+        command: Callable[[], None],
+        *,
+        accent: bool,
+        compact: bool,
+    ) -> None:
+        self.normal = "#8f63ff" if accent else "#211c2b"
+        self.hover = "#a582ff" if accent else "#2c2538"
+        self.disabled = "#392f49"
+        self.border = "#9d78ff" if accent else "#514360"
+        self.text_color = "#ffffff" if accent else "#e9e2f1"
+        self.command = command
+        self.state = "normal"
+        self.label = text
+        height = 35 if compact else 47
+        super().__init__(
+            parent,
+            background=str(parent.cget("background")),
+            highlightthickness=0,
+            borderwidth=0,
+            height=height,
+            cursor="hand2",
+        )
+        self.font = ("Segoe UI Semibold", 9 if compact else 11)
+        self.radius = 10 if compact else 13
+        self.current_fill = self.normal
+        self.bind("<Configure>", self._redraw)
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_click)
+
+    def _redraw(self, _event: object | None = None) -> None:
+        width = max(1, self.winfo_width())
+        height = max(1, self.winfo_height())
+        self.delete("all")
+        _draw_rounded_rectangle(
+            self,
+            1,
+            1,
+            width - 1,
+            height - 1,
+            self.radius,
+            fill=self.disabled if self.state == "disabled" else self.current_fill,
+            outline=self.border,
+        )
+        self.create_text(
+            width / 2,
+            height / 2,
+            text=self.label,
+            fill="#81778c" if self.state == "disabled" else self.text_color,
+            font=self.font,
+        )
+
+    def _on_enter(self, _event: object) -> None:
+        if self.state != "disabled":
+            self.current_fill = self.hover
+            self._redraw()
+
+    def _on_leave(self, _event: object) -> None:
+        self.current_fill = self.normal
+        self._redraw()
+
+    def _on_click(self, _event: object) -> None:
+        if self.state != "disabled":
+            self.command()
+
+    def configure(self, **kwargs: object) -> None:
+        if "state" in kwargs:
+            self.state = str(kwargs["state"])
+        if "text" in kwargs:
+            self.label = str(kwargs["text"])
+        self._redraw()
+
+    def cget(self, key: str) -> object:
+        if key == "state":
+            return self.state
+        return super().cget(key)
 
 
 def user_data_root() -> Path:
@@ -145,7 +414,7 @@ class LauncherWindow:
         self.show_token = BooleanVar(value=False)
         self.status = StringVar(value="Готово к запуску")
         self.busy = False
-        self.action_buttons: list[Button] = []
+        self.action_buttons: list[RoundedButton] = []
 
         self.context_menu = Menu(
             self.root,
@@ -169,28 +438,44 @@ class LauncherWindow:
     def _build(self) -> None:
         shell = Frame(self.root, background="#09080e", padx=24, pady=22)
         shell.pack(fill="both", expand=True)
-        card_border = Frame(
+        card_panel = RoundedPanel(
             shell,
             background="#17131f",
-            highlightbackground="#3b3150",
-            highlightcolor="#8f63ff",
-            highlightthickness=1,
+            parent_background="#09080e",
+            border="#514360",
+            radius=22,
+            padding=28,
         )
-        card_border.pack(fill="both", expand=True)
-        card = Frame(card_border, background="#17131f", padx=30, pady=24)
-        card.pack(fill="both", expand=True)
+        card_panel.pack(fill="both", expand=True)
+        card = card_panel.content
 
         brand = Frame(card, background="#17131f")
         brand.pack(fill="x", pady=(0, 4))
-        Label(
+        logo = Canvas(
             brand,
+            background="#17131f",
+            highlightthickness=0,
+            borderwidth=0,
+            width=38,
+            height=38,
+        )
+        logo.pack(side="left", padx=(0, 12))
+        _draw_rounded_rectangle(
+            logo,
+            1,
+            1,
+            37,
+            37,
+            10,
+            fill="#8f63ff",
+        )
+        logo.create_text(
+            19,
+            19,
             text="魂",
-            background="#8f63ff",
-            foreground="#ffffff",
+            fill="#ffffff",
             font=("Segoe UI Semibold", 17),
-            width=2,
-            height=1,
-        ).pack(side="left", padx=(0, 12))
+        )
         Label(
             brand,
             text="AnimeSoul",
@@ -239,7 +524,7 @@ class LauncherWindow:
             font=("Segoe UI Semibold", 10),
         ).pack(anchor="w")
         self.port_entry = self._create_entry(card, self.port)
-        self.port_entry.pack(fill="x", pady=(6, 4), ipady=9)
+        self.port_entry.pack(fill="x", pady=(6, 4))
         Label(
             card,
             text="По умолчанию 3001 · допустимый диапазон: 1024–65535",
@@ -256,7 +541,7 @@ class LauncherWindow:
             font=("Segoe UI Semibold", 10),
         ).pack(anchor="w")
         self.token_entry = self._create_entry(card, self.token, show="•")
-        self.token_entry.pack(fill="x", pady=(6, 6), ipady=9)
+        self.token_entry.pack(fill="x", pady=(6, 6))
 
         token_actions = Frame(card, background="#17131f")
         token_actions.pack(fill="x", pady=(0, 14))
@@ -332,88 +617,50 @@ class LauncherWindow:
         variable: StringVar,
         *,
         show: str = "",
-    ) -> Entry:
-        entry = Entry(
-            parent,
-            textvariable=variable,
-            show=show,
-            background="#211c2b",
-            foreground="#ffffff",
-            insertbackground="#ffffff",
-            selectbackground="#8f63ff",
-            selectforeground="#ffffff",
-            disabledbackground="#211c2b",
-            disabledforeground="#7d7488",
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=1,
-            highlightbackground="#514360",
-            highlightcolor="#9d78ff",
-            font=("Segoe UI", 11),
-        )
-        self._bind_entry_shortcuts(entry)
+    ) -> RoundedEntry:
+        entry = RoundedEntry(parent, variable, show=show)
+        self._bind_entry_shortcuts(entry.entry)
         return entry
 
     def _create_button(
         self,
         parent: Frame,
         text: str,
-        command: object,
+        command: Callable[[], None],
         *,
         accent: bool,
         compact: bool = False,
-    ) -> Button:
-        normal = "#8f63ff" if accent else "#211c2b"
-        hover = "#a582ff" if accent else "#2c2538"
-        button = Button(
+    ) -> RoundedButton:
+        button = RoundedButton(
             parent,
-            text=text,
-            command=command,
-            background=normal,
-            foreground="#ffffff" if accent else "#e9e2f1",
-            activebackground=hover,
-            activeforeground="#ffffff",
-            disabledforeground="#81778c",
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=1,
-            highlightbackground="#8f63ff" if accent else "#514360",
-            highlightcolor="#a582ff",
-            cursor="hand2",
-            font=("Segoe UI Semibold", 9 if compact else 11),
-            padx=13 if compact else 16,
-            pady=7 if compact else 11,
-        )
-        button.bind(
-            "<Enter>",
-            lambda _event: (
-                button.configure(background=hover)
-                if str(button.cget("state")) != "disabled"
-                else None
-            ),
-        )
-        button.bind(
-            "<Leave>",
-            lambda _event: (
-                button.configure(background=normal)
-                if str(button.cget("state")) != "disabled"
-                else None
-            ),
+            text,
+            command,
+            accent=accent,
+            compact=compact,
         )
         self.action_buttons.append(button)
         return button
 
     def _bind_entry_shortcuts(self, entry: Entry) -> None:
-        entry.bind("<Control-v>", self._paste_entry)
-        entry.bind("<Control-V>", self._paste_entry)
+        # Virtual-key codes stay stable when the active keyboard layout changes.
+        entry.bind("<Control-KeyPress>", self._control_entry_shortcut)
         entry.bind("<Shift-Insert>", self._paste_entry)
-        entry.bind("<Control-c>", self._copy_entry)
-        entry.bind("<Control-C>", self._copy_entry)
-        entry.bind("<Control-x>", self._cut_entry)
-        entry.bind("<Control-X>", self._cut_entry)
-        entry.bind("<Control-a>", self._select_all_entry)
-        entry.bind("<Control-A>", self._select_all_entry)
+        entry.bind("<Control-Insert>", self._copy_entry)
         entry.bind("<Button-3>", self._show_context_menu)
+
+    def _control_entry_shortcut(self, event: object) -> str | None:
+        """Handle edit shortcuts by physical Windows virtual-key code."""
+
+        keycode = int(getattr(event, "keycode", 0))
+        if keycode == 86:  # VK_V
+            return self._paste_entry(event)
+        if keycode == 67:  # VK_C
+            return self._copy_entry(event)
+        if keycode == 88:  # VK_X
+            return self._cut_entry(event)
+        if keycode == 65:  # VK_A
+            return self._select_all_entry(event)
+        return None
 
     def _show_context_menu(self, event: object) -> str:
         entry = event.widget
