@@ -2,8 +2,8 @@
 
 # dependencies
 /node_modules
-/production/node_modules
-/python-react/frontend/node_modules
+/app/frontend/node_modules
+/legacy-old-stack/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -16,9 +16,9 @@
 /coverage
 
 # next.js
-/production/.next/
-/production/.vinext/
-/production/out/
+/legacy-old-stack/.next/
+/legacy-old-stack/.vinext/
+/legacy-old-stack/out/
 
 # misc
 .DS_Store
@@ -30,39 +30,37 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .dev-*.log
-/production/.npm-cache/
+/legacy-old-stack/.npm-cache/
 .local-dev.log
-/production/release-work/
+/legacy-old-stack/release-work/
+/release-work/
 
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
-/production/animesoul.config.json
-/python-react/animesoul.python.json
+/legacy-old-stack/animesoul.config.json
+/app/animesoul.python.json
+/animesoul.config.json
 
 # vercel
 .vercel
 
 # typescript
 next-env.d.ts
-/production/dist/
-/production/.wrangler/
-/production/outputs/
-/production/work/
-/production/desktop-dist/
-/production/desktop-dist-carousel/
-/production/desktop-release/
-/production/desktop-stage*/
-/production/release-*/
-/production/data/animesoul-storage.json
-/production/data/animesoul-storage.tmp.json
-/python-react/frontend/dist/
-/python-react/.venv/
-/python-react/data/
-
-# Old generated folders can remain locked by Windows during a one-time
-# migration. They are not source code and may be removed after a reboot.
-/desktop-dist-carousel/
-/desktop-release/
-/release-0.1.6/
-/release-build/
+/legacy-old-stack/dist/
+/legacy-old-stack/build/
+/legacy-old-stack/.wrangler/
+/legacy-old-stack/outputs/
+/legacy-old-stack/work/
+/legacy-old-stack/desktop-dist/
+/legacy-old-stack/desktop-dist-carousel/
+/legacy-old-stack/desktop-release/
+/legacy-old-stack/desktop-stage*/
+/legacy-old-stack/release-*/
+/legacy-old-stack/data/animesoul-storage.json
+/legacy-old-stack/data/animesoul-storage.tmp.json
+/app/frontend/dist/
+/app/.venv/
+/app/data/
+/app/__pycache__/
+/app/**/*.pyc

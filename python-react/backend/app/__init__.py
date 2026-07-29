@@ -1,1 +1,0 @@
-"""AnimeSoul experimental FastAPI backend."""
