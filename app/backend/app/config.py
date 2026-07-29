@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = PROJECT_ROOT / "animesoul.python.json"
+PACKAGED_ROOT = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT))
+CONFIG_FILE = Path(
+    os.getenv("ANIMESOUL_CONFIG_FILE", str(PROJECT_ROOT / "animesoul.python.json"))
+)
 
 
 @dataclass(slots=True)
@@ -23,7 +27,12 @@ class Settings:
     port: int = 8000
     yummy_token: str = ""
     data_dir: Path = PROJECT_ROOT / "data"
-    frontend_dist: Path = PROJECT_ROOT / "frontend" / "dist"
+    frontend_dist: Path = Path(
+        os.getenv(
+            "ANIMESOUL_FRONTEND_DIST",
+            str(PACKAGED_ROOT / "frontend" / "dist"),
+        )
+    )
     legacy_storage_file: Path = (
         PROJECT_ROOT.parent
         / "legacy-old-stack"

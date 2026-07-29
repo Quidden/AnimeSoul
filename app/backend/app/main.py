@@ -15,7 +15,7 @@ from .config import settings
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.1.9-beta.1",
+    version="0.1.9-beta.2",
     description="FastAPI backend for the AnimeSoul React client.",
 )
 

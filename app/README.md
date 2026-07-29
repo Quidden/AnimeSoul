@@ -1,6 +1,6 @@
 # AnimeSoul — main application
 
-Current beta: **0.1.9 Beta 1**.
+Current beta: **0.1.9 Beta 2**.
 
 This folder contains the current AnimeSoul implementation. All new feature
 development happens here. The previous Vinext/Electron implementation is

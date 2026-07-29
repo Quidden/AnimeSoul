@@ -34,6 +34,8 @@ yarn-error.log*
 .local-dev.log
 /legacy-old-stack/release-work/
 /release-work/
+/app/build/
+/app/dist/
 
 # env files (can opt-in for committing if needed)
 .env*

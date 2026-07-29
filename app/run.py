@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
+import sys
 import threading
 import time
 import webbrowser
@@ -21,7 +23,8 @@ import uvicorn
 
 
 ROOT = Path(__file__).resolve().parent
-CONFIG_FILE = ROOT / "animesoul.python.json"
+DEFAULT_CONFIG_FILE = ROOT / "animesoul.python.json"
+CONFIG_FILE = DEFAULT_CONFIG_FILE
 LaunchMode = Literal["browser", "desktop"]
 
 
@@ -246,11 +249,25 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Open the port, API token and launch mode setup again.",
     )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Use an explicit machine-local configuration file.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
+    global CONFIG_FILE
     args = parse_arguments()
+    if args.config:
+        CONFIG_FILE = args.config.resolve()
+    if getattr(sys, "frozen", False):
+        bundled_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        os.environ["ANIMESOUL_FRONTEND_DIST"] = str(
+            bundled_root / "frontend" / "dist"
+        )
+    os.environ["ANIMESOUL_CONFIG_FILE"] = str(CONFIG_FILE)
     runtime = load_runtime_settings(args.configure)
     port = int(runtime.get("port", 8000))
     mode: LaunchMode = args.mode or (
