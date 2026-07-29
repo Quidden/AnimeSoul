@@ -195,7 +195,17 @@ def run_browser(port: int) -> None:
             print(f"Сайт не ответил по адресу {url}")
 
     threading.Thread(target=open_client, daemon=True).start()
-    uvicorn.run("backend.app.main:app", host="127.0.0.1", port=port, reload=False)
+    # A windowed PyInstaller executable has no regular stderr stream.
+    # Uvicorn's default colour formatter calls stderr.isatty() during startup,
+    # so the packaged runtime must not install that console log configuration.
+    uvicorn.run(
+        "backend.app.main:app",
+        host="127.0.0.1",
+        port=port,
+        reload=False,
+        log_config=None,
+        access_log=False,
+    )
 
 
 def run_desktop(port: int) -> None:
@@ -213,6 +223,8 @@ def run_desktop(port: int) -> None:
         port=port,
         reload=False,
         log_level="warning",
+        log_config=None,
+        access_log=False,
     )
     server = uvicorn.Server(config)
     server_thread = threading.Thread(target=server.run, daemon=True)

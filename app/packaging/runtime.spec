@@ -1,12 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller recipe for the FastAPI + React + WebView runtime."""
 
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
 
 
 APP_ROOT = Path(SPECPATH).parent
+# Hidden imports are collected before Analysis applies ``pathex``. Make the
+# application package importable at collection time so FastAPI routes and
+# services are included in the frozen runtime.
+sys.path.insert(0, str(APP_ROOT))
 hidden_imports = (
     collect_submodules("backend")
     + collect_submodules("uvicorn")
