@@ -16,8 +16,18 @@ import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
-from tkinter import BooleanVar, StringVar, Tk, messagebox
-from tkinter import ttk
+from tkinter import (
+    BooleanVar,
+    Button,
+    Entry,
+    Frame,
+    Label,
+    Menu,
+    StringVar,
+    TclError,
+    Tk,
+    messagebox,
+)
 
 
 APP_NAME = "AnimeSoul"
@@ -126,170 +136,367 @@ class LauncherWindow:
         settings = load_settings()
         self.root = Tk()
         self.root.title("AnimeSoul Launcher")
-        self.root.geometry("680x690")
-        self.root.minsize(620, 620)
-        self.root.configure(background="#0d0b12")
+        self.root.geometry("720x700")
+        self.root.minsize(660, 650)
+        self.root.configure(background="#09080e")
 
         self.port = StringVar(value=str(settings.get("port", DEFAULT_PORT)))
         self.token = StringVar(value=str(settings.get("yummy_public_token", "")))
         self.show_token = BooleanVar(value=False)
         self.status = StringVar(value="Готово к запуску")
         self.busy = False
+        self.action_buttons: list[Button] = []
 
-        self._configure_styles()
+        self.context_menu = Menu(
+            self.root,
+            tearoff=False,
+            background="#211c2b",
+            foreground="#f7f3ff",
+            activebackground="#8f63ff",
+            activeforeground="#ffffff",
+            borderwidth=0,
+            font=("Segoe UI", 10),
+        )
+        self.context_menu.add_command(label="Вырезать", command=self._cut_active_entry)
+        self.context_menu.add_command(label="Копировать", command=self._copy_active_entry)
+        self.context_menu.add_command(label="Вставить", command=self._paste_active_entry)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Выделить всё", command=self._select_all_active_entry)
+        self.active_entry: Entry | None = None
+
         self._build()
 
-    def _configure_styles(self) -> None:
-        style = ttk.Style(self.root)
-        style.theme_use("clam")
-        style.configure("Root.TFrame", background="#0d0b12")
-        style.configure("Card.TFrame", background="#15121c")
-        style.configure(
-            "Title.TLabel",
-            background="#15121c",
-            foreground="#f7f3ff",
-            font=("Segoe UI Semibold", 24),
-        )
-        style.configure(
-            "Text.TLabel",
-            background="#15121c",
-            foreground="#b9b0c7",
-            font=("Segoe UI", 10),
-            wraplength=570,
-        )
-        style.configure(
-            "Field.TLabel",
-            background="#15121c",
-            foreground="#f1ecf8",
-            font=("Segoe UI Semibold", 10),
-        )
-        style.configure(
-            "Status.TLabel",
-            background="#15121c",
-            foreground="#9a72ff",
-            font=("Segoe UI Semibold", 10),
-        )
-        style.configure(
-            "Accent.TButton",
-            background="#8f63ff",
-            foreground="#ffffff",
-            bordercolor="#8f63ff",
-            padding=(16, 12),
-            font=("Segoe UI Semibold", 11),
-        )
-        style.map("Accent.TButton", background=[("active", "#a582ff"), ("disabled", "#514266")])
-        style.configure(
-            "Secondary.TButton",
-            background="#211b2b",
-            foreground="#f3eef9",
-            bordercolor="#514360",
-            padding=(14, 10),
-            font=("Segoe UI Semibold", 10),
-        )
-        style.map("Secondary.TButton", background=[("active", "#2c2339")])
-        style.configure(
-            "TEntry",
-            fieldbackground="#211b2b",
-            foreground="#ffffff",
-            insertcolor="#ffffff",
-            bordercolor="#514360",
-            padding=10,
-        )
-        style.configure(
-            "TCheckbutton",
-            background="#15121c",
-            foreground="#b9b0c7",
-            font=("Segoe UI", 9),
-        )
-
     def _build(self) -> None:
-        outer = ttk.Frame(self.root, style="Root.TFrame", padding=24)
-        outer.pack(fill="both", expand=True)
-        card = ttk.Frame(outer, style="Card.TFrame", padding=28)
+        shell = Frame(self.root, background="#09080e", padx=24, pady=22)
+        shell.pack(fill="both", expand=True)
+        card_border = Frame(
+            shell,
+            background="#17131f",
+            highlightbackground="#3b3150",
+            highlightcolor="#8f63ff",
+            highlightthickness=1,
+        )
+        card_border.pack(fill="both", expand=True)
+        card = Frame(card_border, background="#17131f", padx=30, pady=24)
         card.pack(fill="both", expand=True)
 
-        ttk.Label(card, text="AnimeSoul", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(
+        brand = Frame(card, background="#17131f")
+        brand.pack(fill="x", pady=(0, 4))
+        Label(
+            brand,
+            text="魂",
+            background="#8f63ff",
+            foreground="#ffffff",
+            font=("Segoe UI Semibold", 17),
+            width=2,
+            height=1,
+        ).pack(side="left", padx=(0, 12))
+        Label(
+            brand,
+            text="AnimeSoul",
+            background="#17131f",
+            foreground="#f8f5ff",
+            font=("Segoe UI Semibold", 24),
+        ).pack(side="left")
+        Label(
             card,
             text="Локальная аниме-библиотека · Python + React",
-            style="Text.TLabel",
-        ).pack(anchor="w", pady=(2, 18))
+            background="#17131f",
+            foreground="#a89fb5",
+            font=("Segoe UI", 10),
+        ).pack(anchor="w", pady=(0, 16))
 
-        ttk.Label(
+        Label(
             card,
             text=(
-                "Спасибо разработчикам YummyAnime за открытый API — благодаря их "
-                "работе стало возможным создание AnimeSoul."
+                "Огромное спасибо разработчикам YummyAnime за открытый API — "
+                "благодаря им стало возможным создание AnimeSoul."
             ),
-            style="Text.TLabel",
-        ).pack(anchor="w", pady=(0, 12))
-        ttk.Label(
+            background="#17131f",
+            foreground="#c9c1d4",
+            font=("Segoe UI", 10),
+            justify="left",
+            wraplength=620,
+        ).pack(anchor="w", pady=(0, 8))
+        Label(
             card,
             text=(
-                "Нужен личный Public token. Мы не включаем общий ключ в open-source "
-                "проект, потому что неизвестно, разрешено ли его распространять и "
-                "как общая нагрузка повлияет на API."
+                "Для запуска нужен личный Public token. Общий ключ не входит в "
+                "open-source проект, чтобы не создавать лишнюю нагрузку на API."
             ),
-            style="Text.TLabel",
-        ).pack(anchor="w", pady=(0, 18))
+            background="#17131f",
+            foreground="#a89fb5",
+            font=("Segoe UI", 10),
+            justify="left",
+            wraplength=620,
+        ).pack(anchor="w", pady=(0, 16))
 
-        ttk.Label(card, text="Порт сайта", style="Field.TLabel").pack(anchor="w")
-        ttk.Entry(card, textvariable=self.port).pack(fill="x", pady=(6, 6))
-        ttk.Label(
+        Label(
             card,
-            text="По умолчанию 3001. Используй свободный порт от 1024 до 65535.",
-            style="Text.TLabel",
-        ).pack(anchor="w", pady=(0, 14))
-
-        ttk.Label(card, text="Public token YummyAnime API", style="Field.TLabel").pack(anchor="w")
-        self.token_entry = ttk.Entry(card, textvariable=self.token, show="•")
-        self.token_entry.pack(fill="x", pady=(6, 4))
-        ttk.Checkbutton(
-            card,
-            text="Показать ключ",
-            variable=self.show_token,
-            command=self._toggle_token,
+            text="Порт сайта",
+            background="#17131f",
+            foreground="#f3eef9",
+            font=("Segoe UI Semibold", 10),
         ).pack(anchor="w")
-        ttk.Button(
+        self.port_entry = self._create_entry(card, self.port)
+        self.port_entry.pack(fill="x", pady=(6, 4), ipady=9)
+        Label(
             card,
-            text="Где получить Public token",
-            style="Secondary.TButton",
-            command=lambda: webbrowser.open(API_DOCUMENTATION_URL),
-        ).pack(anchor="w", pady=(8, 18))
+            text="По умолчанию 3001 · допустимый диапазон: 1024–65535",
+            background="#17131f",
+            foreground="#82798f",
+            font=("Segoe UI", 9),
+        ).pack(anchor="w", pady=(0, 12))
 
-        ttk.Label(card, textvariable=self.status, style="Status.TLabel").pack(anchor="w", pady=(0, 12))
+        Label(
+            card,
+            text="Public token YummyAnime API",
+            background="#17131f",
+            foreground="#f3eef9",
+            font=("Segoe UI Semibold", 10),
+        ).pack(anchor="w")
+        self.token_entry = self._create_entry(card, self.token, show="•")
+        self.token_entry.pack(fill="x", pady=(6, 6), ipady=9)
 
-        actions = ttk.Frame(card, style="Card.TFrame")
+        token_actions = Frame(card, background="#17131f")
+        token_actions.pack(fill="x", pady=(0, 14))
+        self.show_token_button = self._create_button(
+            token_actions,
+            "Показать ключ",
+            self._toggle_token,
+            accent=False,
+            compact=True,
+        )
+        self.show_token_button.pack(side="left")
+        docs_button = self._create_button(
+            token_actions,
+            "Где получить ключ ↗",
+            lambda: webbrowser.open(API_DOCUMENTATION_URL),
+            accent=False,
+            compact=True,
+        )
+        docs_button.pack(side="left", padx=(8, 0))
+
+        status_row = Frame(card, background="#17131f")
+        status_row.pack(fill="x", pady=(0, 12))
+        Label(
+            status_row,
+            text="●",
+            background="#17131f",
+            foreground="#8f63ff",
+            font=("Segoe UI", 9),
+        ).pack(side="left", padx=(0, 7))
+        Label(
+            status_row,
+            textvariable=self.status,
+            background="#17131f",
+            foreground="#aa8bff",
+            font=("Segoe UI Semibold", 10),
+        ).pack(side="left")
+
+        actions = Frame(card, background="#17131f")
         actions.pack(fill="x")
-        self.browser_button = ttk.Button(
+        self.browser_button = self._create_button(
             actions,
-            text="Открыть сайт",
-            style="Accent.TButton",
-            command=lambda: self._validate_and_run("browser"),
+            "Открыть сайт",
+            lambda: self._validate_and_run("browser"),
+            accent=True,
         )
         self.browser_button.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        self.desktop_button = ttk.Button(
+        self.desktop_button = self._create_button(
             actions,
-            text="Открыть десктоп",
-            style="Accent.TButton",
-            command=lambda: self._validate_and_run("desktop"),
+            "Открыть десктоп",
+            lambda: self._validate_and_run("desktop"),
+            accent=True,
         )
         self.desktop_button.pack(side="left", fill="x", expand=True, padx=(6, 0))
-        ttk.Button(
+        save_button = self._create_button(
             card,
-            text="Только сохранить настройки",
-            style="Secondary.TButton",
-            command=self._save_without_launch,
-        ).pack(fill="x", pady=(12, 0))
+            "Сохранить настройки",
+            self._save_without_launch,
+            accent=False,
+        )
+        save_button.pack(fill="x", pady=(10, 0))
 
-        ttk.Label(
+        Label(
             card,
-            text=f"Настройки и сохранения: {user_data_root()}",
-            style="Text.TLabel",
-        ).pack(anchor="w", pady=(18, 0))
+            text=f"Данные сохраняются в {user_data_root()}",
+            background="#17131f",
+            foreground="#71697c",
+            font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(12, 0))
+
+    def _create_entry(
+        self,
+        parent: Frame,
+        variable: StringVar,
+        *,
+        show: str = "",
+    ) -> Entry:
+        entry = Entry(
+            parent,
+            textvariable=variable,
+            show=show,
+            background="#211c2b",
+            foreground="#ffffff",
+            insertbackground="#ffffff",
+            selectbackground="#8f63ff",
+            selectforeground="#ffffff",
+            disabledbackground="#211c2b",
+            disabledforeground="#7d7488",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=1,
+            highlightbackground="#514360",
+            highlightcolor="#9d78ff",
+            font=("Segoe UI", 11),
+        )
+        self._bind_entry_shortcuts(entry)
+        return entry
+
+    def _create_button(
+        self,
+        parent: Frame,
+        text: str,
+        command: object,
+        *,
+        accent: bool,
+        compact: bool = False,
+    ) -> Button:
+        normal = "#8f63ff" if accent else "#211c2b"
+        hover = "#a582ff" if accent else "#2c2538"
+        button = Button(
+            parent,
+            text=text,
+            command=command,
+            background=normal,
+            foreground="#ffffff" if accent else "#e9e2f1",
+            activebackground=hover,
+            activeforeground="#ffffff",
+            disabledforeground="#81778c",
+            disabledbackground="#332b40",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=1,
+            highlightbackground="#8f63ff" if accent else "#514360",
+            highlightcolor="#a582ff",
+            cursor="hand2",
+            font=("Segoe UI Semibold", 9 if compact else 11),
+            padx=13 if compact else 16,
+            pady=7 if compact else 11,
+        )
+        button.bind(
+            "<Enter>",
+            lambda _event: (
+                button.configure(background=hover)
+                if str(button.cget("state")) != "disabled"
+                else None
+            ),
+        )
+        button.bind(
+            "<Leave>",
+            lambda _event: (
+                button.configure(background=normal)
+                if str(button.cget("state")) != "disabled"
+                else None
+            ),
+        )
+        self.action_buttons.append(button)
+        return button
+
+    def _bind_entry_shortcuts(self, entry: Entry) -> None:
+        entry.bind("<Control-v>", self._paste_entry)
+        entry.bind("<Control-V>", self._paste_entry)
+        entry.bind("<Shift-Insert>", self._paste_entry)
+        entry.bind("<Control-c>", self._copy_entry)
+        entry.bind("<Control-C>", self._copy_entry)
+        entry.bind("<Control-x>", self._cut_entry)
+        entry.bind("<Control-X>", self._cut_entry)
+        entry.bind("<Control-a>", self._select_all_entry)
+        entry.bind("<Control-A>", self._select_all_entry)
+        entry.bind("<Button-3>", self._show_context_menu)
+
+    def _show_context_menu(self, event: object) -> str:
+        entry = event.widget
+        self.active_entry = entry
+        entry.focus_set()
+        entry.icursor(f"@{event.x}")
+        try:
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.context_menu.grab_release()
+        return "break"
+
+    def _paste_entry(self, event: object) -> str:
+        self._paste_into(event.widget)
+        return "break"
+
+    def _paste_into(self, entry: Entry) -> None:
+        try:
+            text = self.root.clipboard_get()
+        except TclError:
+            self.root.bell()
+            return
+        try:
+            entry.delete("sel.first", "sel.last")
+        except TclError:
+            pass
+        entry.insert("insert", text)
+
+    def _copy_entry(self, event: object) -> str:
+        self._copy_from(event.widget)
+        return "break"
+
+    def _copy_from(self, entry: Entry) -> None:
+        try:
+            text = entry.get()[entry.index("sel.first") : entry.index("sel.last")]
+        except TclError:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+
+    def _cut_entry(self, event: object) -> str:
+        self._copy_from(event.widget)
+        try:
+            event.widget.delete("sel.first", "sel.last")
+        except TclError:
+            pass
+        return "break"
+
+    def _select_all_entry(self, event: object) -> str:
+        self._select_all(event.widget)
+        return "break"
+
+    @staticmethod
+    def _select_all(entry: Entry) -> None:
+        entry.selection_range(0, "end")
+        entry.icursor("end")
+
+    def _paste_active_entry(self) -> None:
+        if self.active_entry is not None:
+            self._paste_into(self.active_entry)
+
+    def _copy_active_entry(self) -> None:
+        if self.active_entry is not None:
+            self._copy_from(self.active_entry)
+
+    def _cut_active_entry(self) -> None:
+        if self.active_entry is not None:
+            self._copy_from(self.active_entry)
+            try:
+                self.active_entry.delete("sel.first", "sel.last")
+            except TclError:
+                pass
+
+    def _select_all_active_entry(self) -> None:
+        if self.active_entry is not None:
+            self._select_all(self.active_entry)
 
     def _toggle_token(self) -> None:
-        self.token_entry.configure(show="" if self.show_token.get() else "•")
+        visible = not self.show_token.get()
+        self.show_token.set(visible)
+        self.token_entry.configure(show="" if visible else "•")
+        self.show_token_button.configure(text="Скрыть ключ" if visible else "Показать ключ")
 
     def _validated_fields(self) -> tuple[int, str] | None:
         try:
@@ -312,8 +519,8 @@ class LauncherWindow:
     def _set_busy(self, value: bool) -> None:
         self.busy = value
         state = "disabled" if value else "normal"
-        self.browser_button.configure(state=state)
-        self.desktop_button.configure(state=state)
+        for button in self.action_buttons:
+            button.configure(state=state)
 
     def _save_without_launch(self) -> None:
         fields = self._validated_fields()
