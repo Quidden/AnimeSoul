@@ -374,7 +374,6 @@ class LauncherWindow:
             activebackground=hover,
             activeforeground="#ffffff",
             disabledforeground="#81778c",
-            disabledbackground="#332b40",
             relief="flat",
             borderwidth=0,
             highlightthickness=1,
