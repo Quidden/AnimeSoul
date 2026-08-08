@@ -11,6 +11,7 @@ import { EpisodeHoverPreview } from "./EpisodeHoverPreview";
 import { FolderPicker } from "./FolderPicker";
 import { Toggle } from "./Toggle";
 import { useWatchParty } from "../hooks/useWatchParty";
+import { isKodikEmbed, kodikSerialIdentity, kodikSerialSource, playerDubbing, playerEpisode, playerTranslationId } from "../lib/kodik";
 
 export function Watch({ header, anime, resumeRequested, newEpisodeRequested, favorite, onFavorite, onBack, onLibrary, onGenre, saved, onProgress, onPlayerPrefsChange, onFolders, tracker, onTrack, onUntrack, folderPicker, folders, toggleFolder, createFolder, closePicker }: { header: ReactNode; anime: Anime; resumeRequested: boolean; newEpisodeRequested: boolean; favorite: boolean; onFavorite: () => void; onBack: () => void; onLibrary: () => void; onGenre: (genre: string) => void; saved?: AnimeProgress; onProgress: (v: AnimeProgress, originEpisodeKey?: string | string[], changedEpisodeKey?: string | string[]) => void; onPlayerPrefsChange: (prefs: PlayerPrefs) => void; onFolders: () => void; tracker?: Tracker; onTrack: (n: number, d: string[], ids: number[], title: string, knownKeys: string[]) => void; onUntrack: () => void; folderPicker: Anime | null; folders: Folder[]; toggleFolder: (f: Folder, id: number) => void; createFolder: () => unknown; closePicker: () => void ;}) {
   const initialPrefs = { ...DEFAULT_PLAYER_PREFS, ...read<Partial<PlayerPrefs>>(K.playerPrefs, {}) };
@@ -25,12 +26,34 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     ?? (resumeUsesTopLevelOrigin ? saved?.originEpisode : undefined);
   const [dub, setDub] = useState(saved?.dub ?? ""), [episode, setEpisode] = useState(resumeEpisode), [player, setPlayer] = useState(""), [autoNext, setAutoNextState] = useState(initialPrefs.autoNext), [autoSkip, setAutoSkipState] = useState(initialPrefs.autoSkipOpening), [autoSkipEnding, setAutoSkipEndingState] = useState(initialPrefs.autoSkipEnding), [autoPlayResume, setAutoPlayResumeState] = useState(initialPrefs.autoPlayResume), [autoScrollPlayer, setAutoScrollPlayerState] = useState(initialPrefs.autoScrollPlayer), [episodeCarousel, setEpisodeCarousel] = useState(initialPrefs.playerEpisodeCarousel), [status, setStatus] = useState("Загружаем серии…"), [position, setPosition] = useState<ToolbarPosition>(read(K.toolbar, "bottom")), [autoPlay, setAutoPlay] = useState(false), [seasons, setSeasons] = useState<SeasonGroup[]>([{ number: 1, entries: [anime] }]), [selectedSeason, setSelectedSeason] = useState(resumeSeason), [seasonVideos, setSeasonVideos] = useState<Record<number, Video[]>>({}), [schedule, setSchedule] = useState<Record<number, ScheduleEntry>>({}), [trackOpen, setTrackOpen] = useState(false), [trackDubs, setTrackDubs] = useState<string[]>(tracker?.dubs ?? []), [showUpcoming, setShowUpcoming] = useState(false), [carouselMotion, setCarouselMotion] = useState<"" | "previous" | "next">("");
   const [episodeHoverPreview, setEpisodeHoverPreview] = useState(initialPrefs.episodeHoverPreview);
+  const [renderedIframeSource, setRenderedIframeSource] = useState("");
   const [partyRoomCode, setPartyRoomCode] = useState(""), [partyTime, setPartyTime] = useState(0), [partyDuration, setPartyDuration] = useState(0), [partyPlaying, setPartyPlaying] = useState(false);
   const [suggestedHostDub, setSuggestedHostDub] = useState<string | null>(null), [partyDubNotice, setPartyDubNotice] = useState("");
   const [previewAnimeById, setPreviewAnimeById] = useState<Record<number, Anime>>({});
   const collapsedSeasonsKey = `animesoul:collapsed-seasons:${anime.anime_id}`;
   const [collapsedSeasons, setCollapsedSeasons] = useState<number[]>(read(collapsedSeasonsKey, []));
-  const iframe = useRef<HTMLIFrameElement>(null), playerShell = useRef<HTMLDivElement>(null), newEpisodeOpened = useRef(false), videoLoadId = useRef(0), lastPartyTime = useRef(0), lastPartyMotionAt = useRef(0), partyPauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null), lastHostPlaying = useRef<boolean | null>(null), pendingPartyPlayback = useRef<PartyPlayback | null>(null), dismissedHostDub = useRef<string | null>(null), latestHostPlayback = useRef<PartyPlayback | null>(null);
+  const iframe = useRef<HTMLIFrameElement>(null), playerFrame = useRef<HTMLDivElement>(null), playerShell = useRef<HTMLDivElement>(null), newEpisodeOpened = useRef(false), videoLoadId = useRef(0), lastPartyTime = useRef(0), lastPartyMotionAt = useRef(0), partyPauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null), lastHostPlaying = useRef<boolean | null>(null), pendingPartyPlayback = useRef<PartyPlayback | null>(null), dismissedHostDub = useRef<string | null>(null), latestHostPlayback = useRef<PartyPlayback | null>(null);
+  const playerManagedEpisodeSwitch = useRef(false);
+  const renderedIframeIdentity = useRef("");
+  const selectionReportedByPlayer = useRef(false);
+  const lastEpisodeCommand = useRef("");
+  // Fullscreen belongs to the already mounted Kodik document. Updating the
+  // React selection while that document changes an episode can make Chromium
+  // tear down fullscreen. Keep the real player selection in refs and only
+  // mirror it into AnimeSoul's controls after the user leaves fullscreen.
+  const fullscreenActive = useRef(false);
+  const fullscreenPromotion = useRef(false);
+  const playbackCursor = useRef({ season: resumeSeason, episode: resumeEpisode, dub: saved?.dub ?? "", player: "" });
+  const latestUiSelection = useRef({ season: resumeSeason, episode: resumeEpisode, dub: saved?.dub ?? "", player: "" });
+  const deferredFullscreenSelection = useRef<{ season: number; episode: string; dub?: string; player?: string } | null>(null);
+  const pendingPlayerEpisodeSwitch = useRef<{
+    displaySeason: number;
+    displayEpisode: string;
+    originEpisode: string;
+    timeoutId?: ReturnType<typeof setTimeout>;
+    retryIds: ReturnType<typeof setTimeout>[];
+  } | null>(null);
+  const autoNextTransitionKey = useRef("");
   const savedRef = useRef(saved), pendingProgress = useRef<{ value: AnimeProgress; originEpisodeKey?: string } | null>(null), progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null), lastProgressCommit = useRef(0);
   const pendingResumeSeek = useRef<{ episodeKey: string; target: number; expiresAt: number; lastAttemptAt: number } | null>(null);
   // Keep the navigation target immutable while the iframe is starting. Some
@@ -44,6 +67,58 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   });
   useEffect(() => { savedRef.current = saved ;}, [saved]);
   const command = (method: string, extra = {}) => iframe.current?.contentWindow?.postMessage({ key: "kodik_player_api", value: { method, ...extra } }, "*");
+  const fullscreenElement = () => {
+    const fullscreenDocument = document as Document & { webkitFullscreenElement?: Element | null };
+    return fullscreenDocument.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement ?? null;
+  };
+  const hasStableFullscreenOwner = () => fullscreenElement() === playerFrame.current;
+  const toggleStableFullscreen = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const frame = playerFrame.current as (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> | void }) | null;
+    const fullscreenDocument = document as Document & {
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+    if (!frame) return;
+    if (fullscreenElement() === frame) {
+      const exit = document.exitFullscreen ? document.exitFullscreen() : fullscreenDocument.webkitExitFullscreen?.();
+      Promise.resolve(exit).catch(() => undefined);
+      return;
+    }
+    const request = frame.requestFullscreen
+      ? frame.requestFullscreen({ navigationUI: "hide" })
+      : frame.webkitRequestFullscreen?.();
+    Promise.resolve(request).catch(() => undefined);
+  };
+  const isPlayerFullscreen = () => {
+    const activeElement = fullscreenElement();
+    if (!activeElement) return false;
+    return activeElement === iframe.current
+      || activeElement === playerFrame.current
+      || activeElement === playerShell.current
+      || Boolean(playerShell.current?.contains(activeElement))
+      || Boolean(iframe.current && activeElement.contains(iframe.current));
+  };
+  const queueFullscreenSelection = (selection: { season: number; episode: string; dub?: string; player?: string }) => {
+    playbackCursor.current = {
+      season: selection.season,
+      episode: selection.episode,
+      dub: selection.dub ?? playbackCursor.current.dub,
+      player: selection.player ?? playbackCursor.current.player,
+    };
+    deferredFullscreenSelection.current = {
+      ...(deferredFullscreenSelection.current ?? {}),
+      ...selection,
+      season: selection.season,
+      episode: selection.episode,
+    };
+  };
+  const cancelPendingPlayerEpisodeSwitch = () => {
+    const pending = pendingPlayerEpisodeSwitch.current;
+    if (pending?.timeoutId) clearTimeout(pending.timeoutId);
+    pending?.retryIds.forEach(clearTimeout);
+    pendingPlayerEpisodeSwitch.current = null;
+  };
   const persistPrefs = (prefs: PlayerPrefs, hoverPreview = episodeHoverPreview) => {
     const stored = { ...DEFAULT_PLAYER_PREFS, ...read<Partial<PlayerPrefs>>(K.playerPrefs, {}) };
     const next = {
@@ -128,6 +203,69 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const selectedGroup = seasons.find(group => group.number === selectedSeason);
   useEffect(() => { if (!videos.length) return; const currentDubAvailable = videos.some(v => v.data.dubbing === dub), savedDubAvailable = saved?.dub && videos.some(v => v.data.dubbing === saved.dub), nextDub = currentDubAvailable ? dub : savedDubAvailable ? saved!.dub : videos[0].data.dubbing; setDub(nextDub); const nums = videos.filter(v => v.data.dubbing === nextDub).map(v => v.number).sort((a, b) => +a - +b), originMatch = resumeOriginAnimeId && resumeOriginEpisode ? videos.find(v => v.originAnimeId === resumeOriginAnimeId && v.originNumber === resumeOriginEpisode && v.data.dubbing === nextDub)?.number : undefined, nextEpisode = originMatch ?? (nums.includes(episode) ? episode : selectedSeason === resumeSeason && nums.includes(resumeEpisode) ? resumeEpisode : nums[0] ?? "1"); setEpisode(nextEpisode); setPlayer("") ;}, [selectedSeason, videos.length]);
   const dubs = Array.from(new Set(videos.map(v => v.data.dubbing))), episodes = Array.from(new Set(videos.filter(v => v.data.dubbing === dub).map(v => v.number))).sort((a, b) => +a - +b), sources = videos.filter(v => v.data.dubbing === dub && v.number === episode), players = Array.from(new Set(sources.map(v => v.data.player))), current = sources.find(v => v.data.player === player) ?? sources.find(v => /kodik/i.test(v.data.player)) ?? sources[0], openingEnd = current?.skips?.opening ? current.skips.opening.time + current.skips.opening.length : 0, endingStart = current?.skips?.ending?.time ?? 0, endingEnd = current?.skips?.ending ? current.skips.ending.time + current.skips.ending.length : (current?.duration ?? 0);
+  useEffect(() => {
+    latestUiSelection.current = { season: selectedSeason, episode, dub, player: current?.data.player ?? player };
+    if (!fullscreenActive.current && !isPlayerFullscreen()) {
+      playbackCursor.current = latestUiSelection.current;
+    }
+  }, [selectedSeason, episode, dub, player, current?.data.player]);
+  useEffect(() => {
+    const fullscreenChanged = () => {
+      const activeElement = fullscreenElement();
+      if (activeElement && isPlayerFullscreen()) {
+        fullscreenActive.current = true;
+        playbackCursor.current = latestUiSelection.current;
+
+        if (activeElement === playerFrame.current) {
+          fullscreenPromotion.current = false;
+          return;
+        }
+
+        // Kodik normally requests fullscreen for its cross-origin iframe. If
+        // that iframe later replaces its internal episode document, Chromium
+        // destroys the fullscreen element. Promote fullscreen ownership to
+        // AnimeSoul's stable frame immediately; Kodik may then change videos
+        // without changing the element owned by the browser fullscreen API.
+        if (activeElement === iframe.current && playerFrame.current && !fullscreenPromotion.current) {
+          fullscreenPromotion.current = true;
+          const frame = playerFrame.current as HTMLDivElement & { webkitRequestFullscreen?: () => void };
+          try {
+            const request = frame.requestFullscreen
+              ? frame.requestFullscreen({ navigationUI: "hide" })
+              : frame.webkitRequestFullscreen?.();
+            Promise.resolve(request).catch(() => {
+            }).finally(() => {
+              fullscreenPromotion.current = false;
+            });
+          } catch {
+            fullscreenPromotion.current = false;
+          }
+        }
+        return;
+      }
+      if (fullscreenPromotion.current) return;
+      if (!fullscreenActive.current) return;
+      fullscreenActive.current = false;
+      const deferred = deferredFullscreenSelection.current;
+      deferredFullscreenSelection.current = null;
+      if (!deferred) return;
+      // The user has now left fullscreen, so it is safe to synchronize the
+      // surrounding page, dropdowns, carousel and progress labels in one pass.
+      playerManagedEpisodeSwitch.current = true;
+      selectionReportedByPlayer.current = true;
+      setShowUpcoming(false);
+      setSelectedSeason(deferred.season);
+      setEpisode(deferred.episode);
+      if (deferred.dub) setDub(deferred.dub);
+      if (deferred.player) setPlayer(deferred.player);
+    };
+    document.addEventListener("fullscreenchange", fullscreenChanged);
+    document.addEventListener("webkitfullscreenchange", fullscreenChanged as EventListener);
+    return () => {
+      document.removeEventListener("fullscreenchange", fullscreenChanged);
+      document.removeEventListener("webkitfullscreenchange", fullscreenChanged as EventListener);
+    };
+  }, []);
   useEffect(() => { if (!sources.length) return; const preferred = sources.find(v => /kodik/i.test(v.data.player))?.data.player ?? sources[0].data.player; if (!sources.some(v => v.data.player === player)) setPlayer(preferred) ;}, [dub, episode, sources.length]);
   const localPartyPlayback: PartyPlayback = { animeId: anime.anime_id, season: selectedSeason, episode, dub, player: current?.data.player ?? player, position: partyTime, duration: partyDuration || current?.duration || 0, playing: partyPlaying, updatedAt: Date.now() };
   const applyHostState = (host: PartyPlayback, force = false) => {
@@ -206,7 +344,10 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     if (!current?.iframe_url) return "";
     const synchronized = pendingPartyPlayback.current;
     const start = synchronized?.position ?? resumePositionFor(episodeKey);
-    if (start <= 5 || !/kodik/i.test(current.data.player)) return current.iframe_url;
+    if (isKodikEmbed(current.iframe_url, current.data.player)) {
+      return kodikSerialSource(current.iframe_url, String(current.originNumber ?? current.number), start);
+    }
+    if (start <= 5) return current.iframe_url;
     try {
       const normalized = current.iframe_url.startsWith("//") ? `https:${current.iframe_url}` : current.iframe_url;
       const url = new URL(normalized, "http://localhost");
@@ -216,10 +357,79 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       return current.iframe_url;
     }
   }, [current?.video_id, episodeKey]);
+  useEffect(() => {
+    if (!current?.iframe_url) {
+      // During an internal Kodik episode transition React can briefly have no
+      // matching API row for the new display episode. Keep the already mounted
+      // iframe alive through that gap; unmounting it immediately exits native
+      // fullscreen even though Kodik itself switched successfully.
+      if ((playerManagedEpisodeSwitch.current || pendingPlayerEpisodeSwitch.current) && renderedIframeSource) return;
+      renderedIframeIdentity.current = "";
+      setRenderedIframeSource("");
+      return;
+    }
+    if (!isKodikEmbed(current.iframe_url, current.data.player)) {
+      renderedIframeIdentity.current = current.iframe_url;
+      setRenderedIframeSource(iframeSource);
+      return;
+    }
+
+    const identity = kodikSerialIdentity(current.iframe_url);
+    const originEpisode = String(current.originNumber ?? current.number);
+
+    // Once auto-next is delegated to the mounted Kodik serial player, never
+    // navigate that iframe while React catches up with its episode/translation
+    // events. Some API rows contain a different embed identity for every
+    // episode, so suppressing only the first render was not enough: a later
+    // render replaced the fullscreen iframe and Chromium closed fullscreen.
+    if (playerManagedEpisodeSwitch.current && renderedIframeSource) {
+      selectionReportedByPlayer.current = false;
+      lastEpisodeCommand.current = originEpisode;
+      return;
+    }
+    if (renderedIframeIdentity.current !== identity) {
+      renderedIframeIdentity.current = identity;
+      lastEpisodeCommand.current = originEpisode;
+      setRenderedIframeSource(iframeSource);
+      return;
+    }
+
+    // A selection made inside Kodik has already changed its own video. For a
+    // selection made in AnimeSoul, command the existing serial iframe instead
+    // of navigating it to another single-episode URL.
+    if (lastEpisodeCommand.current !== originEpisode) {
+      lastEpisodeCommand.current = originEpisode;
+      command("change_episode", { episode: /^\d+$/.test(originEpisode) ? Number(originEpisode) : originEpisode });
+    }
+  }, [iframeSource, current?.video_id]);
   const uniqueFranchiseVideos = Object.entries(seasonVideos).flatMap(([season, list]) => [...new Map(list.map(v => [`${season}:${v.number}`, v])).values()]), totalAcrossSeasons = uniqueFranchiseVideos.length, totalDurationAcrossSeasons = uniqueFranchiseVideos.reduce((sum, v) => sum + (v.duration ?? 0), 0), orderedEpisodeKeys = seasons.flatMap(group => Array.from(new Set((seasonVideos[group.number] ?? []).filter(video => !tracker?.dubs?.length || tracker.dubs.includes(video.data.dubbing)).map(video => video.number))).sort((a, b) => +a - +b).map(number => `${group.number}:${number}`)), pendingDisplayKeys = (tracker?.pendingEpisodeKeys ?? []).flatMap(rawKey => { for (const [season, list] of Object.entries(seasonVideos)) { const match = list.find(video => `${video.originAnimeId}:${video.originNumber}` === rawKey && (!tracker?.dubs?.length || tracker.dubs.includes(video.data.dubbing))); if (match) return [`${season}:${match.number}`] ;} return [] ;}), datedEpisodeKeys = [...new Map(Object.entries(seasonVideos).flatMap(([season, list]) => list.filter(video => !tracker?.dubs?.length || tracker.dubs.includes(video.data.dubbing)).map(video => [`${video.originAnimeId}:${video.originNumber}`, { displayKey: `${season}:${video.number}`, date: video.date ?? 0 }] as const))).values()].sort((a, b) => a.date - b.date).map(item => item.displayKey), resolvedNewEpisodeKeys = pendingDisplayKeys.length ? pendingDisplayKeys : (tracker?.newEpisodes ? datedEpisodeKeys.slice(-tracker.newEpisodes) : []), newEpisodeKeys = new Set(resolvedNewEpisodeKeys);
   useEffect(() => { if (!newEpisodeRequested || newEpisodeOpened.current || !tracker?.newEpisodes || !resolvedNewEpisodeKeys.length) return; const target = resolvedNewEpisodeKeys[0], separator = target.indexOf(":"), targetSeason = Number(target.slice(0, separator)), targetEpisode = target.slice(separator + 1); if (selectedSeason !== targetSeason) { setSelectedSeason(targetSeason); return ;} const targetVideos = (seasonVideos[targetSeason] ?? []).filter(video => video.number === targetEpisode), preferredDub = (tracker.dubs ?? []).find(name => targetVideos.some(video => video.data.dubbing === name)) ?? targetVideos[0]?.data.dubbing; if (!preferredDub) return; const targetSources = targetVideos.filter(video => video.data.dubbing === preferredDub), preferredPlayer = targetSources.find(video => /kodik/i.test(video.data.player))?.data.player ?? targetSources[0]?.data.player ?? ""; newEpisodeOpened.current = true; setDub(preferredDub); setEpisode(targetEpisode); setPlayer(preferredPlayer); setAutoPlay(true) ;}, [newEpisodeRequested, tracker?.newEpisodes, tracker?.dubs?.join("|"), resolvedNewEpisodeKeys.join("|"), selectedSeason, seasonVideos]);
   const scheduleRows = seasons.flatMap(group => group.entries.map(entry => ({ group, entry, item: schedule[entry.anime_id] }))).filter(row => row.item?.episodes?.next_date).sort((a, b) => (a.item.episodes?.next_date ?? 0) - (b.item.episodes?.next_date ?? 0));
   const carouselItems = seasons.flatMap(group => { const list = seasonVideos[group.number] ?? [], numbers = Array.from(new Set(list.map(video => video.number))).sort((a, b) => +a - +b); return numbers.map(number => { const candidates = list.filter(video => video.number === number), video = candidates.find(item => item.data.dubbing === dub) ?? candidates[0], entry = group.entries.find(item => item.anime_id === video?.originAnimeId) ?? group.entries[0]; return { season: group.number, number, group, video, entry } ;}) ;}), carouselIndex = carouselItems.findIndex(item => item.season === selectedSeason && item.number === episode), previousCarouselItem = showUpcoming ? (carouselIndex >= 0 ? carouselItems[carouselIndex] : undefined) : (carouselIndex > 0 ? carouselItems[carouselIndex - 1] : undefined), nextCarouselItem = !showUpcoming && carouselIndex >= 0 ? carouselItems[carouselIndex + 1] : undefined, upcomingRow = !nextCarouselItem ? scheduleRows.find(row => (row.item?.episodes?.next_date ?? 0) * 1000 > Date.now() - 86400000) : undefined, upcomingEpisode = upcomingRow ? Math.max(1, (upcomingRow.item?.episodes?.aired ?? (Number(episode) || 0)) + 1) : 0, upcomingTotal = upcomingRow?.item?.episodes?.count ?? 0, upcomingSeason = upcomingRow?.group.number ?? selectedSeason;
+  const activePlaybackContext = () => {
+    const selection = (fullscreenActive.current || isPlayerFullscreen())
+      ? playbackCursor.current
+      : { season: selectedSeason, episode, dub, player: current?.data.player ?? player };
+    const list = seasonVideos[selection.season] ?? [];
+    const video = list.find(item => item.number === selection.episode && item.data.dubbing === selection.dub && item.data.player === selection.player)
+      ?? list.find(item => item.number === selection.episode && item.data.dubbing === selection.dub && /kodik/i.test(item.data.player))
+      ?? list.find(item => item.number === selection.episode && item.data.dubbing === selection.dub)
+      ?? list.find(item => item.number === selection.episode)
+      ?? current;
+    const group = seasons.find(item => item.number === selection.season) ?? selectedGroup;
+    const activeOpeningEnd = video?.skips?.opening ? video.skips.opening.time + video.skips.opening.length : 0;
+    const activeEndingStart = video?.skips?.ending?.time ?? 0;
+    const activeEndingEnd = video?.skips?.ending ? video.skips.ending.time + video.skips.ending.length : (video?.duration ?? 0);
+    return {
+      ...selection,
+      key: `${selection.season}:${selection.episode}`,
+      video,
+      group,
+      openingEnd: activeOpeningEnd,
+      endingStart: activeEndingStart,
+      endingEnd: activeEndingEnd,
+    };
+  };
   const commitProgress = (entry: { value: AnimeProgress; originEpisodeKey?: string }) => {
     if (progressTimer.current) clearTimeout(progressTimer.current);
     progressTimer.current = null;
@@ -228,9 +438,10 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     onProgress(entry.value, entry.originEpisodeKey);
   };
   const save = (time: number, duration: number, completed = false) => {
-    const snapshot = savedRef.current, previous = snapshot?.episodes[episodeKey], percent = duration ? Math.min(100, Math.round(time / duration * 100)) : previous?.percent ?? 0, reachedEnd = completed || percent >= 100 || (endingStart > 0 && time >= endingStart), startedAgain = Boolean(previous?.completed && time < 60 && time < (previous.position ?? 0)), rewatchArmed = startedAgain || previous?.rewatchArmed === true, firstCompletion = reachedEnd && !previous?.completed, repeatCompletion = reachedEnd && rewatchArmed, delta = previous && time >= previous.position && time - previous.position <= 90 ? time - previous.position : 0, originEpisodeKey = current?.originAnimeId && current.originNumber ? `${current.originAnimeId}:${current.originNumber}` : undefined;
+    const playback = activePlaybackContext();
+    const snapshot = savedRef.current, previous = snapshot?.episodes[playback.key], percent = duration ? Math.min(100, Math.round(time / duration * 100)) : previous?.percent ?? 0, reachedEnd = completed || percent >= 100 || (playback.endingStart > 0 && time >= playback.endingStart), startedAgain = Boolean(previous?.completed && time < 60 && time < (previous.position ?? 0)), rewatchArmed = startedAgain || previous?.rewatchArmed === true, firstCompletion = reachedEnd && !previous?.completed, repeatCompletion = reachedEnd && rewatchArmed, delta = previous && time >= previous.position && time - previous.position <= 90 ? time - previous.position : 0, originEpisodeKey = playback.video?.originAnimeId && playback.video.originNumber ? `${playback.video.originAnimeId}:${playback.video.originNumber}` : undefined;
     const completedNow = firstCompletion || repeatCompletion, updatedAt = Date.now();
-    const value: AnimeProgress = { episode, dub, season: selectedSeason, seasonLabel: selectedGroup?.label, originAnimeId: current?.originAnimeId, originEpisode: current?.originNumber, totalEpisodes: totalAcrossSeasons || episodes.length, totalDuration: totalDurationAcrossSeasons || snapshot?.totalDuration, episodes: { ...(snapshot?.episodes ?? {}), [episodeKey]: { position: time, duration, percent, originAnimeId: current?.originAnimeId ?? previous?.originAnimeId, originEpisode: current?.originNumber ?? previous?.originEpisode, completed: previous?.completed || reachedEnd, completions: (previous?.completions ?? (previous?.completed ? 1 : 0)) + (completedNow ? 1 : 0), completionHistory: completedNow ? [...(previous?.completionHistory ?? []), updatedAt] : previous?.completionHistory, rewatchArmed: repeatCompletion ? false : rewatchArmed, watchedSeconds: (previous?.watchedSeconds ?? Math.min(previous?.position ?? 0, previous?.duration || previous?.position || 0)) + Math.max(0, delta), updatedAt } } };
+    const value: AnimeProgress = { episode: playback.episode, dub: playback.dub || dub, season: playback.season, seasonLabel: playback.group?.label, originAnimeId: playback.video?.originAnimeId, originEpisode: playback.video?.originNumber, totalEpisodes: totalAcrossSeasons || episodes.length, totalDuration: totalDurationAcrossSeasons || snapshot?.totalDuration, episodes: { ...(snapshot?.episodes ?? {}), [playback.key]: { position: time, duration, percent, originAnimeId: playback.video?.originAnimeId ?? previous?.originAnimeId, originEpisode: playback.video?.originNumber ?? previous?.originEpisode, completed: previous?.completed || reachedEnd, completions: (previous?.completions ?? (previous?.completed ? 1 : 0)) + (completedNow ? 1 : 0), completionHistory: completedNow ? [...(previous?.completionHistory ?? []), updatedAt] : previous?.completionHistory, rewatchArmed: repeatCompletion ? false : rewatchArmed, watchedSeconds: (previous?.watchedSeconds ?? Math.min(previous?.position ?? 0, previous?.duration || previous?.position || 0)) + Math.max(0, delta), updatedAt } } };
     savedRef.current = value;
     const entry = { value, originEpisodeKey: reachedEnd ? originEpisodeKey : undefined };
     pendingProgress.current = entry;
@@ -313,8 +524,89 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
   }, []);
-  const chooseEpisode = (nextEpisode: string, nextSeason = selectedSeason, scrollToPlayer = true) => { setShowUpcoming(false); setSelectedSeason(nextSeason); setEpisode(nextEpisode); setPlayer(""); if (scrollToPlayer && autoScrollPlayer) requestAnimationFrame(() => requestAnimationFrame(() => playerShell.current?.scrollIntoView({ behavior: "smooth", block: "start" }))) ;};
+  const chooseEpisode = (nextEpisode: string, nextSeason = selectedSeason, scrollToPlayer = true) => { cancelPendingPlayerEpisodeSwitch(); playerManagedEpisodeSwitch.current = false; setShowUpcoming(false); setSelectedSeason(nextSeason); setEpisode(nextEpisode); setPlayer(""); if (scrollToPlayer && autoScrollPlayer) requestAnimationFrame(() => requestAnimationFrame(() => playerShell.current?.scrollIntoView({ behavior: "smooth", block: "start" }))) ;};
   const activateCarouselItem = (item: (typeof carouselItems)[number], direction: "previous" | "next", play = true, scrollToPlayer = true) => { setCarouselMotion(""); requestAnimationFrame(() => setCarouselMotion(direction)); setTimeout(() => setCarouselMotion(""), 520); setAutoPlay(play); chooseEpisode(item.number, item.season, scrollToPlayer) ;};
+  const confirmPlayerEpisodeSwitch = () => {
+    const pending = pendingPlayerEpisodeSwitch.current;
+    if (!pending) return false;
+    if (pending.timeoutId) clearTimeout(pending.timeoutId);
+    pending.retryIds.forEach(clearTimeout);
+    pendingPlayerEpisodeSwitch.current = null;
+    playerManagedEpisodeSwitch.current = true;
+    // The serial Kodik iframe is already showing this episode. Mark the
+    // following React-state synchronization as player-originated so the
+    // source/identity effect does not navigate the fullscreen iframe again.
+    selectionReportedByPlayer.current = true;
+    if (fullscreenActive.current || isPlayerFullscreen()) {
+      fullscreenActive.current = true;
+      queueFullscreenSelection({
+        season: pending.displaySeason,
+        episode: pending.displayEpisode,
+        dub: playbackCursor.current.dub || dub,
+        player: playbackCursor.current.player || current?.data.player || player,
+      });
+    } else {
+      setShowUpcoming(false);
+      setSelectedSeason(pending.displaySeason);
+      setEpisode(pending.displayEpisode);
+      setAutoPlay(false);
+    }
+    setTimeout(() => command("play"), 80);
+    return true;
+  };
+  const switchInsideKodik = (next: (typeof carouselItems)[number]) => {
+    const originEpisode = String(next.video?.originNumber ?? next.number);
+    const sameOrigin = Boolean(
+      current?.originAnimeId
+      && next.video?.originAnimeId
+      && current.originAnimeId === next.video.originAnimeId,
+    );
+    if (!sameOrigin || next.season !== selectedSeason || !/kodik/i.test(current?.data.player ?? player)) return false;
+
+    cancelPendingPlayerEpisodeSwitch();
+    playerManagedEpisodeSwitch.current = true;
+    const pending = {
+      displaySeason: next.season,
+      displayEpisode: next.number,
+      originEpisode,
+      timeoutId: undefined as ReturnType<typeof setTimeout> | undefined,
+      retryIds: [] as ReturnType<typeof setTimeout>[],
+    };
+    pendingPlayerEpisodeSwitch.current = pending;
+    const requestedEpisode = /^\d+$/.test(originEpisode) ? Number(originEpisode) : originEpisode;
+    // One episode command is intentional. Retrying it after Kodik had already
+    // switched recreated its internal video layer in some builds and dropped
+    // native fullscreen a few seconds after an otherwise successful switch.
+    command("change_episode", { episode: requestedEpisode });
+    pending.retryIds.push(setTimeout(() => {
+      if (pendingPlayerEpisodeSwitch.current === pending) command("play");
+    }, 180));
+    pending.timeoutId = setTimeout(() => {
+      if (pendingPlayerEpisodeSwitch.current !== pending) return;
+      // Some Kodik builds change the episode correctly but never report an
+      // episode_changed/current_episode event. Never navigate the iframe here:
+      // replacing a fullscreen iframe forces Chromium to leave fullscreen.
+      // Commit AnimeSoul's state while keeping the same serial player alive.
+      confirmPlayerEpisodeSwitch();
+    }, 1_500);
+    return true;
+  };
+  const advanceAfterPlayback = () => {
+    const activeSelection = (fullscreenActive.current || isPlayerFullscreen())
+      ? playbackCursor.current
+      : { season: selectedSeason, episode, dub, player: current?.data.player ?? player };
+    const activeIndex = carouselItems.findIndex(item => item.season === activeSelection.season && item.number === activeSelection.episode);
+    const next = activeIndex >= 0 ? carouselItems[activeIndex + 1] : undefined;
+    if (!next) return;
+    const transitionKey = `${activeSelection.season}:${activeSelection.episode}`;
+    if (autoNextTransitionKey.current === transitionKey) return;
+    autoNextTransitionKey.current = transitionKey;
+    if (!switchInsideKodik(next)) activateCarouselItem(next, "next", true, false);
+  };
+  useEffect(() => {
+    autoNextTransitionKey.current = "";
+  }, [current?.video_id]);
+  useEffect(() => () => cancelPendingPlayerEpisodeSwitch(), []);
   const restoreSavedPosition = (observedTime?: number) => {
     const pending = pendingResumeSeek.current;
     if (!pending || pending.episodeKey !== episodeKey) return false;
@@ -349,10 +641,94 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       const key = d?.key ?? d?.type;
       const eventKey = String(key ?? "").toLowerCase();
       const val = d?.value ?? d;
+      const reportedEpisode = playerEpisode(val);
+      const isEpisodeEvent = eventKey === "kodik_player_current_episode"
+        || eventKey.includes("episode_changed")
+        || eventKey.includes("change_episode");
+      const isDubbingEvent = eventKey.includes("translation")
+        || eventKey.includes("dubbing")
+        || eventKey.includes("voice");
+      const reportedDubbing = playerDubbing(val);
+      const reportedTranslationId = playerTranslationId(val)
+        || (isDubbingEvent && (typeof val === "string" || typeof val === "number") ? String(val) : "");
+      if (isEpisodeEvent && reportedEpisode) {
+        const pending = pendingPlayerEpisodeSwitch.current;
+        if (pending && reportedEpisode === pending.originEpisode) {
+          confirmPlayerEpisodeSwitch();
+        } else {
+          const reportedSeason = Number(val?.season ?? val?.current_season ?? 0);
+          const candidates = Object.entries(seasonVideos).flatMap(([season, list]) => list.map(video => ({ season: Number(season), video })));
+          const sameOrigin = candidates.filter(({ video }) =>
+            video.originAnimeId === current?.originAnimeId
+            && String(video.originNumber ?? video.number) === reportedEpisode,
+          );
+          const seasonCandidates = reportedSeason
+            ? candidates.filter(({ season, video }) => season === reportedSeason && String(video.originNumber ?? video.number) === reportedEpisode)
+            : [];
+          const matchPool = sameOrigin.length ? sameOrigin : (seasonCandidates.length ? seasonCandidates : candidates.filter(({ video }) => String(video.originNumber ?? video.number) === reportedEpisode));
+          const match = matchPool.find(({ video }) => video.data.dubbing === dub && video.data.player === (current?.data.player ?? player))
+            ?? matchPool.find(({ video }) => video.data.dubbing === dub)
+            ?? matchPool[0];
+          if (match && (match.video.number !== episode || match.season !== selectedSeason)) {
+            playerManagedEpisodeSwitch.current = true;
+            selectionReportedByPlayer.current = true;
+            if (fullscreenActive.current || isPlayerFullscreen()) {
+              fullscreenActive.current = true;
+              queueFullscreenSelection({
+                season: match.season,
+                episode: match.video.number,
+                dub: match.video.data.dubbing,
+                player: match.video.data.player,
+              });
+            } else {
+              setSelectedSeason(match.season);
+              setEpisode(match.video.number);
+              setPlayer(match.video.data.player);
+            }
+          }
+        }
+      }
+      // Episode and translation are deliberately handled independently:
+      // Kodik commonly reports both in one current_episode payload.
+      if ((isDubbingEvent || reportedDubbing || reportedTranslationId) && (reportedDubbing || reportedTranslationId)) {
+        const normalized = reportedDubbing.trim().toLocaleLowerCase();
+        const reportedEpisodeVideos = reportedEpisode
+          ? videos.filter(video => String(video.originNumber ?? video.number) === reportedEpisode || video.number === reportedEpisode)
+          : videos;
+        const pool = reportedEpisodeVideos.length ? reportedEpisodeVideos : videos;
+        const target = pool.find(video => reportedTranslationId && [video.data.translation_id, video.data.player_id].some(id => id != null && String(id) === reportedTranslationId))
+          ?? pool.find(video => normalized && video.data.dubbing.trim().toLocaleLowerCase() === normalized)
+          ?? pool.find(video => normalized && (normalized.includes(video.data.dubbing.trim().toLocaleLowerCase()) || video.data.dubbing.trim().toLocaleLowerCase().includes(normalized)));
+        if (target && target.data.dubbing !== dub) {
+          // Kodik has already switched its internal translation. Move the
+          // React state to that source without reloading the serial iframe.
+          renderedIframeIdentity.current = kodikSerialIdentity(target.iframe_url);
+          selectionReportedByPlayer.current = true;
+          if (fullscreenActive.current || isPlayerFullscreen()) {
+            fullscreenActive.current = true;
+            queueFullscreenSelection({
+              season: playbackCursor.current.season,
+              episode: playbackCursor.current.episode,
+              dub: target.data.dubbing,
+              player: target.data.player,
+            });
+          } else {
+            setDub(target.data.dubbing);
+            setPlayer(target.data.player);
+          }
+        }
+      }
       if (key === "kodik_player_time_update") {
         const time = Number(val.time ?? val.currentTime ?? val);
-        const duration = Number(val.duration ?? current?.duration ?? 0);
+        const playback = activePlaybackContext();
+        const duration = Number(val.duration ?? playback.video?.duration ?? 0);
         if (Number.isFinite(time)) {
+          // A reset to the beginning confirms that Kodik really changed the
+          // episode, including builds that do not send current_episode.
+          if (pendingPlayerEpisodeSwitch.current && time >= 0 && time < 15) {
+            confirmPlayerEpisodeSwitch();
+            return;
+          }
           if (initialPrefs.watchPartyEnabled) {
             const moved = time > lastPartyTime.current + .04;
             lastPartyTime.current = time;
@@ -369,11 +745,24 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
           }
           const restoring = restoreSavedPosition(time);
           if (!restoring) save(time, duration);
-          if (autoSkip && openingEnd && time >= current!.skips!.opening!.time && time < openingEnd) command("seek", { seconds: openingEnd });
-          if (autoSkipEnding && endingStart && time >= endingStart && time < endingEnd) {
-            save(endingStart, duration, true);
-            command("seek", { seconds: endingEnd });
+          if (autoSkip && playback.openingEnd && time >= playback.video!.skips!.opening!.time && time < playback.openingEnd) command("seek", { seconds: playback.openingEnd });
+          if (autoSkipEnding && playback.endingStart && time >= playback.endingStart && time < playback.endingEnd) {
+            save(playback.endingStart, duration, true);
+            // Seeking to the exact end does not always make the embedded
+            // Kodik player emit `video_ended` (notably in fullscreen). When
+            // fullscreen is active, leave the serial transition to Kodik
+            // itself. Calling change_episode from the parent is what makes
+            // Chromium leave iframe fullscreen. Outside fullscreen AnimeSoul
+            // keeps the existing fallback for players without native auto-next.
+            if (autoNext && (!isPlayerFullscreen() || hasStableFullscreenOwner())) {
+              advanceAfterPlayback();
+              return;
+            }
+            command("seek", { seconds: playback.endingEnd });
           }
+          // Kodik does not consistently emit video_ended. Start the same
+          // transition from its final time update as a reliable fallback.
+          if (autoNext && duration > 0 && time >= Math.max(0, duration - 1.25) && (!isPlayerFullscreen() || hasStableFullscreenOwner())) advanceAfterPlayback();
         }
       } else if (eventKey.includes("ready") || eventKey.includes("loaded")) {
         restoreSavedPosition();
@@ -389,11 +778,13 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       }
       if (key === "kodik_player_video_ended" || key === "ended") {
         if (initialPrefs.watchPartyEnabled) markPartyPaused();
-        save(Number(current?.duration ?? 0), Number(current?.duration ?? 0), true);
-        if (autoNext) {
-          const next = carouselIndex >= 0 ? carouselItems[carouselIndex + 1] : undefined;
-          if (next) activateCarouselItem(next, "next", true, false);
-        }
+        const playback = activePlaybackContext();
+        save(Number(playback.video?.duration ?? 0), Number(playback.video?.duration ?? 0), true);
+        // Keep the same serial iframe document and switch through its API.
+        // Replacing/navigating the iframe would make Chromium leave fullscreen.
+        // In fullscreen Kodik owns the serial transition; AnimeSoul observes
+        // the new episode but deliberately does not mutate the surrounding UI.
+        if (autoNext && (!isPlayerFullscreen() || hasStableFullscreenOwner())) advanceAfterPlayback();
       }
     };
     window.addEventListener("message", fn);
@@ -427,12 +818,12 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   </section> : null;
   return <main className="app">{header}
     <section className="watch-shell"><button className="back" onClick={onBack}>← Каталог</button>
-      <div className="watch-heading"><div><span className="eyebrow">{showUpcoming && upcomingRow ? `${upcomingRow.group.label?.toUpperCase() ?? `СЕЗОН ${upcomingSeason}`} · СЕРИЯ ${upcomingEpisode}` : `${selectedGroup?.label?.toUpperCase() ?? `СЕЗОН ${selectedSeason}`} · ${current?.contentKind ?? (selectedGroup?.kind === "movie" ? "ФИЛЬМ" : "СЕРИЯ")} ${episode}`}</span><h1>{base}</h1></div><b>★ {anime.rating?.average?.toFixed(1) ?? "—"}</b></div><div className="season-tabs">{seasons.map(s => <button className={`${s.number === selectedSeason ? "active " : ""}${s.kind === "special" ? "extra" : ""}`.trim()} key={s.number} onClick={() => { setShowUpcoming(false); setSelectedSeason(s.number) ;}}>{s.label ?? `Сезон ${s.number}`}</button>)}</div>
+      <div className="watch-heading"><div><span className="eyebrow">{showUpcoming && upcomingRow ? `${upcomingRow.group.label?.toUpperCase() ?? `СЕЗОН ${upcomingSeason}`} · СЕРИЯ ${upcomingEpisode}` : `${selectedGroup?.label?.toUpperCase() ?? `СЕЗОН ${selectedSeason}`} · ${current?.contentKind ?? (selectedGroup?.kind === "movie" ? "ФИЛЬМ" : "СЕРИЯ")} ${episode}`}</span><h1>{base}</h1></div><b>★ {anime.rating?.average?.toFixed(1) ?? "—"}</b></div><div className="season-tabs">{seasons.map(s => <button className={`${s.number === selectedSeason ? "active " : ""}${s.kind === "special" ? "extra" : ""}`.trim()} key={s.number} onClick={() => { cancelPendingPlayerEpisodeSwitch(); playerManagedEpisodeSwitch.current = false; setShowUpcoming(false); setSelectedSeason(s.number) ;}}>{s.label ?? `Сезон ${s.number}`}</button>)}</div>
       <div ref={playerShell} className={`episode-carousel ${episodeCarousel ? "enabled" : "disabled"} ${carouselMotion ? `shift-${carouselMotion}` : ""}`}>{episodeCarousel && previousCarouselItem ? <EpisodeSlideshow className="carousel-side carousel-previous" images={episodePreviewImages(previousCarouselItem.entry, previousCarouselItem.video?.originNumber ?? previousCarouselItem.number)} fallback={previousCarouselItem.entry?.poster?.fullsize ?? previousCarouselItem.entry?.poster?.big} label={previousCarouselItem.group.label ?? `Сезон ${previousCarouselItem.season}`} sublabel={`${previousCarouselItem.video?.contentKind ?? "Серия"} ${previousCarouselItem.number}`} onClick={() => activateCarouselItem(previousCarouselItem, "previous")} /> : episodeCarousel ? <span className="carousel-space" /> : null}
       {initialPrefs.watchPartyPanelPosition === "top" && partyPanel}
       <div className={`video-layout ${showUpcoming ? "upcoming-layout" : `toolbar-${position}`}`}>
-      <div className={`player-frame ${showUpcoming ? "upcoming-frame" : ""}`}>{showUpcoming && upcomingRow ? <div className="upcoming-player"><span>СЛЕДУЮЩАЯ СЕРИЯ</span><b>{upcomingRow.group.label ?? `Сезон ${upcomingSeason}`} · Серия {upcomingEpisode}{upcomingTotal > 0 ? ` из ${upcomingTotal}` : ""}</b><time>{formatCalendarDate(upcomingRow.item!.episodes!.next_date!)}</time><small>{upcomingRow.item?.episodes?.aired ?? 0} серий уже вышло · следующая ещё недоступна</small></div> : <>{current && <iframe ref={iframe} key={current.video_id} src={iframeSource} onLoad={loaded} title={`${base}, ${selectedGroup?.label ?? `серия ${episode}`}`} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />}{status && <div className="player-status"><span>{status}</span>{!current && !status.includes("Загружаем") && <button onClick={() => void fetchVideos()}>Повторить загрузку</button>}</div>}</>}</div>
-      {!showUpcoming && <div className="player-toolbar"><label>Озвучка<select value={dub} onChange={e => { setDub(e.target.value); chooseEpisode(videos.find(v => v.data.dubbing === e.target.value)?.number ?? "1") ;}}>{dubs.map(x => <option key={x} value={x}>{x}</option>)}</select></label><label>Серия<select value={episode} onChange={e => chooseEpisode(e.target.value)}>{episodes.map(x => { const duration = episodeDuration(videos, x), watched = isEpisodeWatched(saved?.episodes[`${selectedSeason}:${x}`]); return <option key={x} value={x}>{x}{duration ? ` · ${formatDuration(duration)}` : ""}{watched ? " · Просмотрено" : ""}</option> ;})}</select></label><label>Источник<select value={current?.data.player ?? player} onChange={e => setPlayer(e.target.value)}>{players.map(x => <option key={x} value={x}>{x}</option>)}</select></label>{openingEnd > 0 && <button onClick={() => command("seek", { seconds: openingEnd })}>Пропустить опенинг → {formatTime(openingEnd)}</button>}{endingStart > 0 && <button onClick={() => { save(endingStart, current?.duration ?? 0, true); command("seek", { seconds: endingEnd }) ;}}>Пропустить эндинг → {formatTime(endingEnd)}</button>}<details className="compact-options player-options" onClick={event => { if (event.target === event.currentTarget && event.currentTarget.open) { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false ;} }}><summary>⚙ Настройки просмотра</summary><div><Toggle label="Автоскип опенинга" value={autoSkip} onChange={v => { setAutoSkipState(v); persistPrefs( { ...initialPrefs, autoSkipOpening: v, autoSkipEnding, autoNext, autoPlayResume, autoScrollPlayer, playerEpisodeCarousel: episodeCarousel }) ;}} /><Toggle label="Автоскип эндинга" value={autoSkipEnding} onChange={v => { setAutoSkipEndingState(v); persistPrefs( { ...initialPrefs, autoSkipOpening: autoSkip, autoSkipEnding: v, autoNext, autoPlayResume, autoScrollPlayer, playerEpisodeCarousel: episodeCarousel }) ;}} /><Toggle label="Автосерия" value={autoNext} onChange={v => { setAutoNextState(v); persistPrefs( { ...initialPrefs, autoSkipOpening: autoSkip, autoSkipEnding, autoNext: v, autoPlayResume, autoScrollPlayer, playerEpisodeCarousel: episodeCarousel }) ;}} /><Toggle label="Переход к плееру" value={autoScrollPlayer} onChange={v => { setAutoScrollPlayerState(v); persistPrefs( { ...initialPrefs, autoSkipOpening: autoSkip, autoSkipEnding, autoNext, autoPlayResume, autoScrollPlayer: v, playerEpisodeCarousel: episodeCarousel }) ;}} />
+      <div ref={playerFrame} className={`player-frame ${showUpcoming ? "upcoming-frame" : ""}`}>{showUpcoming && upcomingRow ? <div className="upcoming-player"><span>СЛЕДУЮЩАЯ СЕРИЯ</span><b>{upcomingRow.group.label ?? `Сезон ${upcomingSeason}`} · Серия {upcomingEpisode}{upcomingTotal > 0 ? ` из ${upcomingTotal}` : ""}</b><time>{formatCalendarDate(upcomingRow.item!.episodes!.next_date!)}</time><small>{upcomingRow.item?.episodes?.aired ?? 0} серий уже вышло · следующая ещё недоступна</small></div> : <>{(current || renderedIframeSource) && <iframe ref={iframe} src={renderedIframeSource || iframeSource} onLoad={loaded} title={`${base}, ${selectedGroup?.label ?? `серия ${episode}`}`} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />}{current && isKodikEmbed(current.iframe_url, current.data.player) && <button type="button" tabIndex={-1} aria-label="Полный экран" className="fullscreen-bridge" onClick={toggleStableFullscreen} />}{status && <div className="player-status"><span>{status}</span>{!current && !status.includes("Загружаем") && <button onClick={() => void fetchVideos()}>Повторить загрузку</button>}</div>}</>}</div>
+      {!showUpcoming && <div className="player-toolbar"><label>Озвучка<select value={dub} onChange={e => { setDub(e.target.value); chooseEpisode(videos.find(v => v.data.dubbing === e.target.value)?.number ?? "1") ;}}>{dubs.map(x => <option key={x} value={x}>{x}</option>)}</select></label><label>Серия<select value={episode} onChange={e => chooseEpisode(e.target.value)}>{episodes.map(x => { const duration = episodeDuration(videos, x), watched = isEpisodeWatched(saved?.episodes[`${selectedSeason}:${x}`]); return <option key={x} value={x}>{x}{duration ? ` · ${formatDuration(duration)}` : ""}{watched ? " · Просмотрено" : ""}</option> ;})}</select></label><label>Источник<select value={current?.data.player ?? player} onChange={e => { playerManagedEpisodeSwitch.current = false; setPlayer(e.target.value); }}>{players.map(x => <option key={x} value={x}>{x}</option>)}</select></label>{openingEnd > 0 && <button onClick={() => command("seek", { seconds: openingEnd })}>Пропустить опенинг → {formatTime(openingEnd)}</button>}{endingStart > 0 && <button onClick={() => { save(endingStart, current?.duration ?? 0, true); command("seek", { seconds: endingEnd }) ;}}>Пропустить эндинг → {formatTime(endingEnd)}</button>}<details className="compact-options player-options" onClick={event => { if (event.target === event.currentTarget && event.currentTarget.open) { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false ;} }}><summary>⚙ Настройки просмотра</summary><div><Toggle label="Автоскип опенинга" value={autoSkip} onChange={v => { setAutoSkipState(v); persistPrefs( { ...initialPrefs, autoSkipOpening: v, autoSkipEnding, autoNext, autoPlayResume, autoScrollPlayer, playerEpisodeCarousel: episodeCarousel }) ;}} /><Toggle label="Автоскип эндинга" value={autoSkipEnding} onChange={v => { setAutoSkipEndingState(v); persistPrefs( { ...initialPrefs, autoSkipOpening: autoSkip, autoSkipEnding: v, autoNext, autoPlayResume, autoScrollPlayer, playerEpisodeCarousel: episodeCarousel }) ;}} /><Toggle label="Автосерия" value={autoNext} onChange={v => { setAutoNextState(v); persistPrefs( { ...initialPrefs, autoSkipOpening: autoSkip, autoSkipEnding, autoNext: v, autoPlayResume, autoScrollPlayer, playerEpisodeCarousel: episodeCarousel }) ;}} /><Toggle label="Переход к плееру" value={autoScrollPlayer} onChange={v => { setAutoScrollPlayerState(v); persistPrefs( { ...initialPrefs, autoSkipOpening: autoSkip, autoSkipEnding, autoNext, autoPlayResume, autoScrollPlayer: v, playerEpisodeCarousel: episodeCarousel }) ;}} />
 <Toggle label="Карусель серий" value={episodeCarousel} onChange={v => { setEpisodeCarousel(v); persistPrefs( { ...initialPrefs, autoSkipOpening: autoSkip, autoSkipEnding, autoNext, autoPlayResume, autoScrollPlayer, playerEpisodeCarousel: v }) ;}} />
 <Toggle label="Предпросмотр серии при наведении" value={episodeHoverPreview} onChange={v => { setEpisodeHoverPreview(v); persistPrefs({ ...initialPrefs, autoSkipOpening: autoSkip, autoSkipEnding, autoNext, autoPlayResume, autoScrollPlayer, playerEpisodeCarousel: episodeCarousel, episodeHoverPreview: v }, v) ;}} />
 <Toggle label="Совместный режим" value={initialPrefs.watchPartyEnabled} onChange={v => persistPrefs({ ...initialPrefs, watchPartyEnabled: v })} />
@@ -447,7 +838,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       {scheduleRows.length > 0 && <section className="release-schedule"><div><span className="eyebrow">ГРАФИК ВЫХОДА</span><h2>Следующие серии</h2></div>{scheduleRows.map(({ group, entry, item }) => { const aired = item.episodes?.aired ?? 0, total = item.episodes?.count ?? 0; return <article key={entry.anime_id}><span><b>{group.label}</b><small>{aired} из {total || "—"} серий вышло · следующая — серия {aired + 1}{total ? ` из ${total}` : ""}</small></span><time>{formatCalendarDate(item.episodes!.next_date!)}</time></article> ;})}</section>}
       <div className="all-seasons">{seasons.map(group => { const list = seasonVideos[group.number] ?? [], nums = Array.from(new Set(list.map(v => v.number))).sort((a, b) => +a - +b), watched = nums.filter(e => isEpisodeWatched(saved?.episodes[`${group.number}:${e}`])).length, allWatched = nums.length > 0 && watched === nums.length, entry = group.entries[0], planned = releaseStatus(entry).kind === "planned", airing = releaseStatus(entry).kind === "airing", scheduleItem = group.entries.map(e => schedule[e.anime_id]).find(Boolean), date = scheduleItem?.episodes?.next_date, collapsed = collapsedSeasons.includes(group.number), emptyMessage = planned ? `Запланировано${entry.year ? ` · ${entry.year}` : ""}` : airing ? date ? `Следующая серия · ${formatCalendarDate(date)}` : "Сейчас выходит · дата следующей серии не указана" : "Видео пока не добавлено"; return <section className={`season-panel ${collapsed ? "collapsed " : ""}${group.kind === "special" ? "extra-panel" : ""}`.trim()} key={group.number}><div className="season-summary-row"><button type="button" className="season-summary" onClick={() => toggleSeason(group.number)} aria-expanded={!collapsed}><h2>{group.label ?? `Сезон ${group.number}`}</h2><span>{watched} из {nums.length} просмотрено</span><b>{collapsed ? "⌄" : "⌃"}</b></button><button type="button" className={`season-watch-toggle ${allWatched ? "active" : ""}`} disabled={!nums.length} aria-label={allWatched ? `Снять отметку «просмотрено» со всех серий: ${group.label ?? `Сезон ${group.number}`}` : `Отметить все серии просмотренными: ${group.label ?? `Сезон ${group.number}`}`} title={allWatched ? "Снять отметку со всего сезона" : "Отметить весь сезон просмотренным и учесть длительность серий в статистике"} onClick={() => toggleSeasonWatched(group.number, nums, list)}><span className="eye-glyph" /></button></div><div className="season-progress"><i style={{ width: `${nums.length ? watched / nums.length * 100 : 0}%` }} /></div><div className="season-content"><div>{!nums.length && <div className={`release-empty ${planned ? "planned" : airing ? "airing" : ""}`}><i />{emptyMessage}</div>}<div className="episode-grid">{nums.map(e => { const key = `${group.number}:${e}`, ep = saved?.episodes[key], isWatched = isEpisodeWatched(ep), isActive = group.number === selectedSeason && e === episode, isNew = newEpisodeKeys.has(key) && !isWatched, duration = episodeDuration(list, e), video = list.find(v => v.number === e), originEntry = group.entries.find(item => item.anime_id === video?.originAnimeId) ?? entry, previewAnime = previewAnimeById[originEntry.anime_id] ?? originEntry, unit = video?.contentKind ?? (group.kind === "movie" ? "Фильм" : "Серия"); return <EpisodeHoverPreview key={e} enabled={episodeHoverPreview} images={episodePreviewImages(previewAnime, video?.originNumber ?? e)} fallback={previewAnime.poster?.fullsize ?? previewAnime.poster?.big} label={`${group.label ?? `Сезон ${group.number}`} · ${unit} ${e}`}>
   <div className="episode-card-shell">
-    <button className={`episode-entry ${isActive ? "active " : ""}${isWatched ? "watched " : ""}${isNew ? "new-episode " : ""}${unit !== "Серия" && unit !== "Фильм" ? "extra-episode" : ""}`.trim()} onClick={() => chooseEpisode(e, group.number)}><b>{e}{isWatched && <i>✓</i>}</b><span>{unit} {e}{isNew && <em>НОВАЯ</em>}<small>{duration ? formatDuration(duration) : "Длительность неизвестна"} · {isWatched ? "Просмотрено" : `${ep?.percent ?? 0}% · ${formatTime(ep?.position ?? 0)}`}</small></span></button>
+    <button className={`episode-entry ${isActive ? "active " : ""}${isWatched ? "watched " : ""}${isNew ? "new-episode " : ""}${unit !== "Серия" && unit !== "Фильм" ? "extra-episode" : ""}`.trim()} onClick={() => chooseEpisode(e, group.number)}><b>{e}{isWatched && <i>✓</i>}</b><span>{unit} {e}{isNew && <em>НОВАЯ</em>}{(ep?.completions ?? 0) > 1 && <em className="rewatch-count">×{ep?.completions}</em>}<small>{duration ? formatDuration(duration) : "Длительность неизвестна"} · {isWatched ? "Просмотрено" : `${ep?.percent ?? 0}% · ${formatTime(ep?.position ?? 0)}`}</small></span></button>
     <button
       type="button"
       className={`episode-watch-toggle ${isWatched ? "active" : ""}`}

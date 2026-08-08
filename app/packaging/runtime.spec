@@ -8,6 +8,7 @@ from PyInstaller.utils.hooks import collect_submodules
 
 
 APP_ROOT = Path(SPECPATH).parent
+ICON_FILE = APP_ROOT / "packaging" / "assets" / "animesoul.ico"
 # Hidden imports are collected before Analysis applies ``pathex``. Make the
 # application package importable at collection time so FastAPI routes and
 # services are included in the frozen runtime.
@@ -26,7 +27,11 @@ a = Analysis(
         (
             str(APP_ROOT / "frontend" / "dist"),
             str(Path("frontend") / "dist"),
-        )
+        ),
+        (
+            str(APP_ROOT / "packaging" / "assets"),
+            "assets",
+        ),
     ],
     hiddenimports=hidden_imports,
     hookspath=[],
@@ -52,6 +57,7 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
+    icon=str(ICON_FILE),
     codesign_identity=None,
     entitlements_file=None,
 )

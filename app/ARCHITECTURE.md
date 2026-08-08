@@ -51,3 +51,6 @@ Put network and filesystem work in a backend service, transport validation in a
 route, pure rules in `lib`, interaction in a component or hook, and styles in
 the matching CSS module. Add a regression test whenever a state migration,
 watch-party rule or persistence behavior changes.
+
+For full details on entry points, exit codes, function call chains, API reference, and variable state, see [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md).
+For code reduction, cleanup, and scalability recommendations, see [docs/REFACTORING_RECOMMENDATIONS.md](docs/REFACTORING_RECOMMENDATIONS.md).

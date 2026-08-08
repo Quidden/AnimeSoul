@@ -58,6 +58,7 @@ export function migrateSnapshot(
                 animeId,
                 {
                   ...item,
+                  title: typeof item.title === "string" ? item.title : undefined,
                   episode: typeof item.episode === "string" ? item.episode : "1",
                   dub: typeof item.dub === "string" ? item.dub : "",
                   season: Number.isFinite(item.season) ? item.season : 1,
@@ -75,6 +76,9 @@ export function migrateSnapshot(
             const pendingEpisodeKeys = Array.isArray(item.pendingEpisodeKeys)
               ? [...new Set(item.pendingEpisodeKeys.filter((key) => typeof key === "string"))]
               : [];
+            const pendingOtherDubEpisodeKeys = Array.isArray(item.pendingOtherDubEpisodeKeys)
+              ? [...new Set(item.pendingOtherDubEpisodeKeys.filter((key) => typeof key === "string"))]
+              : [];
             return {
               ...item,
               animeIds: Array.isArray(item.animeIds)
@@ -87,9 +91,16 @@ export function migrateSnapshot(
                 : undefined,
               pendingEpisodeKeys,
               newEpisodes: pendingEpisodeKeys.length || Math.max(0, Number(item.newEpisodes) || 0),
+              knownAnyEpisodeKeys: Array.isArray(item.knownAnyEpisodeKeys)
+                ? [...new Set(item.knownAnyEpisodeKeys.filter((key) => typeof key === "string"))]
+                : undefined,
+              pendingOtherDubEpisodeKeys,
+              otherDubEpisodes: pendingOtherDubEpisodeKeys.length,
               dubs: Array.isArray(item.dubs)
                 ? [...new Set(item.dubs.filter((dub) => typeof dub === "string"))]
                 : [],
+              lastCheckedAt: Number.isFinite(item.lastCheckedAt) ? item.lastCheckedAt : undefined,
+              lastNewEpisodeAt: Number.isFinite(item.lastNewEpisodeAt) ? item.lastNewEpisodeAt : undefined,
             };
           })
       : [],
@@ -104,6 +115,14 @@ export function migrateSnapshot(
     watchingExpanded: typeof input?.watchingExpanded === "boolean" ? input.watchingExpanded : undefined,
     historyExpanded: typeof input?.historyExpanded === "boolean" ? input.historyExpanded : undefined,
     watchingHidden: Array.isArray(input?.watchingHidden) ? input.watchingHidden.filter(Number.isFinite) : [],
+    animeTitles:
+      input?.animeTitles && typeof input.animeTitles === "object"
+        ? Object.fromEntries(
+            Object.entries(input.animeTitles).filter(
+              ([animeId, title]) => Number.isFinite(Number(animeId)) && typeof title === "string",
+            ),
+          )
+        : {},
   };
 }
 
@@ -135,7 +154,15 @@ export function migrateDocument(input: Partial<StorageDocument> | null | undefin
 export const STORAGE_URL = "/api/storage";
 
 export function saveStorageDocument(document: StorageDocument) {
-  return fetch(STORAGE_URL, {
+  const mode = readLocal("animesoul:gdrive-auto-sync-mode", "instant");
+  const initialChoiceDone = readLocal("animesoul:gdrive-initial-choice-done", false);
+  const hasCloudFile = readLocal("animesoul:gdrive-has-cloud-file", false);
+
+  // Block automatic background sync if a cloud file exists and user hasn't made initial choice
+  const allowAutoSync = mode === "instant" && (!hasCloudFile || initialChoiceDone);
+  const autoSyncParam = allowAutoSync ? "true" : "false";
+
+  return fetch(`${STORAGE_URL}?auto_sync=${autoSyncParam}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(document),

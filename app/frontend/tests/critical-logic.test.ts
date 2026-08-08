@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   acknowledgeTrackedEpisode,
+  compareTrackedByRelease,
   collectPlayableEpisodeDates,
   reconcileTrackedEpisodes,
 } from "../src/lib/tracking.ts";
@@ -14,6 +15,30 @@ import {
   playbackChangedByUser,
   playbackReachedTarget,
 } from "../src/lib/watchPartyLogic.ts";
+import { kodikSerialIdentity, kodikSerialSource, playerDubbing, playerEpisode, playerTranslationId } from "../src/lib/kodik.ts";
+
+test("Kodik single episode URL becomes one stable serial player", () => {
+  const first = "//kodik.example/season/abc?episode=1&only_episode=true&only_season=true&translations=false";
+  const second = "//kodik.example/season/abc?episode=2&only_episode=true&only_season=true&translations=false";
+  const source = new URL(kodikSerialSource(first, "5", 42));
+  assert.equal(source.searchParams.get("episode"), "5");
+  assert.equal(source.searchParams.get("start_from"), "42");
+  assert.equal(source.searchParams.has("only_episode"), false);
+  assert.equal(source.searchParams.has("only_season"), false);
+  assert.equal(source.searchParams.has("translations"), false);
+  assert.equal(kodikSerialIdentity(first), kodikSerialIdentity(second));
+});
+
+test("Kodik event payload helpers accept common player formats", () => {
+  assert.equal(playerEpisode({ current_episode: 7 }), "7");
+  assert.equal(playerEpisode({ episode: "3" }), "3");
+  assert.equal(playerDubbing({ translation: { title: "AniLibria" } }), "AniLibria");
+  assert.equal(playerDubbing({ value: { translation: { name: "Dream Cast" } } }), "Dream Cast");
+  assert.equal(playerDubbing('{"translation":{"title":"AniDUB"}}'), "AniDUB");
+  assert.equal(playerTranslationId({ translation: { id: 610 } }), "610");
+  assert.equal(playerTranslationId({ value: { translation_id: "711" } }), "711");
+  assert.equal(playerTranslationId('{"translation":{"id":812}}'), "812");
+});
 
 test("tracking keeps a monotonic baseline and acknowledges an exact episode", () => {
   const baseline = {
@@ -54,6 +79,93 @@ test("tracking filters unavailable videos and non-selected dubbings", () => {
     ["A"],
   );
   assert.deepEqual([...dates.keys()], ["7:1"]);
+});
+
+test("tracking keeps baseline quiet and orders pending releases newest first", () => {
+  const baseline = reconcileTrackedEpisodes(
+    {
+      animeId: 1,
+      animeIds: [1],
+      title: "First",
+      knownEpisodes: 0,
+      newEpisodes: 0,
+    },
+    [1],
+    new Map([["1:1", 1_000]]),
+    100,
+  );
+  assert.equal(baseline.newEpisodes, 0);
+
+  const olderRelease = reconcileTrackedEpisodes(
+    baseline,
+    [1],
+    new Map([["1:1", 1_000], ["1:2", 2_000]]),
+    200,
+  );
+  const newerRelease = reconcileTrackedEpisodes(
+    {
+      animeId: 2,
+      animeIds: [2],
+      title: "Second",
+      knownEpisodes: 1,
+      knownEpisodeKeys: ["2:1"],
+      pendingEpisodeKeys: [],
+      newEpisodes: 0,
+      lastCheckedAt: 100,
+    },
+    [2],
+    new Map([["2:1", 1_000], ["2:2", 3_000]]),
+    300,
+  );
+  const quiet = { ...baseline, animeId: 3, title: "Quiet" };
+
+  const sorted = [olderRelease, quiet, newerRelease].sort(compareTrackedByRelease);
+  assert.deepEqual(sorted.map((tracker) => tracker.animeId), [2, 1, 3]);
+  assert.equal(olderRelease.lastNewEpisodeAt, 200);
+  assert.equal(newerRelease.lastNewEpisodeAt, 300);
+});
+
+test("tracking marks an episode that is available only in another dubbing", () => {
+  const selectedDub = new Map([["7:1", 1_000]]);
+  const baseline = reconcileTrackedEpisodes(
+    {
+      animeId: 7,
+      animeIds: [7],
+      title: "Dub test",
+      knownEpisodes: 1,
+      knownEpisodeKeys: ["7:1"],
+      pendingEpisodeKeys: [],
+      newEpisodes: 0,
+      lastCheckedAt: 100,
+    },
+    [7],
+    selectedDub,
+    200,
+    selectedDub,
+  );
+  assert.equal(baseline.otherDubEpisodes, 0);
+
+  const anotherDubReleased = reconcileTrackedEpisodes(
+    baseline,
+    [7],
+    selectedDub,
+    300,
+    new Map([["7:1", 1_000], ["7:2", 2_000]]),
+  );
+  assert.equal(anotherDubReleased.newEpisodes, 0);
+  assert.equal(anotherDubReleased.otherDubEpisodes, 1);
+  assert.deepEqual(anotherDubReleased.pendingOtherDubEpisodeKeys, ["7:2"]);
+
+  const selectedDubReleased = reconcileTrackedEpisodes(
+    anotherDubReleased,
+    [7],
+    new Map([["7:1", 1_000], ["7:2", 2_000]]),
+    400,
+    new Map([["7:1", 1_000], ["7:2", 2_000]]),
+  );
+  assert.equal(selectedDubReleased.newEpisodes, 1);
+  assert.equal(selectedDubReleased.otherDubEpisodes, 0);
+  assert.deepEqual(selectedDubReleased.pendingOtherDubEpisodeKeys, []);
 });
 
 test("watch-party helpers distinguish remote settling from a user command", () => {

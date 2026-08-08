@@ -1,9 +1,13 @@
 import type { PartyPlayback, PartyState } from "./types";
 
+/**
+ * Checks whether playback state was explicitly modified by a user action
+ * (e.g. changed episode/dub/playing state, or jumped position > 3s from expected drift).
+ */
 export function playbackChangedByUser(
   previous: PartyPlayback | null,
   current: PartyPlayback,
-) {
+): boolean {
   if (!previous) return false;
   if (
     previous.animeId !== current.animeId
@@ -19,10 +23,13 @@ export function playbackChangedByUser(
   return Math.abs(current.position - expectedPosition) > 3;
 }
 
+/**
+ * Determines whether current local playback has reached synchronization target state.
+ */
 export function playbackReachedTarget(
   target: PartyPlayback | null,
   current: PartyPlayback,
-) {
+): boolean {
   if (
     !target
     || target.animeId !== current.animeId
@@ -38,7 +45,10 @@ export function playbackReachedTarget(
   return Math.abs(current.position - expectedPosition) <= 4;
 }
 
-export function roomPlaybackRevision(party: PartyState) {
+/**
+ * Generates a unique revision hash string for the current Watch Party room playback state.
+ */
+export function roomPlaybackRevision(party: PartyState): string {
   const playback = party.playback;
   if (!playback) return "empty";
   return [

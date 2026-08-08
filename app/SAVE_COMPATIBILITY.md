@@ -5,6 +5,16 @@ It contains every profile and each profile contains favorites, folders, notes,
 watch progress, episode statistics, tracking, history preferences, themes and
 player settings.
 
+For easier manual inspection, current saves also duplicate the human-readable
+anime name next to numeric identifiers:
+
+- `snapshot.animeTitles` maps an anime ID to its title;
+- each `snapshot.progress[animeId]` may contain a `title` field.
+
+These fields are informational only. AnimeSoul continues to identify anime by
+their numeric IDs, so changing or removing a duplicated title does not remap
+progress, favorites, folders or tracking.
+
 ## Option 1: transfer one profile through the interface
 
 1. Open the source version.

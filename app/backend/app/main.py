@@ -1,4 +1,8 @@
-"""FastAPI application entry point for AnimeSoul."""
+"""FastAPI application entry point for AnimeSoul backend services.
+
+Provides API routes for storage persistence, Google Drive cloud sync, Watch Party
+real-time WebSocket server, and static production bundle serving.
+"""
 
 from __future__ import annotations
 
@@ -7,19 +11,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .api.gdrive import router as gdrive_router
 from .api.storage import router as storage_router
 from .api.watch_party import router as party_router
 from .api.yummy import router as yummy_router
 from .config import settings
 
-
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.1.9-beta.2",
-    description="FastAPI backend for the AnimeSoul React client.",
+    version="0.2.0",
+    description="FastAPI backend for the AnimeSoul desktop and web client.",
 )
 
-# Vite uses port 5173 during development. Packaged builds are same-origin on FastAPI.
+# Enable CORS for local Vite dev server (port 5173). Production uses same-origin.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
@@ -27,16 +31,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register API routers
 app.include_router(yummy_router)
 app.include_router(storage_router)
 app.include_router(party_router)
+app.include_router(gdrive_router)
 
 
-@app.get("/api/health")
+@app.get("/api/health", summary="Health check", tags=["System"])
 async def health() -> dict[str, object]:
+    """Return backend health status and stack version."""
     return {"ok": True, "stack": "FastAPI + React", "version": app.version}
 
 
+# Serve built React frontend assets in production mode
 if settings.frontend_dist.exists():
     assets = settings.frontend_dist / "assets"
     if assets.exists():
@@ -44,8 +53,7 @@ if settings.frontend_dist.exists():
 
     @app.get("/{path:path}", include_in_schema=False)
     async def react_application(path: str) -> FileResponse:
-        """Use the React entry point for client-side navigation."""
-
+        """Serve client-side single page application routes."""
         candidate = settings.frontend_dist / path
         if candidate.is_file():
             return FileResponse(candidate)

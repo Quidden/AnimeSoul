@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+/** Screenshot preview data structure for anime titles. */
 export type AnimeScreenshot = {
   time?: number;
   id?: number;
@@ -7,6 +8,7 @@ export type AnimeScreenshot = {
   sizes?: { small?: string; full?: string };
 };
 
+/** Core Anime entity returned from YummyAnime / Shikimori APIs. */
 export type Anime = {
   anime_id: number;
   title: string;
@@ -30,6 +32,7 @@ export type Anime = {
   random_screenshots?: AnimeScreenshot[];
 };
 
+/** Individual video / episode stream data structure. */
 export type Video = {
   video_id: number;
   iframe_url: string;
@@ -40,21 +43,26 @@ export type Video = {
   originNumber?: string;
   contentKind?: "Серия" | "OVA" | "ONA" | "Спешл" | "Фильм";
   contentTitle?: string;
-  data: { dubbing: string; player: string };
+  data: {
+    dubbing: string;
+    player: string;
+    /** Provider identifiers report translation reliably across locales. */
+    player_id?: number | string;
+    translation_id?: number | string;
+  };
   skips?: {
     opening?: { time: number; length: number } | null;
     ending?: { time: number; length: number } | null;
   };
 };
 
+/** Per-episode playback progress and watched state. */
 export type EpisodeState = {
   position: number;
   duration: number;
   percent: number;
   updatedAt: number;
-  // Keep the source episode with every progress entry. A franchise season can
-  // combine several API titles, so the display key alone is not sufficient to
-  // restore the same video after reloading the application.
+  /** Origin anime ID for franchise cross-referencing. */
   originAnimeId?: number;
   originEpisode?: string;
   completed?: boolean;
@@ -78,7 +86,10 @@ export type EpisodeState = {
   };
 };
 
+/** Overall watch progress for a single anime title. */
 export type AnimeProgress = {
+  /** Human-readable metadata only. Progress lookup still uses the numeric anime ID. */
+  title?: string;
   episode: string;
   dub: string;
   episodes: Record<string, EpisodeState>;
@@ -90,8 +101,13 @@ export type AnimeProgress = {
   originEpisode?: string;
 };
 
+/** Map of anime ID to its corresponding progress record. */
 export type Progress = Record<number, AnimeProgress>;
+
+/** User-defined folder / category collection. */
 export type Folder = { id: string; name: string; animeIds: number[]; notes?: Record<number, string> };
+
+/** Tracked anime entry for new episode notifications. */
 export type Tracker = {
   animeId: number;
   animeIds?: number[];
@@ -100,11 +116,21 @@ export type Tracker = {
   knownEpisodeKeys?: string[];
   pendingEpisodeKeys?: string[];
   newEpisodes: number;
+  /** Monotonic baseline across every dubbing, used for availability hints. */
+  knownAnyEpisodeKeys?: string[];
+  /** New episodes that exist, but not yet in the selected dubbing(s). */
+  pendingOtherDubEpisodeKeys?: string[];
+  otherDubEpisodes?: number;
   dubs?: string[];
   lastCheckedAt?: number;
+  /** Detection time of the newest still-unacknowledged release. */
+  lastNewEpisodeAt?: number;
 };
 
+/** Position of the UI action toolbar. */
 export type ToolbarPosition = "top" | "bottom" | "left" | "right";
+
+/** User player preferences and customization parameters. */
 export type PlayerPrefs = {
   autoSkipOpening: boolean;
   autoSkipEnding: boolean;
@@ -130,6 +156,7 @@ export type PlayerPrefs = {
   watchPartyAutoCatchUp: boolean;
 };
 
+/** Real-time playback synchronization payload for Watch Party. */
 export type PartyPlayback = {
   animeId: number;
   season: number;
@@ -142,6 +169,8 @@ export type PartyPlayback = {
   updatedAt: number;
   sentAt?: number;
 };
+
+/** Connected room participant in Watch Party. */
 export type PartyParticipant = {
   id: string;
   name: string;
@@ -151,6 +180,8 @@ export type PartyParticipant = {
   buffering?: boolean;
   online: boolean;
 };
+
+/** Complete Watch Party room state. */
 export type PartyState = {
   protocol?: number;
   roomId: string;
@@ -161,6 +192,7 @@ export type PartyState = {
   lastAction?: { type: string; seq: number };
 };
 
+/** Metadata attributes for anime card rendering. */
 export type CardMeta = {
   familyCount: number;
   seasonCount: number;
@@ -170,9 +202,17 @@ export type CardMeta = {
   durationMax: number;
   status: { label: string; kind: string };
 };
+
+/** Color theme definition. */
 export type Theme = { name: string; accent: string; background: string };
+
+/** Grouping of anime entries into a season or movie collection. */
 export type SeasonGroup = { number: number; entries: Anime[]; label?: string; kind?: "season" | "movie" | "special" };
+
+/** Release schedule information entry. */
 export type ScheduleEntry = { anime_id: number; episodes?: { aired?: number; count?: number; next_date?: number; prev_date?: number } };
+
+/** Full snapshot of user preferences, progress, and collections. */
 export type ConfigSnapshot = {
   version: number;
   name: string;
@@ -180,6 +220,8 @@ export type ConfigSnapshot = {
   favorites: number[];
   folders: Folder[];
   progress: Progress;
+  /** Readability aid for exported JSON; application logic never depends on it. */
+  animeTitles?: Record<number, string>;
   tracked: Tracker[];
   theme: Theme;
   toolbar: ToolbarPosition;
@@ -191,22 +233,28 @@ export type ConfigSnapshot = {
   historyExpanded?: boolean;
   watchingHidden?: number[];
 };
+
+/** Storage profile container. */
 export type ConfigProfile = {
   id: string;
   name: string;
   snapshot: ConfigSnapshot;
-  // Future builds may attach profile metadata. Keep it during migrations.
   [key: string]: unknown;
 };
+
+/** Root storage document structure. */
 export type StorageDocument = {
   schemaVersion: number;
   updatedAt: string;
   activeProfile: string;
   profiles: ConfigProfile[];
-  // Makes forward-compatible fields explicit instead of discarding them.
   [key: string]: unknown;
 };
+
+/** UI save status state. */
 export type SaveStatus = { state: "loading" | "saving" | "saved" | "error"; at?: number };
+
+/** Network API synchronization status state. */
 export type ApiStatus = {
   state: "idle" | "updating" | "updated" | "error";
   at?: number;
@@ -214,6 +262,7 @@ export type ApiStatus = {
   downlinkMbps?: number;
 };
 
+/** Props passed to Watch / Player page view. */
 export type WatchProps = {
   header: ReactNode;
   anime: Anime;

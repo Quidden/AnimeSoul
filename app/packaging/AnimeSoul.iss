@@ -1,5 +1,5 @@
 #define AppName "AnimeSoul"
-#define AppVersion "0.1.9-beta.2"
+#define AppVersion "0.2.0"
 #define AppPublisher "Quidden"
 #define AppExeName "AnimeSoul Launcher.exe"
 
@@ -19,6 +19,7 @@ OutputBaseFilename=AnimeSoul-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=assets\animesoul.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 CloseApplications=yes
 RestartApplications=no
@@ -33,8 +34,8 @@ Name: "desktopicon"; Description: "Создать ярлык на рабочем
 Source: "..\..\release-work\AnimeSoul-{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\AnimeSoul"; Filename: "{app}\{#AppExeName}"
-Name: "{autodesktop}\AnimeSoul"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\AnimeSoul"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"
+Name: "{autodesktop}\AnimeSoul"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Запустить AnimeSoul"; Flags: nowait postinstall skipifsilent

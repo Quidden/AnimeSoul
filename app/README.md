@@ -1,6 +1,6 @@
 # AnimeSoul — main application
 
-Current beta: **0.1.9 Beta 2**.
+Current release: **0.2.0**.
 
 This folder contains the current AnimeSoul implementation. All new feature
 development happens here. The previous Vinext/Electron implementation is
@@ -23,6 +23,10 @@ Use one of these files:
 - `Start AnimeSoul in Browser.bat` — always opens a browser.
 - `Start AnimeSoul Desktop.bat` — always opens the desktop window.
 - `Configure AnimeSoul.bat` — changes the port, Public token and default mode.
+
+In desktop mode, hold **Ctrl** and rotate the mouse wheel to scale the complete
+interface from 50% to 200%. Press **Ctrl+0** to return to 100%. The selected
+scale is stored locally and restored on the next desktop launch.
 
 Prerequisites: Python 3.11+, Node.js 22+ and internet access during the first
 dependency installation.
@@ -104,6 +108,9 @@ anime pages, available dubs and sources, progress per episode, resume playback,
 opening and ending skip, favorites, custom folders, history, statistics,
 profiles, themes, release schedules, new-episode tracking, episode previews,
 manual watched marks and synchronized watch-party controls.
+
+The same AnimeSoul `AS` artwork is used for the web favicon and header, launcher,
+desktop runtime, installer and Windows shortcuts.
 
 ## Verification
 

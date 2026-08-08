@@ -181,9 +181,9 @@ export function CollectionOverview({
                     <small>{item.knownEpisodes} известных серий</small>
                   </div>
                   <div className="collection-overview-actions">
-                    <em className={item.newEpisodes > 0 ? "release-status new" : "release-status quiet"}>
-                      <i />{item.newEpisodes > 0 ? `Новая серия · +${item.newEpisodes}` : "Новых серий нет"}
-                    </em>
+                    {item.newEpisodes > 0 && <em className="release-status new"><i />Новая серия · +{item.newEpisodes}</em>}
+                    {(item.otherDubEpisodes ?? 0) > 0 && <em className="release-status other-dub" title="Серия доступна в другой озвучке, но ещё не появилась в отслеживаемой"><i />Есть в другой озвучке · +{item.otherDubEpisodes}</em>}
+                    {item.newEpisodes <= 0 && (item.otherDubEpisodes ?? 0) <= 0 && <em className="release-status quiet"><i />Новых серий нет</em>}
                     {anime && item.newEpisodes > 0 && <button className="watch-new-button" type="button" onClick={event => { event.stopPropagation(); onWatchNew(anime); }}>▶ Смотреть новую серию</button>}
                     <button className="untrack-button" type="button" onClick={event => { event.stopPropagation(); onUntrack(item); }}>Отписаться</button>
                   </div>

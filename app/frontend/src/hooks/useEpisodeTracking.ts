@@ -10,19 +10,15 @@ import { collectPlayableEpisodeDates, reconcileTrackedEpisodes } from "../lib/tr
 export function useEpisodeTracking({
   tracked,
   setTracked,
-  view,
-  active,
 }: {
   tracked: Tracker[];
   setTracked: Dispatch<SetStateAction<Tracker[]>>;
-  view: string;
-  active: Anime | null;
 }) {
   const trackedRef = useRef(tracked);
   trackedRef.current = tracked;
 
   useEffect(() => {
-    if (view !== "home" || active || !tracked.length) return;
+    if (!tracked.length) return;
     let cancelled = false;
     let checking = false;
 
@@ -54,6 +50,7 @@ export function useEpisodeTracking({
           } catch {}
 
           const episodeDates = new Map<string, number>();
+          const allDubEpisodeDates = new Map<string, number>();
           let successfulRequests = 0;
           for (const animeId of animeIds) {
             if (cancelled) return;
@@ -70,18 +67,31 @@ export function useEpisodeTracking({
               for (const [key, date] of playableDates) {
                 episodeDates.set(key, Math.max(episodeDates.get(key) ?? 0, date));
               }
+              const allPlayableDates = collectPlayableEpisodeDates(
+                animeId,
+                (payload.videos ?? []) as Video[],
+              );
+              for (const [key, date] of allPlayableDates) {
+                allDubEpisodeDates.set(key, Math.max(allDubEpisodeDates.get(key) ?? 0, date));
+              }
             } catch {}
             await new Promise((resolve) => setTimeout(resolve, 220));
           }
 
           // Частичный ответ API не должен становиться новой точкой отсчёта:
           // иначе временно пропавшие серии появятся как «новые» при следующем запросе.
-          if (cancelled || successfulRequests !== animeIds.length) continue;
+          if (cancelled || successfulRequests === 0) continue;
           const now = Date.now();
           setTracked((current) => {
             const target = current.find((entry) => entry.animeId === item.animeId);
             if (!target) return current;
-            const nextItem = reconcileTrackedEpisodes(target, animeIds, episodeDates, now);
+            const nextItem = reconcileTrackedEpisodes(
+              target,
+              animeIds,
+              episodeDates,
+              now,
+              allDubEpisodeDates,
+            );
             const next = current.map((entry) =>
               entry.animeId === item.animeId ? nextItem : entry,
             );
@@ -105,8 +115,6 @@ export function useEpisodeTracking({
     tracked
       .map((item) => `${item.animeId}:${item.animeIds?.join(",")}:${item.dubs?.join(",")}`)
       .join("|"),
-    view,
-    active,
     setTracked,
   ]);
 }

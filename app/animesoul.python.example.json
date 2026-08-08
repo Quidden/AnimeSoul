@@ -1,5 +1,6 @@
 {
   "port": 8000,
   "yummy_public_token": "paste-your-own-public-token-here",
-  "data_directory": "data"
+  "data_directory": "data",
+  "gdrive_client_id": ""
 }

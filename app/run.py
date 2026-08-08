@@ -28,6 +28,14 @@ CONFIG_FILE = DEFAULT_CONFIG_FILE
 LaunchMode = Literal["browser", "desktop"]
 
 
+def bundled_asset(name: str) -> Path:
+    """Return a shared artwork path in source and frozen desktop builds."""
+
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS")) / "assets" / name
+    return ROOT / "packaging" / "assets" / name
+
+
 def port_is_available(port: int) -> bool:
     """Return False before startup when another process owns the port."""
 
@@ -159,6 +167,85 @@ def animesoul_is_running(port: int) -> bool:
         return False
 
 
+DESKTOP_ZOOM_SCRIPT = r"""
+(() => {
+  if (window.__animeSoulDesktopZoomInstalled) return;
+  window.__animeSoulDesktopZoomInstalled = true;
+
+  const storageKey = "animesoul.desktop.interfaceScale";
+  const minimum = 0.5;
+  const maximum = 2;
+  const step = 0.1;
+  const clamp = (value) => Math.min(maximum, Math.max(minimum, value));
+  const savedScale = Number.parseFloat(localStorage.getItem(storageKey) || "1");
+  let scale = Number.isFinite(savedScale) ? clamp(savedScale) : 1;
+  let indicatorTimer = 0;
+
+  const indicator = document.createElement("div");
+  indicator.setAttribute("aria-hidden", "true");
+  Object.assign(indicator.style, {
+    position: "fixed",
+    right: "22px",
+    bottom: "22px",
+    zIndex: "2147483647",
+    padding: "9px 13px",
+    border: "1px solid rgba(151, 100, 255, 0.55)",
+    borderRadius: "12px",
+    color: "#fff",
+    background: "rgba(18, 15, 25, 0.88)",
+    boxShadow: "0 12px 38px rgba(0, 0, 0, 0.35)",
+    font: "600 13px/1.2 system-ui, sans-serif",
+    pointerEvents: "none",
+    opacity: "0",
+    transform: "translateY(6px)",
+    transition: "opacity 150ms ease, transform 150ms ease"
+  });
+  document.body.appendChild(indicator);
+
+  const applyScale = (showIndicator) => {
+    document.documentElement.style.zoom = String(scale);
+    localStorage.setItem(storageKey, String(scale));
+    if (!showIndicator) return;
+    indicator.textContent = `Масштаб: ${Math.round(scale * 100)}%`;
+    indicator.style.opacity = "1";
+    indicator.style.transform = "translateY(0)";
+    window.clearTimeout(indicatorTimer);
+    indicatorTimer = window.setTimeout(() => {
+      indicator.style.opacity = "0";
+      indicator.style.transform = "translateY(6px)";
+    }, 900);
+  };
+
+  window.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    scale = clamp(Math.round((scale + (event.deltaY < 0 ? step : -step)) * 10) / 10);
+    applyScale(true);
+  }, { capture: true, passive: false });
+
+  window.addEventListener("keydown", (event) => {
+    if (!event.ctrlKey || event.key !== "0") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    scale = 1;
+    applyScale(true);
+  }, true);
+
+  applyScale(false);
+})();
+"""
+
+
+def install_desktop_zoom(window: object) -> None:
+    """Install persistent Ctrl+wheel interface scaling after WebView loads."""
+
+    def install() -> None:
+        window.evaluate_js(DESKTOP_ZOOM_SCRIPT)
+
+    window.events.loaded += install
+
+
 def open_existing_client(port: int, mode: LaunchMode) -> None:
     """Open an existing local server instead of failing on a second launch."""
 
@@ -173,14 +260,15 @@ def open_existing_client(port: int, mode: LaunchMode) -> None:
     except ImportError as error:
         print("Desktop-компонент не установлен. Запусти bat-файл ещё раз.")
         raise SystemExit(4) from error
-    webview.create_window(
+    window = webview.create_window(
         "AnimeSoul",
         url,
         width=1440,
         height=900,
         min_size=(960, 640),
     )
-    webview.start(private_mode=False)
+    install_desktop_zoom(window)
+    webview.start(private_mode=False, icon=str(bundled_asset("animesoul.ico")))
 
 
 def run_browser(port: int) -> None:
@@ -241,9 +329,12 @@ def run_desktop(port: int) -> None:
         height=900,
         min_size=(960, 640),
     )
+    install_desktop_zoom(window)
     try:
-        # WebView2 keeps familiar Ctrl+/Ctrl- page zoom behavior on Windows.
-        webview.start(private_mode=False)
+        webview.start(
+            private_mode=False,
+            icon=str(bundled_asset("animesoul.ico")),
+        )
     finally:
         server.should_exit = True
         server_thread.join(timeout=5)
