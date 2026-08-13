@@ -1,135 +1,192 @@
-# Полное руководство по рефакторингу и оптимизации AnimeSoul
+# AnimeSoul: refactoring roadmap
 
-Данный документ объединяет все результаты проведенного аудита кода, список неиспользуемых элементов, предложения по уменьшению объема кода и архитектурные рекомендации по повышению читаемости и масштабируемости приложения.
+This document describes the current Python + React application in `app/` and
+the safe path for continuing its refactor. It is deliberately implementation
+oriented: a contributor should be able to pick one phase, understand its
+boundary and verify that behavior did not change.
 
----
+## Non-negotiable compatibility rules
 
-## Часть 1. Удаление неиспользуемого и устаревшего кода (Dead Code Removal)
+1. The active application is `app/`. Do not add new product behavior to
+   `legacy-old-stack/` and do not delete the archive as part of refactoring.
+2. Keep storage schema version 3 readable in both implementations. Unknown
+   profile fields must survive migration, local saves, cloud synchronization
+   and import/export.
+3. Preserve the existing HTTP and WebSocket contracts until all callers and
+   packaged desktop builds have migrated.
+4. A refactor must not silently change progress, new-episode tracking,
+   watch-party synchronization or Google Drive merge rules.
+5. Do not change the product version merely because code was reorganized.
 
-### 1.1 Файлы вне продакшн-папки `app/`
-Вся актуальная рабочая версия приложения находится в папке `app/` (FastAPI + React Vite + PyWebView). Все элементы вне этой папки подлежат удалению:
+## Completed in the current refactor
 
-1. **Папка `legacy-old-stack/` (Размер: > 500 МБ)**:
-   - *Описание*: Старый стек приложения на Next.js / Node.js / Drizzle ORM.
-   - *Добавить в гитигнор или перенести в другую ветку*: Исходники, `node_modules` и `package-lock.json` старого стека полностью устарели. Единственная связь в коде — 1 строчка в `app/backend/app/config.py` для попытки первичного импорта старого файла сохранения.
-2. **Папка `release-work/` (Размер: > 28 МБ)**:
-   - *Описание*: Скомпилированные бинарные файлы (`.exe`, `.zip`, сборки PyInstaller).
-   - *Причина удаления*: Скомпилированные релизы должны храниться в разделе GitHub Releases, а не находиться внутри git-репозитория исходного кода.
-3. **Корневые папки `dist/` и `build/`**:
-   - *Причина удаления*: Являются дубликатами артефактов сборки. Продакшн-бандл React собирается в `app/frontend/dist`.
-4. **Корневой файл `Start AnimeSoul.bat`**:
-   - *Причина удаления*: Дублирует аналогичный скрипт `app/Start AnimeSoul.bat`.
+### Frontend feature boundaries
 
-### 1.2 Неиспользуемый и мёртвый код в Бэкенде (`app/backend/` & `app/run.py`)
-1. **Мёртвый эндпоинт `/health` в `app/backend/app/api/watch_party.py`**:
-   - *Код*: `@router.get("/health")` возвращает `{"ok": True, "watchPartyProtocol": WATCH_PARTY_PROTOCOL}`.
-   - *Причина*: Нигде не вызывается. Фронтенд и скрипты проверки используют единый эндпоинт `/api/health` из `main.py`.
-2. **Захардкоженный дефолтный `DEFAULT_CLIENT_ID` в `app/backend/app/services/gdrive.py`**:
-   - *Причина*: Ключи OAuth должны браться строго из единой конфигурации `Settings`. Захардкоженный токен в коде сервиса создает путаницу.
-3. **Дублирование системных скриптов (`launcher.py` vs `run.py`)**:
-   - *Причина*: `launcher.py` (835 строк на Tkinter) дублирует логику консольного мастера настройки `ask_settings()` из `run.py` и повторно реализует функции проверки сетевых портов и токенов YummyAnime.
-4. **Избыточный шаблон `animesoul.python.example.json`**:
-   - *Причина*: Мастер настройки `run.py` автоматически создает `animesoul.python.json` при первом запуске.
+Network calls and domain rules have been removed from the largest UI files:
 
-### 1.3 Неиспользуемый код во Фронтенде (`app/frontend/src/`)
-1. **Неиспользуемая функция `formatLongDuration` в `src/lib/anime.ts`**:
-   - *Причина*: Все UI-компоненты используют `formatDuration`. `formatLongDuration` является мертвым экспортом.
-2. **Дублирующиеся ре-экспорты в `src/lib/storage.ts`**:
-   - *Причина*: `STORAGE_KEYS` экспортируется повторно через `export { STORAGE_KEYS }`, хотя импортируется напрямую из `lib/settings.ts`.
-3. **Неиспользуемые ключи localStorage в `src/lib/storage.ts`**:
-   - *Причина*: Функция `saveStorageDocument` считывает ключ `"animesoul:gdrive-auto-sync-mode"`, рудиментарно оставшийся после упрощения UI настроек.
+- `features/catalog/api.ts` owns catalog, details, video and schedule requests.
+- `features/tracking/api.ts` owns tracking refresh requests.
+- `features/watch-party/api.ts` and `types.ts` own the room protocol.
+- `features/library/selectors.ts` calculates history, watching lists, folder
+  progress and statistics without rendering UI.
+- `features/storage/profileDocument.ts` builds and resolves versioned profile
+  documents while preserving unknown fields.
+- `features/settings/` contains the settings catalog, reusable setting row,
+  Google Drive state, cloud-specific panels, appearance controls and profile
+  import/export controls.
+- `features/player/` contains the toolbar, seasons, release schedule, metadata
+  and watch-party presentation.
+- `features/player/useResumePreview.ts` resolves the current resume card;
+  `activeWatchActions.ts` owns progress/tracking mutations for the open title.
+- `features/catalog/useCatalogController.ts` and
+  `useCatalogPresentation.ts` separate request state from derived card data.
+- `features/storage/useProfileStorage.ts` owns profile persistence and transfer.
+- `pages/HomePage.tsx`, `pages/CatalogPage.tsx`, `pages/StatisticsPage.tsx` and
+  `pages/FolderView.tsx` are real page modules. Home sections live in
+  `pages/home/` instead of `App.tsx`.
+- Typed application events live in `lib/events.ts`; API and save status effects
+  live in dedicated hooks.
+- `styles/base.css` is now an ordered manifest for thematic `base-*.css`
+  modules. The original cascade is preserved without one giant stylesheet.
 
----
+`App.tsx`, `Player.tsx` and `SettingsCenter.tsx` remain orchestration shells.
+They are intentionally still present so this refactor can be reviewed and
+tested in small steps rather than replacing all state management at once.
 
-## Часть 2. Уменьшение объема и дублирования кода (Code Reduction & DRY)
+### Backend isolation
 
-### 2.1 Вынос общих системных функций в `app/common.py`
-- **Где**: `app/run.py` и `app/launcher.py`
-- **Что сделать**: Вынести дублирующиеся 1-в-1 функции `bundled_asset()`, `port_is_available()` и `validate_token()` в единый модуль `app/common.py`.
-- **Экономия**: ~60 строк кода.
+- FastAPI routes remain transport adapters.
+- Services own I/O and external integrations.
+- Pure Google Drive merge rules now live in `services/gdrive_merge.py`; they can
+  be tested without OAuth, HTTP or filesystem access.
 
-### 2.2 Внедрение хелперов проверки типов для Google Drive
-- **Где**: `app/backend/app/services/gdrive.py`
-- **Что сделать**: Заменить более 20 громоздких тернарных операторов проверки типов:
-  ```python
-  def as_list(val: Any) -> list: return val if isinstance(val, list) else []
-  def as_dict(val: Any) -> dict: return val if isinstance(val, dict) else {}
-  def as_set(val: Any) -> set: return set(val) if isinstance(val, list) else set()
-  ```
-- **Экономия**: **~80–100 строк кода**, значительное повышение читаемости алгоритма слияния сохранений.
+## Target dependency direction
 
-### 2.3 Унификация валидации массивов в миграциях сохранений
-- **Где**: `app/frontend/src/lib/storage.ts` (`migrateSnapshot`)
-- **Что сделать**: Создать компактные функции санитизации `sanitizeNumbers(arr)` и `sanitizeStrings(arr)`.
-- **Экономия**: **~40 строк кода** (сокращение функции миграции с 75 до 35 строк).
+```text
+pages/components -> feature hooks -> feature API/domain -> lib contracts
+FastAPI routes   -> application services -> external API/filesystem
+```
 
-### 2.4 Единый компонент модального окна `<Modal />`
-- **Где**: `SettingsCenter.tsx`, `FolderPicker.tsx`, `CollectionOverview.tsx`
-- **Что сделать**: Создать универсальный переиспользуемый компонент `<Modal isOpen onClose title>{children}</Modal>` для устранения дублирования верстки размытых оверлеев и кнопок закрытия.
-- **Экономия**: **~150 строк JSX**.
+Dependencies must point inward. A pure selector must never import React; a UI
+component must not construct an upstream YummyAnime URL; an API route must not
+implement merge policy.
 
-### 2.5 Декомпозиция роута `/api/yummy` в бэкенде
-- **Где**: `app/backend/app/api/yummy.py`
-- **Что сделать**: Разбить один мультиплексированный роут с параметром `mode` (`catalog`, `details`, `videos`, `schedule`, `ping`) на чистые стандартизированные FastAPI эндпоинты (`/api/yummy/catalog`, `/api/yummy/anime/{id}/videos`).
-- **Экономия**: Устранение сложных ветвлений `if/else` и автоматическая валидация аргументов через FastAPI.
+## Remaining phases
 
----
+### Phase 1: finish anime-detail extraction
 
-## Часть 3. Рекомендации по читаемости и масштабируемости (Clean Architecture)
+The home layout has been extracted. Move the remaining anime-detail
+composition behind a typed page boundary while keeping routing in `App.tsx`
+and player lifetime in the player feature.
 
-### 3.1 Внедрение React Context API (Устранение Prop-Drilling)
-- **Проблема**: В `App.tsx` более 20 пропсов передаются через несколько уровней вложенности в компоненты `<Header>`, `<Player>`, `<SettingsCenter>`.
-- **Решение**: Создать два изолированных контекста:
-  1. `StorageContext` — доступ к `activeProfile`, списку избранного, функциям сохранения на диск.
-  2. `PlayerContext` — доступ к текущему аниме, серии, плееру и состоянию Watch Party.
-- **Результат**: Компоненты становятся автономными, убирается необходимость пробрасывать десятки пропсов из `App.tsx`.
+Acceptance criteria:
 
-### 3.2 Глобальная обработка ошибок в FastAPI (Exception Handlers)
-- **Проблема**: Контроллеры бэкенда вручную перехватывают ошибки и формируют вызовы `HTTPException(status_code=..., detail=...)`.
-- **Решение**: Объявить доменные исключения (`RoomNotFoundError`, `YummyAPIError`) и зарегистрировать их обработчики в `main.py`:
-  ```python
-  @app.exception_handler(RoomNotFoundError)
-  async def room_not_found_handler(request: Request, exc: RoomNotFoundError):
-      return JSONResponse(status_code=404, content={"error": "Комната не найдена", "code": "ROOM_NOT_FOUND"})
-  ```
-- **Результат**: Очистка бэкенда от повторяющихся блоков `try/except`.
+- page modules receive typed view models and callbacks;
+- no page directly reads or writes the storage document;
+- catalog and resume regression tests keep passing;
+- `App.tsx` becomes an application coordinator, not a markup container.
 
-### 3.3 Разделение API-клиентов и бизнес-логики во Фронтенде
-- **Проблема**: В `src/lib/` функции сетевых вызовов `fetch` перемешаны с чистой математической логикой и работой с `localStorage`.
-- **Решение**: Разделить структуру папки:
-  - `src/lib/api/` — только вызовы сетевых эндпоинтов (`yummyApi.ts`, `storageApi.ts`).
-  - `src/lib/domain/` — чистые функции фильтрации и расчета прогресса (`animeFilter.ts`).
-  - `src/lib/storage/` — логика структуры JSON и миграций (`migrations.ts`).
-- **Результат**: Возможность покрытия чистых функций модульными тестами без создания сетевых заглушек.
+### Phase 2: split player orchestration
 
-### 3.4 Переход на Pydantic Settings в `config.py`
-- **Проблема**: Ручное чтение `.env` и файлов конфигурации через методы `.get()`.
-- **Решение**: Использовать `pydantic-settings` для автоматического приведения типов, валидации путей и понятных сообщений об ошибках при неверной конфигурации.
+Keep `Player.tsx` as the owner of player lifetime, but extract:
 
-### 3.5 Централизация CSS-переменных (Design Tokens)
-- **Проблема**: Цвета фонов (`#181524`), границ (`#2e2842`) и акцентов (`#a78bfa`) прописаны жесткими значениями в верстке.
-- **Решение**: Вынести цвета в CSS-переменные в `base.css` (`--bg-app`, `--bg-card`, `--accent-purple`).
+- selection state for season, episode, dub and source;
+- resume and progress synchronization;
+- fullscreen episode transition policy;
+- preview-frame loading;
+- embedded-player message adapter.
 
-### 3.6 Безопасные транзакции записи сохранений
-- **Проблема**: Отдельные вызовы `read()` и `write()` в `JsonStorage` могут привести к гонке данных при одновременной записи локально и из Google Диска.
-- **Решение**: Реализовать асинхронный контекстный менеджер транзакции:
-  ```python
-  @asynccontextmanager
-  async def transaction(self):
-      async with self._lock:
-          doc = await self.read()
-          yield doc
-          await self.write(doc)
-  ```
+Each hook should expose a small typed interface. Avoid one global player
+context: it would hide dependencies and make watch-party feedback loops harder
+to reason about.
 
----
+Acceptance criteria:
 
-## Сводная таблица результатов оптимизации
+- manually selecting an episode and automatic next episode remain distinct;
+- marked-as-watched episodes are still replayable;
+- resume restores both episode identity and timestamp;
+- fullscreen and watch-party tests cover transitions.
 
-| Категория | Действие | Результат |
-| :--- | :--- | :--- |
-| **Очистка репозитория** | Удаление `legacy-old-stack/` и `release-work/` | Освобождение **> 528 МБ** дискового пространства |
-| **Очистка кода** | Удаление мертвых эндпоинтов и экспортов | Повышение надежности, исключение путаницы |
-| **Уменьшение кода** | Внедрение хелперов и компонента `<Modal />` | Сокращение исходного кода на **~400+ строк** |
-| **Декомпозиция** | Разделение `App.tsx` и `SettingsCenter.tsx` | Сокращение главного файла с 1753 до ~200 строк, устранение лишних перерендеров |
-| **Архитектура** | React Context + FastAPI Exception Handlers | Высокая читаемость, изолированность модулей и масштабируемость |
+### Phase 3: finish settings orchestration
+
+`SettingsCenter.tsx` now delegates appearance, profiles and Google Drive to
+feature components. Continue until it only owns modal navigation, search,
+watch-party configuration and reset. Keep setting metadata in
+`settingsCatalog.ts`.
+
+Acceptance criteria:
+
+- every setting has one canonical label, description and search entry;
+- cloud controls render only from the Google Drive feature state;
+- closing a modal cannot click controls behind the overlay;
+- reset behavior is covered by a migration or component test.
+
+### Phase 4: formalize persistence commands
+
+Replace scattered snapshot mutations with named commands such as
+`markEpisodeWatched`, `updateEpisodeProgress`, `removeFavorite` and
+`updateTrackingBaseline`. Commands return the next immutable snapshot; a single
+persistence boundary writes it.
+
+Acceptance criteria:
+
+- one user action produces one save request;
+- all commands preserve unknown snapshot fields;
+- Google Drive merge tests cover concurrent progress and settings changes;
+- export/import remains byte-safe for Unicode names and notes.
+
+### Phase 5: backend application layer
+
+Introduce small use-case functions between routes and infrastructure only where
+a route currently coordinates multiple services. Do not add abstract base
+classes merely for symmetry.
+
+Good candidates are cloud restore, tracking refresh and watch-party host
+transfer. Keep simple health and proxy endpoints simple.
+
+### Phase 6: CSS ownership (initial split complete)
+
+The monolithic file has been split into ordered responsibility modules. Future
+work may colocate narrowly feature-specific selectors with their components.
+Keep design tokens, resets and shared primitives in `base-core.css`; keep
+`base.css` as the stable import manifest.
+
+Acceptance criteria:
+
+- each feature has one obvious stylesheet owner;
+- no new `!important` without an explanation;
+- desktop scaling and responsive layouts are visually checked after moves.
+
+## How to implement one refactor slice
+
+1. Identify one behavior and its existing tests.
+2. Extract pure types and rules first.
+3. Move side effects into an API module or hook.
+4. Leave a small adapter at the old call site.
+5. Run all validation commands before the next slice.
+6. Add a regression test when the old behavior was not covered.
+
+Avoid mixing a feature change with file movement. If a bug is discovered while
+extracting code, first add a failing test, then fix it in a separate reviewable
+change.
+
+## Required validation
+
+From `app/frontend`:
+
+```powershell
+npm run typecheck
+npm test
+npm run build
+```
+
+From `app`:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
+.\.venv\Scripts\python.exe -m compileall backend/app
+```
+
+Finally run `git diff --check` and review the complete diff. Packaging and a
+manual browser/desktop smoke test are required before publishing a release, but
+not for every internal extraction commit.

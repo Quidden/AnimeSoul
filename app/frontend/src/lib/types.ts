@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 /** Screenshot preview data structure for anime titles. */
 export type AnimeScreenshot = {
   time?: number;
@@ -20,7 +18,7 @@ export type Anime = {
   year?: number;
   season?: number;
   poster?: { big?: string; fullsize?: string };
-  rating?: { average?: number };
+  rating?: AnimeApiRating;
   genres?: { title: string; alias: string }[];
   type?: { name?: string; alias?: string; shortname?: string; value?: number };
   data?: { index?: number; text?: string };
@@ -31,6 +29,50 @@ export type Anime = {
   franchiseEntries?: Anime[];
   random_screenshots?: AnimeScreenshot[];
 };
+
+/** Ratings returned by YummyAnime and its upstream catalog sources. */
+export type AnimeApiRating = {
+  average?: number;
+  counters?: number;
+  kp_rating?: number;
+  anidub_rating?: number;
+  myanimelist_rating?: number;
+  worldart_rating?: number;
+  shikimori_rating?: number;
+  imdb_rating?: number;
+  [source: string]: number | undefined;
+};
+
+/** User scores for one anime/franchise, including its seasons and episodes. */
+export type AnimeUserRatings = {
+  title?: string;
+  anime?: number;
+  seasons: Record<string, number>;
+  episodes: Record<string, number>;
+  updatedAt?: number;
+};
+
+/** Map of catalog anime ID to the user's rating tree. */
+export type UserRatings = Record<number, AnimeUserRatings>;
+
+/** One aggregate score returned by the shared AnimeSoul rating service. */
+export type CommunityRatingSummary = {
+  average: number;
+  count: number;
+};
+
+/** Anonymous aggregate for an anime and its season/episode rating tree. */
+export type CommunityAnimeRating = {
+  animeId: number;
+  title?: string;
+  anime?: CommunityRatingSummary | null;
+  seasons: Record<string, CommunityRatingSummary>;
+  episodes: Record<string, CommunityRatingSummary>;
+  updatedAt?: number;
+};
+
+/** Map of anime ID to shared ratings published to this AnimeSoul server. */
+export type CommunityRatings = Record<number, CommunityAnimeRating>;
 
 /** Individual video / episode stream data structure. */
 export type Video = {
@@ -54,6 +96,14 @@ export type Video = {
     opening?: { time: number; length: number } | null;
     ending?: { time: number; length: number } | null;
   };
+};
+
+/** Normalized trailer source used by the full-screen home hero. */
+export type HeroTrailer = {
+  url: string;
+  kind: "video" | "embed";
+  title?: string;
+  poster?: string;
 };
 
 /** Per-episode playback progress and watched state. */
@@ -220,6 +270,7 @@ export type ConfigSnapshot = {
   favorites: number[];
   folders: Folder[];
   progress: Progress;
+  ratings: UserRatings;
   /** Readability aid for exported JSON; application logic never depends on it. */
   animeTitles?: Record<number, string>;
   tracked: Tracker[];
@@ -260,33 +311,4 @@ export type ApiStatus = {
   at?: number;
   pingMs?: number;
   downlinkMbps?: number;
-};
-
-/** Props passed to Watch / Player page view. */
-export type WatchProps = {
-  header: ReactNode;
-  anime: Anime;
-  resumeRequested: boolean;
-  newEpisodeRequested: boolean;
-  favorite: boolean;
-  onFavorite: () => void;
-  onBack: () => void;
-  onLibrary: () => void;
-  onGenre: (genre: string) => void;
-  saved?: AnimeProgress;
-  onProgress: (
-    value: AnimeProgress,
-    originEpisodeKey?: string | string[],
-    changedEpisodeKey?: string | string[],
-  ) => void;
-  onPlayerPrefsChange: (prefs: PlayerPrefs) => void;
-  onFolders: () => void;
-  tracker?: Tracker;
-  onTrack: (count: number, dubs: string[], ids: number[], title: string) => void;
-  onUntrack: () => void;
-  folderPicker: Anime | null;
-  folders: Folder[];
-  toggleFolder: (folder: Folder, id: number) => void;
-  createFolder: () => unknown;
-  closePicker: () => void;
 };

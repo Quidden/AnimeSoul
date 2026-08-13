@@ -10,16 +10,27 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import socket
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
+import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any
 
 import webview
+
+from runtime_instance import (
+    find_available_port,
+    read_runtime_state,
+    remove_runtime_state,
+    runtime_state_file,
+    write_runtime_state,
+)
 
 
 APP_NAME = "AnimeSoul"
@@ -93,7 +104,7 @@ def validate_public_token(token: str) -> tuple[bool, str]:
             "X-Application": token,
             "Lang": "ru",
             "Accept": "application/json",
-            "User-Agent": "AnimeSoul-Launcher/0.2.0",
+            "User-Agent": "AnimeSoul-Launcher/0.2.1",
         },
     )
     try:
@@ -120,8 +131,8 @@ def port_is_available(port: int) -> bool:
             return False
 
 
-def existing_animesoul(port: int) -> bool:
-    """Allow launching a second client for an already running AnimeSoul."""
+def existing_animesoul_payload(port: int) -> dict[str, Any] | None:
+    """Return health data only when the port belongs to AnimeSoul."""
 
     try:
         with urllib.request.urlopen(
@@ -129,14 +140,135 @@ def existing_animesoul(port: int) -> bool:
             timeout=1.5,
         ) as response:
             payload = json.loads(response.read().decode("utf-8"))
-            return bool(
+            if (
                 response.status < 400
                 and isinstance(payload, dict)
                 and payload.get("ok") is True
                 and payload.get("stack") == "FastAPI + React"
-            )
+            ):
+                return payload
     except (OSError, ValueError, urllib.error.URLError):
-        return False
+        pass
+    return None
+
+
+def existing_animesoul(port: int) -> bool:
+    """Allow launching a second client for an already running AnimeSoul."""
+
+    return existing_animesoul_payload(port) is not None
+
+
+def server_status_payload(port: int) -> dict[str, Any]:
+    """Describe the selected port and whether this launcher may stop it."""
+
+    if port_is_available(port):
+        return {
+            "state": "stopped",
+            "running": False,
+            "canStop": False,
+            "message": f"Порт {port} свободен.",
+        }
+
+    health = existing_animesoul_payload(port)
+    if health is None:
+        return {
+            "state": "occupied",
+            "running": False,
+            "canStop": False,
+            "message": f"Порт {port} занят другим приложением.",
+        }
+
+    state = read_runtime_state(config_file()) or {}
+    health_instance_id = str(health.get("runtimeInstanceId", "")).strip()
+    state_instance_id = str(state.get("instance_id", "")).strip()
+    try:
+        state_port = int(state.get("port", 0))
+        state_pid = int(state.get("pid", 0))
+    except (TypeError, ValueError):
+        state_port = 0
+        state_pid = 0
+    managed = bool(
+        health_instance_id
+        and health_instance_id == state_instance_id
+        and state_port == port
+        and state_pid > 0
+    )
+    return {
+        "state": "running",
+        "running": True,
+        "canStop": managed,
+        "message": (
+            f"AnimeSoul работает на порту {port}."
+            if managed
+            else f"AnimeSoul уже работает на порту {port}; его можно открыть повторно."
+        ),
+    }
+
+
+def stop_managed_server(port: int) -> dict[str, Any]:
+    """Stop only the exact AnimeSoul process recorded by this launcher."""
+
+    health = existing_animesoul_payload(port)
+    state = read_runtime_state(config_file()) or {}
+    health_instance_id = str((health or {}).get("runtimeInstanceId", "")).strip()
+    state_instance_id = str(state.get("instance_id", "")).strip()
+    try:
+        state_port = int(state.get("port", 0))
+        pid = int(state.get("pid", 0))
+    except (TypeError, ValueError):
+        state_port = 0
+        pid = 0
+
+    if not (
+        health
+        and health_instance_id
+        and health_instance_id == state_instance_id
+        and state_port == port
+        and pid > 0
+    ):
+        return {
+            "ok": False,
+            "message": "Этот сервер не был запущен текущей версией лаунчера, поэтому безопасная остановка недоступна.",
+            "status": server_status_payload(port),
+        }
+
+    try:
+        if os.name == "nt":
+            completed = subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                timeout=10,
+                check=False,
+            )
+            if completed.returncode != 0 and not port_is_available(port):
+                raise OSError("taskkill could not stop the process")
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except (OSError, subprocess.SubprocessError) as error:
+        return {
+            "ok": False,
+            "message": f"Не удалось остановить сервер: {error}",
+            "status": server_status_payload(port),
+        }
+
+    for _ in range(50):
+        if port_is_available(port):
+            break
+        time.sleep(0.1)
+    if not port_is_available(port):
+        return {
+            "ok": False,
+            "message": "Процесс получил команду остановки, но порт пока ещё занят.",
+            "status": server_status_payload(port),
+        }
+    remove_runtime_state(config_file(), state_instance_id)
+    return {
+        "ok": True,
+        "message": "Сервер AnimeSoul остановлен, порт снова свободен.",
+        "status": server_status_payload(port),
+    }
 
 
 def runtime_command(mode: str) -> list[str]:
@@ -183,40 +315,6 @@ class LauncherApi:
             "configPath": str(config_file()),
         }
 
-    def launch(self, port: object, token: object, mode: object) -> dict[str, Any]:
-        parsed = self._validate_fields(port, token)
-        if isinstance(parsed, dict):
-            return parsed
-        parsed_port, parsed_token = parsed
-        launch_mode = "desktop" if str(mode) == "desktop" else "browser"
-
-        if not port_is_available(parsed_port) and not existing_animesoul(parsed_port):
-            return {
-                "ok": False,
-                "message": f"Порт {parsed_port} занят другим приложением. Выбери другой порт.",
-            }
-
-        token_ok, token_message = validate_public_token(parsed_token)
-        if not token_ok:
-            return {"ok": False, "message": token_message}
-
-        save_settings(parsed_port, parsed_token, launch_mode)
-        command = runtime_command(launch_mode)
-        if not Path(command[0]).exists():
-            return {
-                "ok": False,
-                "message": "Runtime AnimeSoul не найден. Переустанови приложение.",
-            }
-        try:
-            subprocess.Popen(
-                command,
-                cwd=str(Path(command[0]).resolve().parent),
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-        except OSError as error:
-            return {"ok": False, "message": f"Не удалось запустить AnimeSoul: {error}"}
-        return {"ok": True, "message": token_message, "close": True}
-
     def close(self) -> None:
         if webview.windows:
             webview.windows[0].destroy()
@@ -239,6 +337,141 @@ class LauncherApi:
                 "message": "Введи личный Public token из документации YummyAnime API.",
             }
         return parsed_port, parsed_token
+
+
+    def get_server_status(self, port: object) -> dict[str, Any]:
+        parsed_port = self._validate_port(port)
+        if isinstance(parsed_port, dict):
+            return parsed_port
+        return {"ok": True, **server_status_payload(parsed_port)}
+
+    def stop_server(self, port: object) -> dict[str, Any]:
+        parsed_port = self._validate_port(port)
+        if isinstance(parsed_port, dict):
+            return parsed_port
+        return stop_managed_server(parsed_port)
+
+    def launch(self, port: object, token: object, mode: object) -> dict[str, Any]:
+        parsed_port = self._validate_port(port)
+        if isinstance(parsed_port, dict):
+            return parsed_port
+        launch_mode = "desktop" if str(mode) == "desktop" else "browser"
+
+        available = port_is_available(parsed_port)
+        running = existing_animesoul(parsed_port)
+        port_message = ""
+        if not available and not running:
+            occupied_port = parsed_port
+            available_port = find_available_port(
+                parsed_port + 1,
+                port_is_available,
+            )
+            if available_port is None:
+                return {
+                    "ok": False,
+                    "message": (
+                        f"Порт {occupied_port} занят другим приложением, "
+                        "а рядом не найден свободный порт. Укажи другой порт."
+                    ),
+                }
+            parsed_port = available_port
+            port_message = (
+                f"Порт {occupied_port} был занят — выбран свободный "
+                f"порт {parsed_port}. "
+            )
+
+        if running:
+            return self._open_running_server(parsed_port, launch_mode)
+
+        parsed = self._validate_fields(parsed_port, token)
+        if isinstance(parsed, dict):
+            return parsed
+        _, parsed_token = parsed
+        token_ok, token_message = validate_public_token(parsed_token)
+        if not token_ok:
+            return {"ok": False, "message": token_message}
+
+        save_settings(parsed_port, parsed_token, launch_mode)
+        command = runtime_command(launch_mode)
+        if not Path(command[0]).exists():
+            return {
+                "ok": False,
+                "message": (
+                    "Runtime AnimeSoul не найден. Переустанови приложение."
+                ),
+            }
+
+        instance_id = uuid.uuid4().hex
+        environment = os.environ.copy()
+        environment["ANIMESOUL_INSTANCE_ID"] = instance_id
+        environment["ANIMESOUL_RUNTIME_STATE_FILE"] = str(
+            runtime_state_file(config_file())
+        )
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=str(Path(command[0]).resolve().parent),
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                env=environment,
+            )
+        except OSError as error:
+            return {
+                "ok": False,
+                "message": f"Не удалось запустить AnimeSoul: {error}",
+            }
+
+        write_runtime_state(
+            config_file(),
+            instance_id=instance_id,
+            pid=process.pid,
+            port=parsed_port,
+            mode=launch_mode,
+        )
+        return {
+            "ok": True,
+            "message": (
+                f"{port_message}{token_message} "
+                f"Сервер запускается на порту {parsed_port}."
+            ),
+            "close": False,
+        }
+
+    @staticmethod
+    def _open_running_server(port: int, mode: str) -> dict[str, Any]:
+        if mode == "browser":
+            webbrowser.open(f"http://127.0.0.1:{port}")
+        else:
+            command = runtime_command(mode)
+            try:
+                subprocess.Popen(
+                    command,
+                    cwd=str(Path(command[0]).resolve().parent),
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+            except OSError as error:
+                return {
+                    "ok": False,
+                    "message": f"Не удалось открыть desktop-клиент: {error}",
+                }
+        return {
+            "ok": True,
+            "message": (
+                f"AnimeSoul уже работает на порту {port}. "
+                "Открываем ещё одно окно."
+            ),
+            "close": False,
+            "status": server_status_payload(port),
+        }
+
+    @staticmethod
+    def _validate_port(port: object) -> int | dict[str, Any]:
+        try:
+            parsed_port = int(str(port).strip())
+        except ValueError:
+            return {"ok": False, "message": "Порт должен быть целым числом."}
+        if not 1024 <= parsed_port <= 65535:
+            return {"ok": False, "message": "Выбери порт от 1024 до 65535."}
+        return parsed_port
 
 
 LAUNCHER_HTML = r"""
@@ -272,6 +505,22 @@ LAUNCHER_HTML = r"""
     .reveal { position: absolute; right: 7px; top: 7px; height: 32px; border: 0; border-radius: 8px;
       padding: 0 12px; background: #30283d; color: #e9e2f1; cursor: pointer; }
     .help { margin-top: 7px; font-size: 12px; line-height: 1.4; }
+    .server-panel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
+      gap: 12px; margin-top: 12px; padding: 12px 14px; border: 1px solid #3e3549; border-radius: 14px;
+      background: #15111c; transition: border-color .18s, background .18s; }
+    .server-panel.running { border-color: #356b55; background: #111b18; }
+    .server-panel.occupied { border-color: #75404b; background: #1d1217; }
+    .server-dot { width: 9px; height: 9px; border-radius: 50%; background: #777080; box-shadow: 0 0 10px #777080; }
+    .server-panel.running .server-dot { background: #6de3a5; box-shadow: 0 0 12px #6de3a5; }
+    .server-panel.occupied .server-dot { background: #ff8296; box-shadow: 0 0 12px #ff8296; }
+    .server-copy { min-width: 0; }
+    .server-copy strong, .server-copy span { display: block; }
+    .server-copy strong { font-size: 13px; }
+    .server-copy span { margin-top: 3px; color: #a89fb5; font-size: 11px; overflow-wrap: anywhere; }
+    .stop-server { min-height: 34px; padding: 0 12px; border: 1px solid #824150; border-radius: 9px;
+      background: #25151b; color: #ff9aad; cursor: pointer; font: 600 12px inherit; }
+    .stop-server:hover { background: #321a22; }
+    .hidden { display: none !important; }
     .docs { margin-top: 10px; border: 1px solid #514360; border-radius: 10px; padding: 9px 13px;
       background: #211c2b; color: #eee8f7; cursor: pointer; }
     .status { display: flex; align-items: center; gap: 9px; min-height: 24px; margin: 18px 0 12px; color: #b79bff; }
@@ -298,6 +547,14 @@ LAUNCHER_HTML = r"""
 
     <label for="port">Порт сайта</label>
     <input id="port" inputmode="numeric" autocomplete="off" value="3001">
+    <section class="server-panel" id="serverPanel" aria-live="polite">
+      <span class="server-dot" aria-hidden="true"></span>
+      <div class="server-copy">
+        <strong id="serverTitle">Проверяем локальный сервер…</strong>
+        <span id="serverMessage">Состояние выбранного порта появится здесь.</span>
+      </div>
+      <button class="stop-server hidden" id="stopServer" type="button">Остановить сервер</button>
+    </section>
     <div class="help">По умолчанию 3001 · допустимый диапазон: 1024–65535.</div>
 
     <label for="token">Public token YummyAnime API</label>
@@ -317,9 +574,37 @@ LAUNCHER_HTML = r"""
     const token = document.querySelector('#token');
     const status = document.querySelector('#status');
     const path = document.querySelector('#path');
+    const serverPanel = document.querySelector('#serverPanel');
+    const serverTitle = document.querySelector('#serverTitle');
+    const serverMessage = document.querySelector('#serverMessage');
+    const stopServer = document.querySelector('#stopServer');
     const buttons = [...document.querySelectorAll('button')];
+    let serverTimer = null;
+    let portTimer = null;
     const setBusy = value => buttons.forEach(button => button.disabled = value);
     const showStatus = (message, kind = '') => { status.textContent = message; status.className = `status ${kind}`; };
+
+    const renderServerStatus = value => {
+      const state = value?.state || 'stopped';
+      serverPanel.className = `server-panel ${state}`;
+      serverTitle.textContent = state === 'running'
+        ? 'Сервер AnimeSoul запущен'
+        : state === 'occupied'
+          ? 'Порт занят другим приложением'
+          : 'Сервер AnimeSoul остановлен';
+      serverMessage.textContent = value?.message || 'Порт свободен и готов к запуску.';
+      stopServer.classList.toggle('hidden', !value?.canStop);
+    };
+
+    const refreshServerStatus = async () => {
+      if (!window.pywebview?.api) return;
+      const result = await window.pywebview.api.get_server_status(port.value);
+      if (!result.ok) {
+        renderServerStatus({ state: 'occupied', message: result.message, canStop: false });
+        return;
+      }
+      renderServerStatus(result);
+    };
 
     window.addEventListener('pywebviewready', async () => {
       const settings = await window.pywebview.api.get_settings();
@@ -327,6 +612,13 @@ LAUNCHER_HTML = r"""
       token.value = settings.token || '';
       path.textContent = `Данные сохраняются в ${settings.configPath}`;
       showStatus('Готово к запуску');
+      await refreshServerStatus();
+      serverTimer = window.setInterval(refreshServerStatus, 2500);
+    });
+
+    port.addEventListener('input', () => {
+      window.clearTimeout(portTimer);
+      portTimer = window.setTimeout(refreshServerStatus, 350);
     });
 
     document.querySelector('#reveal').addEventListener('click', () => {
@@ -341,17 +633,34 @@ LAUNCHER_HTML = r"""
       showStatus(result.message, result.ok ? 'success' : 'error');
       if (result.configPath) path.textContent = `Данные сохраняются в ${result.configPath}`;
       setBusy(false);
+      await refreshServerStatus();
+    });
+    stopServer.addEventListener('click', async () => {
+      setBusy(true);
+      showStatus('Останавливаем локальный сервер…');
+      const result = await window.pywebview.api.stop_server(port.value);
+      showStatus(result.message, result.ok ? 'success' : 'error');
+      setBusy(false);
+      if (result.status) renderServerStatus(result.status);
+      else await refreshServerStatus();
     });
     document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', async () => {
       setBusy(true); showStatus('Проверяем порт и ключ API…');
       const result = await window.pywebview.api.launch(port.value, token.value, button.dataset.mode);
       showStatus(result.message, result.ok ? 'success' : 'error');
+      if (result.status) renderServerStatus(result.status);
       if (result.ok && result.close) {
         window.setTimeout(() => window.pywebview.api.close(), 180);
         return;
       }
       setBusy(false);
+      window.setTimeout(refreshServerStatus, 800);
+      window.setTimeout(refreshServerStatus, 2200);
     }));
+    window.addEventListener('beforeunload', () => {
+      window.clearInterval(serverTimer);
+      window.clearTimeout(portTimer);
+    });
   </script>
 </body>
 </html>
@@ -366,8 +675,8 @@ def main() -> None:
         html=LAUNCHER_HTML,
         js_api=LauncherApi(),
         width=760,
-        height=780,
-        min_size=(620, 640),
+        height=850,
+        min_size=(620, 680),
         background_color="#09080e",
     )
     webview.start(

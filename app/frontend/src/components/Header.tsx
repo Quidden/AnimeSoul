@@ -7,6 +7,7 @@ import { fetchGDriveAuthUrl, fetchGDriveStatus, syncGDrive, type GDriveStatus } 
 import { SettingsCenter } from "./SettingsCenter";
 import { ChangelogButton } from "./ChangelogModal";
 import { recordDebugEvent } from "../lib/debugLog";
+import { emitAppEvent, listenAppEvent } from "../lib/events";
 
 type HeaderProps = {
   query: string;
@@ -14,6 +15,7 @@ type HeaderProps = {
   onSearch: () => void;
   onCatalog: () => void;
   onLibrary: () => void;
+  onRatings: () => void;
   theme?: Theme;
   setTheme?: (theme: Theme) => void;
   playerPrefs?: PlayerPrefs;
@@ -48,6 +50,7 @@ export function Header({
   onSearch,
   onCatalog,
   onLibrary,
+  onRatings,
   theme,
   setTheme,
   playerPrefs,
@@ -64,12 +67,18 @@ export function Header({
   onImport,
   onStorageReload,
 }: HeaderProps) {
-  const [suggestionsOpen, setSuggestionsOpen] = useState(true);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [diskStatus, setDiskStatus] = useState<SaveStatus>({ state: "loading" });
   const [apiStatus, setApiStatus] = useState<ApiStatus>({ state: "idle" });
   const [partyPing, setPartyPing] = useState<{ state: "idle" | "connected" | "error"; ms?: number; roomId?: string }>({ state: "idle" });
   const [statusNotice, setStatusNotice] = useState<StatusNotice | null>(null);
   const statusNoticeTimerRef = useRef<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const closeSearchSuggestions = () => {
+    setSuggestionsOpen(false);
+    searchInputRef.current?.blur();
+  };
 
   const showStatusNotice = (notice: StatusNotice) => {
     setStatusNotice(notice);
@@ -80,35 +89,32 @@ export function Header({
   useEffect(() => {
     setDiskStatus(read("animesoul:save-status", { state: "loading" }));
     setApiStatus(read("animesoul:api-status", { state: "idle" }));
-    const diskListener = (event: Event) => {
-      const next = (event as CustomEvent<SaveStatus>).detail;
+    const diskListener = (next: SaveStatus) => {
       setDiskStatus(next);
       recordDebugEvent(next.state === "error" ? "error" : next.state === "saved" ? "success" : "info", "Сохранение", next.state, next.state === "error" ? "Локальное сохранение завершилось с ошибкой" : `Статус локального сохранения: ${next.state}`);
       if (next.state === "saving") showStatusNotice({ tone: "loading", text: "Сохраняем на ПК…" });
       if (next.state === "saved") showStatusNotice({ tone: "success", text: "Сохранено на ПК" });
       if (next.state === "error") showStatusNotice({ tone: "error", text: "Не удалось сохранить на ПК" });
     };
-    const apiListener = (event: Event) => {
-      const next = (event as CustomEvent<ApiStatus>).detail;
+    const apiListener = (next: ApiStatus) => {
       setApiStatus(current => ({ ...current, ...next }));
       recordDebugEvent(next.state === "error" ? "error" : next.state === "updated" ? "success" : "info", "API", next.state, next.state === "error" ? "API временно недоступно" : `Статус обновления API: ${next.state}`);
       if (next.state === "updating") showStatusNotice({ tone: "loading", text: "Обновляем данные API…" });
       if (next.state === "updated") showStatusNotice({ tone: "success", text: "Данные API обновлены" });
       if (next.state === "error") showStatusNotice({ tone: "error", text: "API временно недоступно" });
     };
-    const pingListener = (event: Event) => {
-      const next = (event as CustomEvent<{ state: "idle" | "connected" | "error"; ms?: number; roomId?: string }>).detail;
+    const pingListener = (next: { state: "idle" | "connected" | "error"; ms?: number; roomId?: string }) => {
       setPartyPing(next);
       if (next.state !== "idle") recordDebugEvent(next.state === "error" ? "error" : "success", "Совместный просмотр", "Связь с комнатой", next.state === "connected" ? `Пинг: ${next.ms ?? "—"} мс` : "Нет связи с сервером комнаты");
       if (next.state === "error") showStatusNotice({ tone: "error", text: "Нет связи с комнатой" });
     };
-    window.addEventListener("animesoul:save-status", diskListener);
-    window.addEventListener("animesoul:api-status", apiListener);
-    window.addEventListener("animesoul:party-ping", pingListener);
+    const stopSaveStatus = listenAppEvent("save-status", diskListener);
+    const stopApiStatus = listenAppEvent("api-status", apiListener);
+    const stopPartyPing = listenAppEvent("party-ping", pingListener);
     return () => {
-      window.removeEventListener("animesoul:save-status", diskListener);
-      window.removeEventListener("animesoul:api-status", apiListener);
-      window.removeEventListener("animesoul:party-ping", pingListener);
+      stopSaveStatus();
+      stopApiStatus();
+      stopPartyPing();
       if (statusNoticeTimerRef.current) window.clearTimeout(statusNoticeTimerRef.current);
     };
   }, []);
@@ -236,7 +242,7 @@ export function Header({
     }
 
     if (needsChoice) {
-      window.dispatchEvent(new CustomEvent("animesoul:open-gdrive-choice"));
+      emitAppEvent("open-gdrive-choice");
       return;
     }
 
@@ -301,14 +307,19 @@ export function Header({
 
   return <header>
     <Brand />
-    <nav><button onClick={onCatalog}>Каталог</button><button onClick={onLibrary}>Статистика</button></nav>
-    {!compact && <div className="search-wrap">
-      <form className="header-search" onSubmit={event => { event.preventDefault(); setSuggestionsOpen(false); onSearch(); }}>
-        <input value={query} onFocus={() => setSuggestionsOpen(true)} onChange={event => { setSuggestionsOpen(true); setQuery(event.target.value); }} placeholder="Поиск…" />
+    <nav><button onClick={onCatalog}>Каталог</button><button onClick={onLibrary}>Статистика</button><button onClick={onRatings}>Оценки</button></nav>
+    {!compact && <div className="search-wrap" onBlur={event => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setSuggestionsOpen(false);
+    }}>
+      <form className="header-search" onSubmit={event => { event.preventDefault(); closeSearchSuggestions(); onSearch(); }}>
+        <input ref={searchInputRef} value={query} onFocus={() => setSuggestionsOpen(true)}
+          onKeyDown={event => { if (event.key === "Escape") closeSearchSuggestions(); }}
+          onChange={event => { setSuggestionsOpen(true); setQuery(event.target.value); }}
+          placeholder="Поиск…" />
         <button type="submit">⌕</button>
       </form>
       {suggestionsOpen && suggestions.length > 0 && <div className="suggestions">{suggestions.map(anime =>
-        <button key={anime.anime_id} onClick={() => { setSuggestionsOpen(false); onSuggestion?.(anime); }}>
+        <button key={anime.anime_id} onClick={() => { closeSearchSuggestions(); onSuggestion?.(anime); }}>
           {anime.poster?.big && <img src={anime.poster.big} alt="" />}
           <span>{anime.title}<small>{anime.year} · ★ {anime.rating?.average?.toFixed(1)}</small></span>
         </button>,

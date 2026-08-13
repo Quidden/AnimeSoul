@@ -2,64 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PartyPlayback, PartyState } from "../lib/types";
+import { emitAppEvent } from "../lib/events";
+import {
+  assertCompatibleWatchPartyProtocol,
+  describeWatchPartyError,
+  fetchWatchPartyState,
+  postWatchParty,
+  readWatchPartySession,
+  saveWatchPartySession,
+} from "../features/watch-party/api";
+import type { WatchPartySession } from "../features/watch-party/types";
 import {
   playbackChangedByUser,
   playbackReachedTarget,
   roomPlaybackRevision,
 } from "../lib/watchPartyLogic";
 
-export type WatchPartySession = { roomId: string; token: string; role: "host" | "guest" };
-export const WATCH_PARTY_SESSION_KEY = "animesoul:watch-party-session";
-const WATCH_PARTY_PROTOCOL = 2;
-
-const endpoint = (server: string, path: string) => `${server.replace(/\/+$/, "")}${path}`;
-const readSession = () => {
-  if (typeof window === "undefined") return null;
-  try {
-    return JSON.parse(sessionStorage.getItem(WATCH_PARTY_SESSION_KEY) || "null") as WatchPartySession | null;
-  } catch {
-    return null;
-  }
-};
-const saveSession = (session: WatchPartySession | null) => {
-  if (session) sessionStorage.setItem(WATCH_PARTY_SESSION_KEY, JSON.stringify(session));
-  else sessionStorage.removeItem(WATCH_PARTY_SESSION_KEY);
-};
-type PartyRequestError = Error & { status?: number; code?: string };
-const roomError = (reason: unknown, fallback: string) => {
-  const error = reason as PartyRequestError;
-  if (error.code === "PARTICIPANT_NOT_FOUND") return "Участник отключился от комнаты. Подождите его переподключения и попробуйте снова.";
-  if (error.code === "ROOM_NOT_FOUND") return "Комната больше не существует. Создайте новую комнату.";
-  if (error.code === "NOT_HOST") return "Передать роль может только текущий хост.";
-  if (error.status === 404) return error.message || "Команда не поддерживается сервером совместного просмотра. Перезапустите AnimeSoul у хоста.";
-  return reason instanceof Error ? reason.message : fallback;
-};
-const post = async (server: string, path: string, body: unknown) => {
-  const response = await fetch(endpoint(server, path), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload.error || "Ошибка комнаты") as PartyRequestError;
-    error.status = response.status;
-    error.code = payload.code;
-    throw error;
-  }
-  return payload;
-};
-const normalizeParty = (value: PartyState) => ({
-  ...value,
-  roomMode: value.roomMode === "shared" ? "shared" as const : "host" as const,
-});
-const assertCompatibleProtocol = (value: { protocol?: number }) => {
-  if (value.protocol !== WATCH_PARTY_PROTOCOL) {
-    const error = new Error("Сервер совместного просмотра запущен из старой версии AnimeSoul. Полностью закройте старый сервер и запустите приложение заново.") as PartyRequestError;
-    error.code = "UNSUPPORTED_PROTOCOL";
-    throw error;
-  }
-};
+export type { WatchPartySession } from "../features/watch-party/types";
+export { WATCH_PARTY_SESSION_KEY } from "../features/watch-party/api";
 export function useWatchParty({ enabled, server, name, mode, roomMode, playback, onHostState }: {
   enabled: boolean;
   server: string;
@@ -69,7 +29,7 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
   playback: PartyPlayback;
   onHostState: (playback: PartyPlayback, force?: boolean) => void;
 }) {
-  const [session, setSession] = useState<WatchPartySession | null>(readSession);
+  const [session, setSession] = useState<WatchPartySession | null>(readWatchPartySession);
   const [party, setParty] = useState<PartyState | null>(null);
   const [error, setError] = useState("");
   const playbackRef = useRef(playback);
@@ -82,52 +42,56 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
 
   const remember = useCallback((next: WatchPartySession | null) => {
     setSession(next);
-    saveSession(next);
+    saveWatchPartySession(next);
   }, []);
   const createRoom = useCallback(async () => {
     setError("");
     try {
-      const result = await post(server, "/watch-party/create", { name, roomMode });
-      assertCompatibleProtocol(result);
-      remember(result as WatchPartySession);
+      const result = await postWatchParty<WatchPartySession & { protocol?: number }>(
+        server,
+        "/watch-party/create",
+        { name, roomMode },
+      );
+      assertCompatibleWatchPartyProtocol(result);
+      remember(result);
     } catch (reason) {
-      setError(roomError(reason, "Не удалось создать комнату"));
+      setError(describeWatchPartyError(reason, "Не удалось создать комнату"));
     }
   }, [server, name, roomMode, remember]);
   const joinRoom = useCallback(async (code: string) => {
     setError("");
     try {
-      const result = await post(server, "/watch-party/join", {
+      const result = await postWatchParty<WatchPartySession & { protocol?: number }>(server, "/watch-party/join", {
         roomId: code.trim().toUpperCase(),
         name,
         mode,
       });
-      assertCompatibleProtocol(result);
-      remember(result as WatchPartySession);
+      assertCompatibleWatchPartyProtocol(result);
+      remember(result);
     } catch (reason) {
-      setError(roomError(reason, "Не удалось подключиться"));
+      setError(describeWatchPartyError(reason, "Не удалось подключиться"));
     }
   }, [server, name, mode, remember]);
   const leaveRoom = useCallback(async () => {
     const current = session;
     remember(null);
     setParty(null);
-    if (current) void post(server, "/watch-party/leave", current).catch(() => {});
+    if (current) void postWatchParty(server, "/watch-party/leave", current).catch(() => {});
   }, [server, session, remember]);
   const transferHost = useCallback(async (participantId: string) => {
     if (!session || session.role !== "host") return;
     setError("");
     try {
-      await post(server, "/watch-party/transfer-host", { ...session, participantId });
+      await postWatchParty(server, "/watch-party/transfer-host", { ...session, participantId });
       remember({ ...session, role: "guest" });
     } catch (reason) {
-      setError(roomError(reason, "Не удалось передать роль хоста"));
+      setError(describeWatchPartyError(reason, "Не удалось передать роль хоста"));
     }
   }, [server, session, remember]);
 
   useEffect(() => {
     if (!enabled || !session) {
-      window.dispatchEvent(new CustomEvent("animesoul:party-ping", { detail: { state: "idle" } }));
+      emitAppEvent("party-ping", { state: "idle" });
       return;
     }
     let cancelled = false;
@@ -158,7 +122,7 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
           );
         // Keep the remote target while its command is settling.
         if (!suppressingRemotePlayback) lastLocalPlayback.current = { ...currentPlayback };
-        await post(server, "/watch-party/update", {
+        await postWatchParty(server, "/watch-party/update", {
           ...session,
           name,
           mode,
@@ -166,28 +130,16 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
           playback: currentPlayback,
           control,
         });
-        const response = await fetch(
-          endpoint(server, `/watch-party/state?room=${encodeURIComponent(session.roomId)}`),
-          { cache: "no-store" },
-        );
-        const payload = await response.json();
-        if (!response.ok) {
-          const stateError = new Error(payload.error || "Комната недоступна") as Error & { status?: number };
-          stateError.status = response.status;
-          throw stateError;
-        }
-        assertCompatibleProtocol(payload);
+        const payload = await fetchWatchPartyState(server, session.roomId);
         if (!cancelled) {
-          const next = normalizeParty(payload as PartyState);
+          const next = payload;
           setParty(next);
           setError("");
-          window.dispatchEvent(new CustomEvent("animesoul:party-ping", {
-            detail: {
-              state: "connected",
-              ms: Math.round(performance.now() - startedAt),
-              roomId: session.roomId,
-            },
-          }));
+          emitAppEvent("party-ping", {
+            state: "connected",
+            ms: Math.round(performance.now() - startedAt),
+            roomId: session.roomId,
+          });
           const self = next.participants.find(participant => participant.id === session.token);
           if (self?.role && self.role !== session.role) remember({ ...session, role: self.role });
           const revision = roomPlaybackRevision(next);
@@ -215,14 +167,14 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
           remember(null);
           setParty(null);
           setError("");
-          window.dispatchEvent(new CustomEvent("animesoul:party-ping", { detail: { state: "idle" } }));
+          emitAppEvent("party-ping", { state: "idle" });
           return;
         }
         if (!cancelled) {
           setError(reason instanceof Error && reason.message !== "Not found"
             ? reason.message
             : "Сервер комнаты недоступен — перезапусти AnimeSoul");
-          window.dispatchEvent(new CustomEvent("animesoul:party-ping", { detail: { state: "error" } }));
+          emitAppEvent("party-ping", { state: "error" });
         }
       } finally {
         busy = false;
@@ -233,7 +185,7 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
     return () => {
       cancelled = true;
       clearInterval(timer);
-      window.dispatchEvent(new CustomEvent("animesoul:party-ping", { detail: { state: "idle" } }));
+      emitAppEvent("party-ping", { state: "idle" });
     };
   }, [enabled, server, session?.roomId, session?.token, session?.role, name, mode, roomMode, remember]);
 
@@ -258,8 +210,11 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
   };
 }
 
+/** Public controller consumed by Watch Party UI components. */
+export type WatchPartyController = ReturnType<typeof useWatchParty>;
+
 export function useWatchPartyPresence({ enabled, server }: { enabled: boolean; server: string }) {
-  const [session, setSession] = useState<WatchPartySession | null>(readSession);
+  const [session, setSession] = useState<WatchPartySession | null>(readWatchPartySession);
   const [party, setParty] = useState<PartyState | null>(null);
 
   useEffect(() => {
@@ -270,26 +225,21 @@ export function useWatchPartyPresence({ enabled, server }: { enabled: boolean; s
     let cancelled = false;
     const poll = async () => {
       try {
-        const response = await fetch(
-          endpoint(server, `/watch-party/state?room=${encodeURIComponent(session.roomId)}`),
-          { cache: "no-store" },
-        );
-        const payload = await response.json();
-        if (!response.ok) throw Object.assign(new Error(payload.error || "Комната недоступна"), { status: response.status });
+        const payload = await fetchWatchPartyState(server, session.roomId);
         if (cancelled) return;
-        const next = normalizeParty(payload as PartyState);
+        const next = payload;
         setParty(next);
         const self = next.participants.find(participant => participant.id === session.token);
         if (self?.role && self.role !== session.role) {
           const updated = { ...session, role: self.role };
           setSession(updated);
-          saveSession(updated);
+          saveWatchPartySession(updated);
         }
       } catch (reason) {
         if (!cancelled && (reason as { status?: number })?.status === 404) {
           setSession(null);
           setParty(null);
-          saveSession(null);
+          saveWatchPartySession(null);
         }
       }
     };

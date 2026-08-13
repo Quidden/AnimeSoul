@@ -1,0 +1,549 @@
+/* Google Drive settings --------------------------------------------------- */
+
+.google-drive-settings {
+  display: grid;
+  gap: 10px;
+}
+
+.google-drive-settings>.settings-group-title {
+  margin-bottom: 2px;
+}
+
+.cloud-settings-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid #342e39;
+  border-radius: 13px;
+  background: linear-gradient(135deg,#141117,#111014);
+}
+
+.cloud-settings-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #37303e;
+  border-radius: 11px;
+  background: #1c1820;
+  color: #8f8796;
+  font-size: 17px;
+}
+
+.cloud-settings-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.cloud-settings-copy p {
+  margin: 0;
+  color: #8f8795;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.cloud-settings-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.cloud-settings-heading>b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #eeeaf1;
+  font-size: 11px;
+}
+
+.cloud-settings-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #89828e;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.cloud-settings-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+}
+
+.cloud-settings-card.synced .cloud-settings-state,.cloud-settings-card.ready .cloud-settings-state {
+  color: #74c99a;
+}
+
+.cloud-settings-card.syncing .cloud-settings-state {
+  color: #72b7ff;
+}
+
+.cloud-settings-card.syncing .cloud-settings-state i {
+  animation: cloud-dot-pulse 1.1s ease-in-out infinite;
+}
+
+.cloud-settings-card.error .cloud-settings-state {
+  color: #e06f78;
+}
+
+.cloud-settings-main-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cloud-settings-main-actions .primary {
+  min-width: 138px;
+  padding: 9px 11px;
+  border-color: color-mix(in srgb,var(--accent) 62%,#3a3340);
+  background: color-mix(in srgb,var(--accent) 18%,#19151e);
+  color: #eee9f2;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.cloud-settings-main-actions .primary:hover {
+  background: color-mix(in srgb,var(--accent) 26%,#19151e);
+}
+
+.cloud-settings-quick-options {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 8px;
+}
+
+.cloud-settings-quick-options>label,.cloud-settings-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid #302a35;
+  border-radius: 10px;
+  background: #151218;
+}
+
+.cloud-settings-quick-options label>span,.cloud-settings-field>span {
+  display: grid;
+  gap: 2px;
+}
+
+.cloud-settings-quick-options b,.cloud-settings-field b {
+  font-size: 9px;
+}
+
+.cloud-settings-quick-options small,.cloud-settings-field small {
+  color: #77707d;
+  font-size: 7px;
+}
+
+.cloud-settings-quick-options select,.cloud-settings-field select {
+  width: min(215px,48%);
+  min-width: 145px;
+}
+
+.cloud-settings-message {
+  padding: 8px 10px;
+  border: 1px solid #3a3145;
+  border-radius: 9px;
+  background: #17131c;
+  color: #a99bb7;
+  font-size: 8px;
+}
+
+.cloud-settings-details {
+  overflow: hidden;
+  border: 1px solid #302a35;
+  border-radius: 10px;
+  background: #131116;
+}
+
+.cloud-settings-details summary {
+  position: relative;
+  list-style: none;
+  cursor: pointer;
+  padding: 11px 36px 11px 12px;
+  color: #b8b1bd;
+  font-size: 9px;
+  font-weight: 700;
+  transition: .18s;
+}
+
+.cloud-settings-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.cloud-settings-details summary:after {
+  content: "⌄";
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--accent);
+  font-size: 12px;
+  transition: rotate .18s;
+}
+
+.cloud-settings-details[open] summary {
+  border-bottom: 1px solid #2c2631;
+  background: #17131b;
+}
+
+.cloud-settings-details[open] summary:after {
+  rotate: 180deg;
+}
+
+.cloud-settings-details-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.cloud-settings-details-body>p {
+  margin: 0;
+  color: #827a87;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.cloud-settings-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 8px;
+}
+
+.cloud-settings-action-grid button {
+  display: grid;
+  gap: 3px;
+  min-height: 58px;
+  padding: 9px;
+  text-align: left;
+  border-color: #382f41;
+  background: #19151d;
+}
+
+.cloud-settings-action-grid button:hover {
+  border-color: color-mix(in srgb,var(--accent) 55%,#382f41);
+}
+
+.cloud-settings-action-grid b {
+  font-size: 8px;
+}
+
+.cloud-settings-action-grid small {
+  color: #7d7582;
+  font-size: 7px;
+  line-height: 1.35;
+}
+
+.cloud-settings-disconnect {
+  justify-self: start;
+  border-color: #532f38!important;
+  background: #24171b!important;
+  color: #df8b99!important;
+}
+
+.cloud-settings-text-button {
+  justify-self: start;
+  background: #1a1620!important;
+  color: #c2b6d0!important;
+}
+
+.cloud-settings-credentials {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.cloud-settings-credentials label {
+  display: grid;
+  gap: 4px;
+  color: #8d8492;
+  font-size: 8px;
+}
+
+.cloud-settings-credentials label small {
+  min-height: 2.7em;
+  color: #77707d;
+  font-size: 7px;
+  line-height: 1.35;
+}
+
+.cloud-settings-credentials button {
+  min-height: 36px;
+}
+
+.cloud-oauth-setup a {
+  color: color-mix(in srgb,var(--accent) 82%,#fff);
+  text-decoration: none;
+}
+
+.cloud-oauth-setup a:hover {
+  text-decoration: underline;
+}
+
+.cloud-oauth-intro {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #322b38;
+  border-radius: 9px;
+  background: #17141a;
+}
+
+.cloud-oauth-intro b {
+  color: #d8d1dd;
+  font-size: 9px;
+}
+
+.cloud-oauth-intro p {
+  margin: 0;
+  color: #8e8593;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.cloud-oauth-steps {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: oauth-step;
+}
+
+.cloud-oauth-steps li {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  min-height: 48px;
+  padding: 9px 10px 9px 36px;
+  border: 1px solid #302a35;
+  border-radius: 9px;
+  background: #151218;
+  counter-increment: oauth-step;
+}
+
+.cloud-oauth-steps li:before {
+  content: counter(oauth-step);
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  background: color-mix(in srgb,var(--accent) 18%,#201a26);
+  color: color-mix(in srgb,var(--accent) 80%,#fff);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.cloud-oauth-steps b {
+  color: #cfc7d4;
+  font-size: 8px;
+}
+
+.cloud-oauth-steps span {
+  color: #817987;
+  font-size: 7px;
+  line-height: 1.4;
+}
+
+.cloud-oauth-help,.cloud-oauth-warning {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 7px;
+  line-height: 1.45;
+}
+
+.cloud-oauth-help {
+  border: 1px solid #302a39;
+  background: #17141b;
+  color: #8e8594;
+}
+
+.cloud-oauth-warning {
+  border: 1px solid #4b3b28;
+  background: #1e1913;
+  color: #b79b73;
+}
+
+.cloud-oauth-save {
+  min-width: 145px;
+  border-color: color-mix(in srgb,var(--accent) 58%,#3a3340)!important;
+  background: color-mix(in srgb,var(--accent) 18%,#19151e)!important;
+}
+
+@media(max-width:760px){
+  .cloud-settings-card {
+    grid-template-columns: 34px minmax(0,1fr);
+  }
+  .cloud-settings-icon {
+    width: 34px;
+    height: 34px;
+  }
+  .cloud-settings-main-actions {
+    grid-column: 1/-1;
+  }
+  .cloud-settings-main-actions .primary {
+    width: 100%;
+  }
+  .cloud-settings-quick-options,.cloud-settings-action-grid,.cloud-settings-credentials,.cloud-oauth-steps {
+    grid-template-columns: 1fr;
+  }
+  .cloud-settings-quick-options>label,.cloud-settings-field {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .cloud-settings-quick-options select,.cloud-settings-field select {
+    width: 100%;
+  }
+}
+
+/* Hover effects for Google Drive sync choice modal buttons */
+
+.settings-sync-choice-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.settings-sync-choice-heading h3 {
+  margin: 0;
+  color: #a78bfa;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.settings-sync-choice-heading button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #3a3244;
+  border-radius: 10px;
+  background: #211b28;
+  color: #aaa1b2;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.settings-sync-choice-heading button:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.settings-sync-choice-lead {
+  margin: 0 0 16px;
+  color: #a39aa9;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-sync-choice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-sync-choice-list .sync-choice-btn {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-sync-choice-list .sync-choice-btn b {
+  font-size: 14px;
+}
+
+.settings-sync-choice-list .sync-choice-btn span {
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: .9;
+}
+
+.sync-choice-btn {
+  padding: 14px 16px;
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.18s ease,
+              background-color 0.18s ease,
+              box-shadow 0.18s ease,
+              filter 0.18s ease;
+}
+
+.sync-choice-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.15);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+}
+
+.sync-choice-btn:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.sync-choice-btn-primary {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: #fff;
+  border: 1px solid #9333ea;
+  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.35);
+}
+
+.sync-choice-btn-primary:hover {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  border-color: #c084fc;
+  box-shadow: 0 8px 28px rgba(139, 92, 246, 0.5);
+}
+
+.sync-choice-btn-purple {
+  background: #241e30;
+  color: #e2e8f0;
+  border: 1px solid #7c3aed;
+}
+
+.sync-choice-btn-purple:hover {
+  background: #2d233e;
+  border-color: #a78bfa;
+  box-shadow: 0 8px 24px rgba(167, 139, 250, 0.25);
+}
+
+.sync-choice-btn-blue {
+  background: #241e30;
+  color: #e2e8f0;
+  border: 1px solid #4a3866;
+}
+
+.sync-choice-btn-blue:hover {
+  background: #232a3e;
+  border-color: #3b82f6;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25);
+}
+
+.sync-choice-btn-green {
+  background: #241e30;
+  color: #e2e8f0;
+  border: 1px solid #4a3866;
+}
+
+.sync-choice-btn-green:hover {
+  background: #212d26;
+  border-color: #22c55e;
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.25);
+}

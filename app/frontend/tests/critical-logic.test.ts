@@ -7,8 +7,11 @@ import {
   reconcileTrackedEpisodes,
 } from "../src/lib/tracking.ts";
 import {
+  animeSearchQueryVariants,
+  animeSearchScore,
   episodeResumePosition,
   latestResumePoint,
+  matchesAnimeSearch,
   toggleEpisodeWatched,
 } from "../src/lib/anime.ts";
 import {
@@ -16,6 +19,132 @@ import {
   playbackReachedTarget,
 } from "../src/lib/watchPartyLogic.ts";
 import { kodikSerialIdentity, kodikSerialSource, playerDubbing, playerEpisode, playerTranslationId } from "../src/lib/kodik.ts";
+import { fetchAnimeTrailers, fetchCatalogPage, prefetchCatalogSearch } from "../src/features/catalog/api.ts";
+import { homeTrailerEmbedUrl } from "../src/lib/trailer.ts";
+import {
+  animeApiRatings,
+  animeSeasonsAverage,
+  ratingForSource,
+  seasonCombinedAverage,
+  seasonEpisodeAverage,
+  setUserRating,
+} from "../src/lib/ratings.ts";
+
+test("home trailer URL removes playlist controls and keeps muted autoplay", () => {
+  const url = new URL(homeTrailerEmbedUrl(
+    "https://www.youtube-nocookie.com/embed/demo123?loop=1&playlist=demo123&controls=1",
+    17.8,
+    "http://127.0.0.1:3003",
+  ));
+
+  assert.equal(url.searchParams.has("playlist"), false);
+  assert.equal(url.searchParams.has("loop"), false);
+  assert.equal(url.searchParams.get("autoplay"), "1");
+  assert.equal(url.searchParams.get("mute"), "1");
+  assert.equal(url.searchParams.get("controls"), "0");
+  assert.equal(url.searchParams.get("autohide"), "1");
+  assert.equal(url.searchParams.get("start"), "17");
+  assert.equal(url.searchParams.get("origin"), "http://127.0.0.1:3003");
+});
+
+test("user ratings roll up from episodes to seasons and anime", () => {
+  let ratings = setUserRating(undefined, "Demo", { scope: "anime" }, 9);
+  ratings = setUserRating(ratings, "Demo", { scope: "season", season: 1 }, 8);
+  ratings = setUserRating(ratings, "Demo", { scope: "episode", season: 1, episode: "1" }, 10);
+  ratings = setUserRating(ratings, "Demo", { scope: "episode", season: 1, episode: "2" }, 6);
+  ratings = setUserRating(ratings, "Demo", { scope: "episode", season: 2, episode: "1" }, 10);
+
+  assert.equal(seasonEpisodeAverage(ratings, 1), 8);
+  assert.equal(seasonCombinedAverage(ratings, 1), 8);
+  assert.equal(animeSeasonsAverage(ratings), 9);
+  assert.equal(ratings.anime, 9);
+});
+
+test("all positive API rating sources are normalized for display", () => {
+  const sources = animeApiRatings({
+    anime_id: 1,
+    title: "Demo",
+    rating: {
+      average: 8.4,
+      kp_rating: 7.9,
+      imdb_rating: 8.1,
+      future_rating: 9.2,
+      anidub_rating: 0,
+    },
+  });
+  assert.deepEqual(sources.map(source => source.key), [
+    "average",
+    "kp_rating",
+    "imdb_rating",
+    "future_rating",
+  ]);
+});
+
+test("AnimeSoul rating source reads the public server aggregate", () => {
+  const anime = { anime_id: 1, title: "Demo" };
+  const value = ratingForSource(anime, undefined, "animesoul", {
+    animeId: 1,
+    anime: { average: 8.75, count: 12 },
+    seasons: {},
+    episodes: {},
+  });
+
+  assert.equal(value, 8.75);
+});
+
+test("YouTube trailers are normalized with an immediate preview image", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    trailers: [{ iframe_url: "https://youtube.com/embed/v4Uj7RJprQE?enablejsapi=1" }],
+  }), { headers: { "content-type": "application/json" } });
+
+  try {
+    const [trailer] = await fetchAnimeTrailers(1589);
+    assert.equal(trailer.url, "https://www.youtube-nocookie.com/embed/v4Uj7RJprQE");
+    assert.equal(trailer.poster, "https://i.ytimg.com/vi/v4Uj7RJprQE/maxresdefault.jpg");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("anime search understands layouts, acronyms, aliases and alternate languages", () => {
+  const naruto = { anime_id: 1, title: "Naruto: Shippuden", other_titles: ["Наруто: Ураганные хроники"] };
+  const attack = { anime_id: 2, title: "Attack on Titan", original: "Shingeki no Kyojin" };
+  const jujutsu = { anime_id: 3, title: "Jujutsu Kaisen", other_titles: ["Магическая битва"] };
+  const onePiece = { anime_id: 4, title: "One Piece" };
+
+  assert.equal(matchesAnimeSearch(naruto, "yfhenj"), true);
+  assert.equal(matchesAnimeSearch(attack, "aot"), true);
+  assert.equal(matchesAnimeSearch(attack, "аот"), true);
+  assert.equal(matchesAnimeSearch(jujutsu, "магичка"), true);
+  assert.equal(matchesAnimeSearch(onePiece, "ванпис"), true);
+  assert.ok(animeSearchQueryVariants("аот").includes("attack on titan"));
+  assert.ok(animeSearchScore(attack, "attack on titan") > animeSearchScore(attack, "аот"));
+});
+
+test("catalog search submit reuses a prefetched in-flight request", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    await new Promise(resolve => setTimeout(resolve, 10));
+    return new Response(JSON.stringify({ anime: [{ anime_id: 9, title: "Attack on Titan" }] }), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const query = `cache-probe-${Date.now()}`;
+    const [prefetched, submitted] = await Promise.all([
+      prefetchCatalogSearch(query),
+      fetchCatalogPage({ limit: 24, offset: 0, query }),
+    ]);
+    assert.equal(calls, 1);
+    assert.deepEqual(prefetched, submitted);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("Kodik single episode URL becomes one stable serial player", () => {
   const first = "//kodik.example/season/abc?episode=1&only_episode=true&only_season=true&translations=false";

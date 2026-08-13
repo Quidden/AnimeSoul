@@ -1,5 +1,5 @@
 import { DEFAULT_PLAYER_PREFS, SCHEMA_VERSION, STORAGE_KEYS, THEMES } from "./settings";
-import type { AnimeProgress, ConfigSnapshot, Folder, StorageDocument, ToolbarPosition } from "./types";
+import type { AnimeProgress, AnimeUserRatings, ConfigSnapshot, Folder, StorageDocument, ToolbarPosition } from "./types";
 
 export function readLocal<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -69,6 +69,26 @@ export function migrateSnapshot(
             }),
           )
         : {},
+    ratings:
+      input?.ratings && typeof input.ratings === "object"
+        ? Object.fromEntries(
+            Object.entries(input.ratings)
+              .filter(([animeId, value]) => Number.isFinite(Number(animeId)) && value && typeof value === "object")
+              .map(([animeId, value]) => {
+                const item = value as Partial<AnimeUserRatings>;
+                return [
+                  animeId,
+                  {
+                    title: typeof item.title === "string" ? item.title : undefined,
+                    anime: validUserRating(item.anime),
+                    seasons: normalizeUserRatingMap(item.seasons),
+                    episodes: normalizeUserRatingMap(item.episodes),
+                    updatedAt: Number.isFinite(item.updatedAt) ? item.updatedAt : undefined,
+                  },
+                ];
+              }),
+          )
+        : {},
     tracked: Array.isArray(input?.tracked)
       ? input.tracked
           .filter((item) => item && Number.isFinite(item.animeId))
@@ -124,6 +144,21 @@ export function migrateSnapshot(
           )
         : {},
   };
+}
+
+function validUserRating(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 10
+    ? value
+    : undefined;
+}
+
+function normalizeUserRatingMap(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, score]) => [key, validUserRating(score)] as const)
+      .filter((entry): entry is readonly [string, number] => entry[1] !== undefined),
+  );
 }
 
 export function migrateDocument(input: Partial<StorageDocument> | null | undefined): StorageDocument {

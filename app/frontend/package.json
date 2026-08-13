@@ -1,11 +1,12 @@
 {
   "name": "animesoul-frontend",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "format:css": "node ../tools/format-css.mjs src/styles/*.css",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/critical-logic.test.ts"
   },

@@ -6,12 +6,15 @@ real-time WebSocket server, and static production bundle serving.
 
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.gdrive import router as gdrive_router
+from .api.community_ratings import router as community_ratings_router
 from .api.storage import router as storage_router
 from .api.watch_party import router as party_router
 from .api.yummy import router as yummy_router
@@ -19,7 +22,7 @@ from .config import settings
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.2.0",
+    version="0.2.1",
     description="FastAPI backend for the AnimeSoul desktop and web client.",
 )
 
@@ -37,12 +40,21 @@ app.include_router(yummy_router)
 app.include_router(storage_router)
 app.include_router(party_router)
 app.include_router(gdrive_router)
+app.include_router(community_ratings_router)
 
 
 @app.get("/api/health", summary="Health check", tags=["System"])
 async def health() -> dict[str, object]:
     """Return backend health status and stack version."""
-    return {"ok": True, "stack": "FastAPI + React", "version": app.version}
+    payload: dict[str, object] = {
+        "ok": True,
+        "stack": "FastAPI + React",
+        "version": app.version,
+    }
+    runtime_instance_id = os.getenv("ANIMESOUL_INSTANCE_ID", "").strip()
+    if runtime_instance_id:
+        payload["runtimeInstanceId"] = runtime_instance_id
+    return payload
 
 
 # Serve built React frontend assets in production mode

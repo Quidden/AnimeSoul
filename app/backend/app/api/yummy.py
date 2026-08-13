@@ -50,13 +50,18 @@ async def yummy_proxy(
                 gateway.request(f"/anime/{id}/videos"),
             )
             return {"anime": details, "videos": videos or []}
+        if mode == "trailers":
+            if id is None:
+                raise HTTPException(status_code=400, detail="Anime ID is required")
+            return {"trailers": await gateway.request(f"/anime/{id}/trailers") or []}
         if mode == "schedule":
             return {"schedule": await gateway.request("/anime/schedule") or []}
 
         params: dict[str, object] = {"limit": limit, "offset": offset}
         if q.strip():
-            params["q"] = q.strip()
-        anime = await gateway.request("/anime", params) or []
+            anime = await gateway.search(q.strip(), limit=limit, offset=offset)
+        else:
+            anime = await gateway.request("/anime", params) or []
         return {"anime": anime, "hasMore": len(anime) == limit}
     except HTTPException:
         raise

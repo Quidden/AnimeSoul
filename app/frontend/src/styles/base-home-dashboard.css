@@ -1,0 +1,545 @@
+.hero-widgets {
+  width: min(650px,50%);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.hero-box {
+  background: #121016d9;
+  border: 1px solid #2d2733;
+  border-radius: 15px;
+  padding: 18px;
+  min-height: 125px;
+}
+
+.hero-box.alerts {
+  grid-column: 1/-1;
+  min-height: auto;
+}
+
+.hero-box h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 0 13px;
+  font-size: 13px;
+}
+
+.hero-box h3 span {
+  color: var(--accent);
+}
+
+.hero-box h3 button {
+  border: 0;
+  background: none;
+  color: var(--accent);
+}
+
+.mini-list,.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mini-list button,.alerts>button {
+  display: flex;
+  justify-content: space-between;
+  border: 0;
+  background: none;
+  color: #aaa3af;
+  text-align: left;
+  padding: 4px 0;
+  font-size: 11px;
+}
+
+.alerts>button b {
+  color: #79d49d;
+}
+
+.folder-progress {
+  display: grid;
+  grid-template-columns: 1fr 65px 28px;
+  gap: 7px;
+  align-items: center;
+  margin: 8px 0;
+  font-size: 10px;
+}
+
+.folder-progress span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.folder-progress small {
+  color: #77717c;
+}
+
+.folder-progress i,.wide-progress,.season-progress {
+  height: 4px;
+  background: #302a35;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.folder-progress i b,.wide-progress i,.season-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.folder-progress em {
+  font-style: normal;
+  color: #81798a;
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  gap: 14px;
+}
+
+.collection-card {
+  background: #131117;
+  border: 1px solid #2c2731;
+  border-radius: 14px;
+  padding: 18px;
+  min-height: 150px;
+}
+
+.collection-card h3 {
+  margin: 0 0 5px;
+}
+
+.collection-card>b {
+  color: #85808c;
+  font-size: 10px;
+}
+
+.collection-card>div:last-child {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+
+.collection-card button {
+  border: 0;
+  border-top: 1px solid #28232d;
+  background: none;
+  text-align: left;
+  padding: 8px 0;
+  color: #b4adba;
+  font-size: 11px;
+}
+
+.wide-progress {
+  margin-top: 13px!important;
+}
+
+.outline {
+  border: 1px solid #3d3447;
+  background: #17131b;
+  border-radius: 8px;
+  padding: 9px 13px;
+}
+
+.filter-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 13px;
+}
+
+.filter-panel label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #89828f;
+  font-size: 10px;
+}
+
+.filter-panel input {
+  width: 90px;
+}
+
+.filter-panel button {
+  border: 0;
+  background: none;
+  color: #a98aff;
+  font-size: 11px;
+}
+
+.watch-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 0 3px 22px;
+}
+
+.watch-heading h1 {
+  font: 500 clamp(30px,4vw,48px) Georgia,serif;
+  margin: 7px 0 0;
+}
+
+.watch-heading>b {
+  color: #ffd477;
+  font-size: 22px;
+}
+
+.video-layout {
+  display: grid;
+  border: 1px solid #29242f;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #100e13;
+  box-shadow: 0 28px 80px #0009;
+}
+
+.video-layout .player-frame {
+  aspect-ratio: 16/9;
+}
+
+.toolbar-bottom {
+  grid-template-columns: 1fr;
+}
+
+.toolbar-bottom .player-toolbar {
+  grid-row: 2;
+}
+
+.toolbar-top {
+  grid-template-columns: 1fr;
+}
+
+.toolbar-top .player-toolbar {
+  grid-row: 1;
+}
+
+.toolbar-top .player-frame {
+  grid-row: 2;
+}
+
+.toolbar-left {
+  grid-template-columns: 220px minmax(0,1fr);
+}
+
+.toolbar-left .player-toolbar {
+  grid-column: 1;
+  grid-row: 1;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.toolbar-left .player-frame {
+  grid-column: 2;
+}
+
+.toolbar-right {
+  grid-template-columns: minmax(0,1fr) 220px;
+}
+
+.toolbar-right .player-toolbar {
+  grid-column: 2;
+  grid-row: 1;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.toolbar-right .player-frame {
+  grid-column: 1;
+}
+
+.toolbar-left .player-toolbar>label,.toolbar-right .player-toolbar>label {
+  width: 100%;
+}
+
+.toolbar-left .player-toolbar select,.toolbar-right .player-toolbar select {
+  max-width: none;
+  width: 100%;
+}
+
+.season-panel {
+  background: #121016;
+  border: 1px solid #29242f;
+  border-radius: 14px;
+  padding: 22px;
+  margin-top: 15px;
+}
+
+.season-panel>div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.season-panel h2 {
+  margin: 0;
+  font: 500 25px Georgia,serif;
+}
+
+.season-panel>div:first-child span {
+  color: #8b8491;
+  font-size: 11px;
+}
+
+.season-progress {
+  margin: 15px 0;
+}
+
+.episode-grid {
+  display: grid;
+  grid-template-columns: repeat(5,1fr);
+  gap: 8px;
+}
+
+.episode-grid button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  border: 1px solid #2c2731;
+  background: #19161d;
+  border-radius: 9px;
+  padding: 9px;
+}
+
+.episode-grid button.active {
+  border-color: var(--accent);
+  background: #211a2b;
+}
+
+.episode-grid button>b {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  border-radius: 7px;
+  background: #2a2430;
+}
+
+.episode-grid button>span {
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+}
+
+.episode-grid small {
+  color: #807987;
+  font-size: 8px;
+  margin-top: 3px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.folder-checks label b {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.toast {
+  position: fixed;
+  z-index: 80;
+  right: 20px;
+  bottom: 20px;
+  background: #ece5f6;
+  color: #17131c;
+  padding: 12px 16px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+@media(max-width:1050px){
+  .dashboard-hero {
+    flex-direction: column;
+  }
+  .hero-widgets {
+    width: 100%;
+  }
+  .collection-grid {
+    grid-template-columns: repeat(2,1fr);
+  }
+  .episode-grid {
+    grid-template-columns: repeat(3,1fr);
+  }
+  .header-search {
+    min-width: 180px;
+  }
+  .theme-picker {
+    display: none;
+  }
+}
+
+@media(max-width:700px){
+  .header-search {
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    top: 82px;
+    background: #151219;
+  }
+  .dashboard-hero {
+    padding-top: 95px;
+  }
+  .hero-widgets {
+    grid-template-columns: 1fr;
+  }
+  .hero-box.alerts {
+    grid-column: auto;
+  }
+  .collection-grid {
+    grid-template-columns: 1fr;
+  }
+  .toolbar-left,.toolbar-right {
+    grid-template-columns: 1fr;
+  }
+  .toolbar-left .player-toolbar,.toolbar-right .player-toolbar {
+    grid-column: 1;
+    grid-row: 2;
+    flex-direction: row;
+  }
+  .toolbar-left .player-frame,.toolbar-right .player-frame {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .episode-grid {
+    grid-template-columns: repeat(2,1fr);
+  }
+}
+
+.player-toolbar {
+  display: grid!important;
+  grid-template-columns: minmax(150px,1.5fr) 82px minmax(115px,.8fr) minmax(150px,1.1fr) auto auto minmax(105px,.8fr);
+  align-items: end!important;
+  gap: 10px!important;
+}
+
+.player-toolbar>label:not(.toggle-row) {
+  width: 100%;
+  min-width: 0;
+}
+
+.player-toolbar select {
+  width: 100%;
+  max-width: none;
+}
+
+.player-toolbar>button {
+  height: 35px;
+  white-space: nowrap;
+}
+
+.player-toolbar .toggle-row {
+  height: 35px;
+  align-items: center;
+}
+
+.toolbar-left .player-toolbar,.toolbar-right .player-toolbar {
+  display: flex!important;
+  align-items: stretch!important;
+}
+
+.toolbar-left .player-toolbar>button,.toolbar-right .player-toolbar>button {
+  width: 100%;
+}
+
+.danger {
+  color: #f194a4!important;
+  border-color: #6b3542!important;
+}
+
+.season-tabs {
+  display: flex;
+  gap: 7px;
+  margin: -8px 0 14px;
+  overflow: auto;
+}
+
+.season-tabs button {
+  border: 1px solid #332d39;
+  background: #151219;
+  color: #958e9c;
+  border-radius: 8px;
+  padding: 8px 13px;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.season-tabs button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.facts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.facts span {
+  background: #19161d;
+  border: 1px solid #2c2731;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #aaa3af;
+  font-size: 10px;
+}
+
+.track-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: #1b1720;
+  border: 1px solid #352e3d;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.track-settings label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: #aaa3af;
+  font-size: 10px;
+}
+
+.track-settings>button {
+  border: 1px solid #41364c;
+  background: #241d2c;
+  border-radius: 6px;
+  padding: 7px;
+  font-size: 10px;
+}
+
+.collection-card {
+  transition: .2s;
+  cursor: pointer;
+}
+
+.collection-card:hover,.hero-box .folder-progress:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 15px 35px #0005;
+}
+
+.folder-progress {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  border-radius: 7px;
+  padding: 3px;
+}
+
+.collection-card button span,.mini-list small {
+  margin-left: auto;
+  color: var(--accent);
+}

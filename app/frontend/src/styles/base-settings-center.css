@@ -1,0 +1,466 @@
+/* Settings center: compact navigation, search and consistent control cards. */
+
+.settings-modal {
+  width: min(1180px,calc(100vw - 32px));
+  height: min(850px,calc(100dvh - 32px));
+  max-height: none;
+}
+
+.settings-modal>header {
+  padding: 18px 22px;
+  border-bottom: 1px solid #302a35;
+  background: linear-gradient(120deg,color-mix(in srgb,var(--accent) 10%,#151219),#111014 54%);
+}
+
+.settings-modal>header h2 {
+  font-size: 27px;
+  line-height: 1.05;
+}
+
+.settings-modal>header p {
+  margin-top: 5px;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 238px minmax(0,1fr);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-tabs {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 12px;
+  border-right: 1px solid #302a35;
+  background: #111014;
+  overflow: hidden;
+}
+
+.settings-search {
+  display: grid;
+  grid-template-columns: 20px minmax(0,1fr) 24px;
+  align-items: center;
+  gap: 5px;
+  margin: 0 2px 13px;
+  padding: 0 8px;
+  height: 40px;
+  border: 1px solid #36303b;
+  border-radius: 11px;
+  background: #19151d;
+  color: #827987;
+  transition: border-color .18s,box-shadow .18s;
+}
+
+.settings-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.settings-search>span {
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+  color: var(--accent);
+}
+
+.settings-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #eeeaf2;
+  font: inherit;
+  font-size: 10px;
+}
+
+.settings-search input::placeholder {
+  color: #766f7c;
+}
+
+.settings-search button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #27212d;
+  color: #b9afc1;
+  font-size: 15px;
+}
+
+.settings-search button:hover {
+  background: #34283f;
+  color: #fff;
+}
+
+.settings-tab-list {
+  display: grid;
+  gap: 5px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.settings-tab-list>button {
+  display: grid;
+  grid-template-columns: 30px minmax(0,1fr);
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: #a69eaa;
+  text-align: left;
+  transition: background .18s,border-color .18s,color .18s;
+}
+
+.settings-tab-list>button:hover {
+  background: #19151d;
+  border-color: #2e2833;
+  color: #e9e4ed;
+}
+
+.settings-tab-list>button.active {
+  background: linear-gradient(115deg,color-mix(in srgb,var(--accent) 18%,#1a1620),#19151d);
+  border-color: color-mix(in srgb,var(--accent) 55%,#332b3a);
+  color: #fff;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.settings-tab-list>button>i {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #221c29;
+  color: var(--accent);
+  font-style: normal;
+  font-size: 14px;
+}
+
+.settings-tab-list>button.active>i {
+  background: color-mix(in srgb,var(--accent) 22%,#201928);
+  color: #fff;
+}
+
+.settings-tab-list>button>span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-tab-list>button b {
+  font-size: 12px;
+}
+
+.settings-tab-list>button small {
+  overflow: hidden;
+  color: #837b88;
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.settings-tab-list>button.active small {
+  color: #a69dab;
+}
+
+.settings-workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #131116;
+}
+
+.settings-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #302a35;
+  background: #161319;
+}
+
+.settings-panel-heading>div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-panel-heading>div>span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #39313f;
+  border-radius: 10px;
+  background: #211b27;
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.settings-panel-heading h3 {
+  margin: 0;
+  color: #f1edf3;
+  font-size: 16px;
+}
+
+.settings-panel-heading p {
+  margin: 3px 0 0;
+  color: #918895;
+  font-size: 10px;
+}
+
+.settings-panel-heading>small {
+  flex: none;
+  color: #8a818e;
+  font-size: 9px;
+}
+
+.settings-workspace>.settings-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 18px 22px;
+  overflow: auto;
+}
+
+.settings-scroll>[data-settings-tab] {
+  display: none!important;
+}
+
+.settings-scroll[data-active-tab="watching"]>[data-settings-tab="watching"],.settings-scroll[data-active-tab="player"]>[data-settings-tab="player"],.settings-scroll[data-active-tab="appearance"]>[data-settings-tab="appearance"],.settings-scroll[data-active-tab="cloud"]>[data-settings-tab="cloud"],.settings-scroll[data-active-tab="party"]>[data-settings-tab="party"],.settings-scroll[data-active-tab="profiles"]>[data-settings-tab="profiles"],.settings-scroll[data-active-tab="debug"]>[data-settings-tab="debug"] {
+  display: grid!important;
+}
+
+.settings-scroll.is-searching>.settings-group:not(.google-drive-settings):not(:has(.settings-item)) {
+  display: none!important;
+}
+
+.settings-scroll .settings-group {
+  gap: 9px;
+  margin: 0 0 14px;
+}
+
+.settings-scroll .settings-group:last-child {
+  margin-bottom: 0;
+}
+
+.settings-group-title {
+  display: flex!important;
+  align-items: end!important;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 2px 2px;
+  padding: 0 0 8px;
+  border-bottom: 0!important;
+}
+
+.settings-group-title b {
+  color: #f0ebf2;
+  font-size: 14px;
+}
+
+.settings-group-title span {
+  max-width: 58%;
+  color: #88808d;
+  font-size: 10px;
+  text-align: right;
+}
+
+.settings-item {
+  grid-template-columns: minmax(0,1fr) minmax(190px,auto);
+  min-height: 72px;
+  padding: 13px 14px!important;
+  border: 1px solid #302a35!important;
+  border-radius: 12px!important;
+  background: #17141a!important;
+  transition: border-color .18s,background .18s;
+}
+
+.settings-item:hover {
+  border-color: #45394f!important;
+  background: #1a161e!important;
+}
+
+.settings-item>div:first-child {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.settings-item>div:first-child>b {
+  color: #ede8ef;
+  font-size: 12px;
+}
+
+.settings-item p {
+  margin: 0!important;
+  color: #918895!important;
+  font-size: 10px!important;
+  line-height: 1.5!important;
+}
+
+.settings-item small {
+  color: var(--accent)!important;
+  font-size: 9px!important;
+  line-height: 1.45!important;
+}
+
+.settings-item>div:last-child {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.settings-item select {
+  min-width: 210px;
+  max-width: 320px;
+  font-size: 10px;
+}
+
+.settings-known-issues {
+  margin: 0 0 14px;
+  padding: 13px 14px;
+  border: 1px solid #4c3e28;
+  border-radius: 12px;
+  background: linear-gradient(110deg,#201a13,#18151a);
+  color: #b9a68a;
+}
+
+.settings-known-issues b {
+  color: #e4bd75;
+  font-size: 12px;
+}
+
+.settings-known-issues p {
+  margin: 6px 0 0;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.google-drive-settings {
+  gap: 10px;
+}
+
+.google-drive-settings .cloud-settings-card,.google-drive-settings .cloud-settings-quick-options>label,.google-drive-settings .cloud-settings-field,.google-drive-settings .cloud-settings-details {
+  border-color: #302a35;
+  background: #17141a;
+}
+
+.google-drive-settings .cloud-settings-card {
+  border-radius: 12px;
+}
+
+.google-drive-settings .cloud-settings-quick-options>label,.google-drive-settings .cloud-settings-field {
+  min-height: 68px;
+  border-radius: 12px;
+}
+
+.google-drive-settings .cloud-settings-details {
+  border-radius: 12px;
+}
+
+html[data-color-scheme="light"] .settings-tabs {
+  background: #f3eff5;
+  border-color: #d8d0de;
+}
+
+html[data-color-scheme="light"] .settings-workspace,html[data-color-scheme="light"] .settings-workspace>.settings-panel-heading {
+  background: #f8f5fa;
+  border-color: #ddd5e2;
+}
+
+html[data-color-scheme="light"] .settings-search,html[data-color-scheme="light"] .settings-item,html[data-color-scheme="light"] .google-drive-settings .cloud-settings-card,html[data-color-scheme="light"] .google-drive-settings .cloud-settings-quick-options>label,html[data-color-scheme="light"] .google-drive-settings .cloud-settings-field,html[data-color-scheme="light"] .google-drive-settings .cloud-settings-details {
+  background: #fff!important;
+  border-color: #d8d0de!important;
+}
+
+html[data-color-scheme="light"] .settings-search input,html[data-color-scheme="light"] .settings-panel-heading h3,html[data-color-scheme="light"] .settings-group-title b,html[data-color-scheme="light"] .settings-item>div:first-child>b {
+  color: #2b2530;
+}
+
+@media(max-width:860px){
+  .settings-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0,1fr);
+  }
+  .settings-tabs {
+    padding: 10px;
+    border-right: 0;
+    border-bottom: 1px solid #302a35;
+    overflow: visible;
+  }
+  .settings-search {
+    margin-bottom: 9px;
+  }
+  .settings-tab-list {
+    display: flex;
+    overflow-x: auto;
+  }
+  .settings-tab-list>button {
+    flex: 0 0 160px;
+  }
+  .settings-tab-list>button small {
+    white-space: nowrap;
+  }
+  .settings-panel-heading {
+    padding: 11px 13px;
+  }
+  .settings-panel-heading>small {
+    display: none;
+  }
+  .settings-workspace>.settings-scroll {
+    padding: 12px;
+  }
+}
+
+@media(max-width:600px){
+  .settings-modal {
+    width: calc(100vw - 12px);
+    height: calc(100dvh - 12px);
+  }
+  .settings-modal>header {
+    padding: 13px;
+  }
+  .settings-modal>header h2 {
+    font-size: 21px;
+  }
+  .settings-item {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .settings-item>div:last-child {
+    justify-content: flex-start;
+  }
+  .settings-item select {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+  .settings-group-title {
+    display: grid!important;
+    align-items: start!important;
+  }
+  .settings-group-title span {
+    max-width: none;
+    text-align: left;
+  }
+  .settings-tab-list>button {
+    flex-basis: 138px;
+  }
+}

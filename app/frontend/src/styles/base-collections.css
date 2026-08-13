@@ -1,0 +1,279 @@
+/* The resume label is a real button so keyboard and pointer users share one path. */
+
+.hero-resume-label {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-underline-offset: 4px;
+}
+
+.hero-resume-label:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.hero-resume-label:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.hero-resume-label:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.hero-widgets>.hero-box {
+  cursor: pointer;
+  transition: border-color .2s ease,box-shadow .2s ease,transform .2s ease;
+}
+
+.hero-widgets>.hero-box:hover {
+  border-color: color-mix(in srgb,var(--accent) 52%,#302a36);
+  box-shadow: 0 14px 38px #0003,0 0 0 1px var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.hero-widgets>.hero-box button {
+  cursor: pointer;
+}
+
+/* The icon is real SVG so Windows emoji fonts cannot shift or replace it. */
+
+.hero-mini-delete {
+  position: relative;
+  font-size: 0!important;
+}
+
+.hero-mini-delete svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+.hero-mini-delete::before,.hero-mini-delete::after {
+  content: none;
+}
+
+/* Full details for Favorites, Folders and Tracking. */
+
+.collection-overview-backdrop {
+  z-index: 10020;
+  padding: 20px;
+}
+
+.collection-overview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1040px,calc(100vw - 32px));
+  max-width: none;
+  max-height: min(820px,calc(100dvh - 40px));
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #393141;
+  border-radius: 18px;
+  background: #100e14;
+  box-shadow: 0 30px 100px #000d;
+}
+
+.collection-overview>.modal-close {
+  position: absolute;
+  z-index: 2;
+  right: 18px;
+  top: 18px;
+}
+
+.collection-overview>header {
+  padding: 26px 28px 19px;
+  border-bottom: 1px solid #2b2531;
+  background: linear-gradient(135deg,var(--accent-soft),transparent 48%);
+}
+
+.collection-overview>header h2 {
+  margin: 6px 0 4px;
+  font: 500 clamp(27px,4vw,42px) Georgia,serif;
+}
+
+.collection-overview>header p {
+  margin: 0;
+  color: #918996;
+  font-size: 10px;
+}
+
+.collection-overview-list {
+  display: grid;
+  gap: 9px;
+  overflow: auto;
+  padding: 18px 22px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) #1b171f;
+}
+
+.collection-overview-anime,.collection-overview-tracker {
+  display: grid;
+  grid-template-columns: 68px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 96px;
+  padding: 10px;
+  border: 1px solid #2d2733;
+  border-radius: 12px;
+  background: #151219;
+  cursor: pointer;
+  transition: .18s;
+}
+
+.collection-overview-anime:hover,.collection-overview-tracker:hover,.collection-overview-folder:hover {
+  border-color: color-mix(in srgb,var(--accent) 55%,#2d2733);
+  background: #19151e;
+}
+
+.collection-overview-anime>img,.collection-overview-tracker>img,.overview-poster-empty {
+  width: 68px;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #211c26;
+}
+
+.collection-overview-anime>div:nth-child(2),.collection-overview-tracker>div:nth-child(2) {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.collection-overview h3 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.collection-overview-anime span,.collection-overview-tracker span,.collection-overview-tracker small,.collection-overview-folder span {
+  color: #918996;
+  font-size: 9px;
+}
+
+.collection-overview-anime .wide-progress {
+  width: min(420px,100%);
+  margin: 4px 0 0;
+}
+
+.collection-overview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.collection-overview-actions button {
+  white-space: nowrap;
+}
+
+.overview-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #5a303a;
+  border-radius: 8px;
+  background: #21141a;
+  color: #ec8998;
+  padding: 8px 10px;
+}
+
+.overview-remove svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.collection-overview-folder {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #2d2733;
+  border-radius: 12px;
+  background: #151219;
+  cursor: pointer;
+  transition: .18s;
+}
+
+.collection-overview-folder>div {
+  display: grid;
+  gap: 6px;
+}
+
+.collection-overview-folder .wide-progress {
+  max-width: 620px;
+  margin: 2px 0 0;
+}
+
+.collection-overview-folder>b {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.collection-overview-tracker .collection-overview-actions {
+  flex-wrap: wrap;
+}
+
+.collection-overview-tracker .release-status {
+  margin-right: auto;
+}
+
+.collection-overview-empty {
+  display: grid;
+  place-items: center;
+  min-height: 230px;
+  color: #8f8794;
+}
+
+@media(max-width:760px){
+  .collection-overview-backdrop {
+    padding: 8px;
+  }
+  .collection-overview {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+  }
+  .collection-overview>header {
+    padding: 22px 20px 16px;
+  }
+  .collection-overview-list {
+    padding: 12px;
+  }
+  .collection-overview-anime,.collection-overview-tracker {
+    grid-template-columns: 52px minmax(0,1fr);
+  }
+  .collection-overview-anime>img,.collection-overview-tracker>img,.overview-poster-empty {
+    width: 52px;
+    height: 72px;
+  }
+  .collection-overview-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: none;
+  }
+  .collection-overview-actions button {
+    width: 100%;
+  }
+  .collection-overview-actions .overview-remove {
+    justify-content: center;
+  }
+}

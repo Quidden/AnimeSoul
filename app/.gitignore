@@ -4,5 +4,7 @@ __pycache__/
 frontend/node_modules/
 frontend/dist/
 animesoul.python.json
+animesoul.runtime.json
+animesoul.runtime.json.tmp
 .env
 data/

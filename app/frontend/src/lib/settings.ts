@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   favorites: "animesoul:favorites",
   folders: "animesoul:folders",
   progress: "animesoul:progress-v2",
+  ratings: "animesoul:ratings-v1",
   tracked: "animesoul:tracked",
   theme: "animesoul:theme",
   toolbar: "animesoul:toolbar",

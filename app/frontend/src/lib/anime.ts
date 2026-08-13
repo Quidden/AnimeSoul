@@ -1,12 +1,81 @@
 import type { Anime, AnimeProgress, EpisodeState, Video } from "./types";
 
+const ENGLISH_KEYBOARD = "`qwertyuiop[]asdfghjkl;'zxcvbnm,.";
+const RUSSIAN_KEYBOARD = "ёйцукенгшщзхъфывапролджэячсмитьбю";
+const KEYBOARD_LAYOUT = new Map<string, string>();
+[...ENGLISH_KEYBOARD].forEach((key, index) => {
+  KEYBOARD_LAYOUT.set(key, RUSSIAN_KEYBOARD[index]);
+  KEYBOARD_LAYOUT.set(RUSSIAN_KEYBOARD[index], key);
+});
+
+const CYRILLIC_TRANSLITERATION: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", ґ: "g", д: "d", е: "e", ё: "e", є: "ye",
+  ж: "zh", з: "z", и: "i", і: "i", ї: "yi", й: "y", к: "k", л: "l", м: "m",
+  н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "kh",
+  ц: "ts", ч: "ch", ш: "sh", щ: "shch", ы: "y", э: "e", ю: "yu", я: "ya",
+  ъ: "", ь: "",
+};
+
+// Keep these common community names aligned with the backend search aliases.
+const ANIME_SEARCH_ALIASES: Record<string, string[]> = {
+  aot: ["attack on titan", "shingeki no kyojin", "атака титанов"],
+  аот: ["attack on titan", "shingeki no kyojin", "атака титанов"],
+  bnha: ["boku no hero academia", "my hero academia", "моя геройская академия"],
+  бнха: ["boku no hero academia", "my hero academia", "моя геройская академия"],
+  mha: ["my hero academia", "boku no hero academia", "моя геройская академия"],
+  мга: ["моя геройская академия", "my hero academia"],
+  kny: ["kimetsu no yaiba", "demon slayer", "клинок рассекающий демонов"],
+  крд: ["клинок рассекающий демонов", "kimetsu no yaiba", "demon slayer"],
+  sao: ["sword art online", "мастера меча онлайн"],
+  сао: ["sword art online", "мастера меча онлайн"],
+  fma: ["fullmetal alchemist", "стальной алхимик"],
+  fmab: ["fullmetal alchemist brotherhood", "стальной алхимик"],
+  фма: ["fullmetal alchemist", "стальной алхимик"],
+  jjba: ["jojo bizarre adventure", "невероятные приключения джоджо"],
+  джджба: ["jojo bizarre adventure", "невероятные приключения джоджо"],
+  "ван пис": ["one piece"],
+  ванпис: ["one piece"],
+  "ре зеро": ["re zero", "re:zero", "жизнь в альтернативном мире с нуля"],
+  резеро: ["re zero", "re:zero", "жизнь в альтернативном мире с нуля"],
+  магичка: ["магическая битва", "jujutsu kaisen"],
+  "др стоун": ["dr stone", "doctor stone"],
+  "доктор стоун": ["dr stone", "doctor stone"],
+};
+
+const ACRONYM_STOP_WORDS = new Set(["a", "an", "and", "of", "the", "to"]);
+
 export function normalizeAnimeSearch(value: string) {
   return value
+    .normalize("NFKD")
     .toLocaleLowerCase("ru-RU")
     .replace(/\u0451/g, "\u0435")
+    .replace(/\p{M}+/gu, "")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function swapAnimeSearchKeyboard(value: string) {
+  return [...value].map(character => KEYBOARD_LAYOUT.get(character) ?? character).join("");
+}
+
+function transliterateAnimeSearch(value: string) {
+  return [...value].map(character => CYRILLIC_TRANSLITERATION[character] ?? character).join("");
+}
+
+export function animeSearchQueryVariants(value: string) {
+  const variants: string[] = [];
+  const add = (candidate: string) => {
+    const normalized = normalizeAnimeSearch(candidate);
+    if (normalized && !variants.includes(normalized)) variants.push(normalized);
+  };
+
+  const normalized = normalizeAnimeSearch(value);
+  add(normalized);
+  add(swapAnimeSearchKeyboard(normalized));
+  add(transliterateAnimeSearch(normalized));
+  [...variants].forEach(candidate => ANIME_SEARCH_ALIASES[candidate]?.forEach(add));
+  return variants;
 }
 
 function animeSearchTitles(anime: Anime) {
@@ -21,16 +90,40 @@ function animeSearchTitles(anime: Anime) {
 }
 
 export function animeSearchScore(anime: Anime, query: string) {
-  const normalizedQuery = normalizeAnimeSearch(query);
-  if (!normalizedQuery) return 1;
-  const tokens = normalizedQuery.split(" ").filter(Boolean);
+  const queries = animeSearchQueryVariants(query);
+  if (!queries.length) return 1;
   let best = 0;
   for (const title of animeSearchTitles(anime)) {
-    if (title === normalizedQuery) best = Math.max(best, 1000);
-    else if (title.startsWith(normalizedQuery)) best = Math.max(best, 800);
-    else if (title.includes(normalizedQuery)) best = Math.max(best, 650);
-    const matchedTokens = tokens.filter((token) => title.includes(token)).length;
-    if (matchedTokens === tokens.length) best = Math.max(best, 400 + matchedTokens * 20);
+    const titleTokens = title.split(" ").filter(Boolean);
+    const acronyms = new Set([
+      titleTokens.map(token => token[0]).join(""),
+      titleTokens.filter(token => !ACRONYM_STOP_WORDS.has(token)).map(token => token[0]).join(""),
+    ]);
+    const compactTitle = titleTokens.join("");
+
+    queries.forEach((normalizedQuery, index) => {
+      const penalty = Math.min(index * 12, 84);
+      const tokens = normalizedQuery.split(" ").filter(Boolean);
+      const compactQuery = tokens.join("");
+      if (title === normalizedQuery) best = Math.max(best, 1000 - penalty);
+      else if (title.startsWith(normalizedQuery)) best = Math.max(best, 800 - penalty);
+      else if (title.includes(normalizedQuery)) best = Math.max(best, 650 - penalty);
+
+      if (compactQuery.length >= 4 && compactTitle === compactQuery) {
+        best = Math.max(best, 900 - penalty);
+      } else if (compactQuery.length >= 4 && compactTitle.includes(compactQuery)) {
+        best = Math.max(best, 600 - penalty);
+      }
+      if (tokens.length === 1 && compactQuery.length >= 2 && compactQuery.length <= 10
+        && acronyms.has(compactQuery)) {
+        best = Math.max(best, 760 - penalty);
+      }
+
+      const matchedTokens = tokens.filter(token => title.includes(token)).length;
+      if (matchedTokens === tokens.length) {
+        best = Math.max(best, 400 + matchedTokens * 20 - penalty);
+      }
+    });
   }
   return best;
 }
@@ -267,7 +360,13 @@ export function groupFranchises(items: Anime[]) {
   return [...groups.values()].map((entries) => {
     const ordered = [...entries].sort((a, b) => (a.year ?? 9999) - (b.year ?? 9999) || a.anime_id - b.anime_id);
     const representative = ordered[0];
-    const ratings = entries.map((anime) => anime.rating?.average).filter((value): value is number => typeof value === "number");
+    const ratingKeys = new Set(entries.flatMap(anime => Object.keys(anime.rating ?? {})));
+    const ratings = Object.fromEntries([...ratingKeys].flatMap(key => {
+      const values = entries
+        .map(anime => anime.rating?.[key])
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+      return values.length ? [[key, Math.max(...values)]] : [];
+    }));
     const statusSource =
       entries.find((anime) => releaseStatus(anime).kind === "airing") ??
       entries.find((anime) => releaseStatus(anime).kind === "planned") ??
@@ -278,7 +377,7 @@ export function groupFranchises(items: Anime[]) {
       franchiseCount: entries.length,
       franchiseEntries: entries,
       anime_status: statusSource.anime_status,
-      rating: ratings.length ? { average: Math.max(...ratings) } : representative.rating,
+      rating: Object.keys(ratings).length ? ratings : representative.rating,
       views: entries.reduce((sum, anime) => sum + (anime.views ?? 0), 0),
     };
   });

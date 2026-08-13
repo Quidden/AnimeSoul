@@ -23,7 +23,7 @@ local_storage = JsonStorage(settings.data_dir)
 
 class CredentialsRequest(BaseModel):
     client_id: str
-    client_secret: str = ""
+    client_secret: str | None = None
 
 
 class SyncRequest(BaseModel):
@@ -57,7 +57,8 @@ async def get_status() -> dict[str, Any]:
 @router.post("/credentials")
 async def set_credentials(payload: CredentialsRequest) -> dict[str, Any]:
     """Save user-provided Google OAuth client credentials."""
-    gdrive_service.save_client_credentials(payload.client_id.strip(), payload.client_secret.strip())
+    client_secret = payload.client_secret.strip() if payload.client_secret is not None else None
+    gdrive_service.save_client_credentials(payload.client_id.strip(), client_secret)
     return {"saved": True}
 
 

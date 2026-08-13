@@ -11,6 +11,10 @@ For normal use, open [`app/README.md`](app/README.md) or run the root
 [`Start AnimeSoul.bat`](Start%20AnimeSoul.bat). New development belongs in
 `app/`; the legacy folder should receive only compatibility or security fixes.
 
+Contributor documentation: [`app/ARCHITECTURE.md`](app/ARCHITECTURE.md) explains
+module boundaries and data flows; the incremental roadmap is in
+[`app/docs/REFACTORING_RECOMMENDATIONS.md`](app/docs/REFACTORING_RECOMMENDATIONS.md).
+
 The Git repository metadata stays at this root, while application code is kept
 inside the two version folders.
 

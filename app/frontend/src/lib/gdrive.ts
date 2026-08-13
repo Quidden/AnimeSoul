@@ -63,11 +63,14 @@ export async function fetchGDriveAuthUrl(): Promise<{ url: string; redirect_uri:
 /**
  * Saves custom Google OAuth Client ID and Secret to backend credentials storage.
  */
-export async function saveGDriveCredentials(clientId: string, clientSecret = ""): Promise<void> {
+export async function saveGDriveCredentials(clientId: string, clientSecret?: string): Promise<void> {
   const res = await fetch("/api/gdrive/credentials", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret?.trim() || null,
+    }),
   });
   if (!res.ok) throw new Error("Failed to save Google OAuth credentials");
 }

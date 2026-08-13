@@ -14,12 +14,19 @@ import socket
 import sys
 import threading
 import time
+import uuid
 import webbrowser
 from pathlib import Path
 from typing import Literal
 
 import httpx
 import uvicorn
+
+from runtime_instance import (
+    find_available_port,
+    remove_runtime_state,
+    write_runtime_state,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -110,12 +117,21 @@ def ask_settings(previous: dict[str, object] | None = None) -> dict[str, object]
         "data_directory": str(previous.get("data_directory", "data")),
         "launch_mode": mode,
     }
-    CONFIG_FILE.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    save_runtime_settings(result)
     print(f"Настройки сохранены: {CONFIG_FILE}")
     return result
+
+
+def save_runtime_settings(settings: dict[str, object]) -> None:
+    """Atomically persist launcher settings without leaving partial JSON."""
+
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = CONFIG_FILE.with_suffix(CONFIG_FILE.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(settings, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, CONFIG_FILE)
 
 
 def load_runtime_settings(reconfigure: bool = False) -> dict[str, object]:
@@ -146,6 +162,18 @@ def wait_until_ready(port: int, attempts: int = 100) -> bool:
             pass
         time.sleep(0.12)
     return False
+
+
+def load_fastapi_app() -> object:
+    """Import FastAPI only after the launcher configured local paths.
+
+    Passing the real application object avoids relying on Uvicorn resolving a
+    source-only module path inside the packaged Windows runtime.
+    """
+
+    from backend.app.main import app
+
+    return app
 
 
 def animesoul_is_running(port: int) -> bool:
@@ -287,7 +315,7 @@ def run_browser(port: int) -> None:
     # Uvicorn's default colour formatter calls stderr.isatty() during startup,
     # so the packaged runtime must not install that console log configuration.
     uvicorn.run(
-        "backend.app.main:app",
+        load_fastapi_app(),
         host="127.0.0.1",
         port=port,
         reload=False,
@@ -306,7 +334,7 @@ def run_desktop(port: int) -> None:
         raise SystemExit(4) from error
 
     config = uvicorn.Config(
-        "backend.app.main:app",
+        load_fastapi_app(),
         host="127.0.0.1",
         port=port,
         reload=False,
@@ -380,14 +408,37 @@ def main() -> None:
         if animesoul_is_running(port):
             open_existing_client(port, mode)
             return
-        print(f"Порт {port} занят другим приложением.")
-        print(f"Измени его командой run.py --configure или в {CONFIG_FILE}.")
-        raise SystemExit(3)
+        occupied_port = port
+        available_port = find_available_port(port + 1, port_is_available)
+        if available_port is None:
+            print(f"Порт {occupied_port} занят другим приложением.")
+            print("Не удалось найти свободный порт рядом с ним.")
+            print(f"Измени порт командой run.py --configure или в {CONFIG_FILE}.")
+            raise SystemExit(3)
+        port = available_port
+        runtime["port"] = port
+        save_runtime_settings(runtime)
+        print(
+            f"Порт {occupied_port} занят другим приложением. "
+            f"AnimeSoul автоматически выбрал свободный порт {port}."
+        )
 
-    if mode == "desktop":
-        run_desktop(port)
-    else:
-        run_browser(port)
+    instance_id = os.getenv("ANIMESOUL_INSTANCE_ID", "").strip() or uuid.uuid4().hex
+    os.environ["ANIMESOUL_INSTANCE_ID"] = instance_id
+    write_runtime_state(
+        CONFIG_FILE,
+        instance_id=instance_id,
+        pid=os.getpid(),
+        port=port,
+        mode=mode,
+    )
+    try:
+        if mode == "desktop":
+            run_desktop(port)
+        else:
+            run_browser(port)
+    finally:
+        remove_runtime_state(CONFIG_FILE, instance_id)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,427 @@
+.score-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+header nav button:nth-child(2) {
+  font-size: 14px;
+}
+
+header nav button:nth-child(2):after {
+  content: none;
+}
+
+.score-picker>span {
+  white-space: nowrap;
+}
+
+.score-picker select {
+  min-width: 82px;
+  border: 1px solid color-mix(in srgb,var(--accent) 42%,var(--line));
+  border-radius: 9px;
+  padding: 7px 25px 7px 9px;
+  background: #17131d;
+  color: #ffd876;
+  cursor: pointer;
+}
+
+.score-picker.compact select {
+  min-width: 66px;
+  padding: 5px 21px 5px 7px;
+  font-size: 10px;
+}
+
+.rating-board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.rating-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 82px;
+  padding: 8px 10px;
+  border: 1px solid #302a37;
+  border-radius: 10px;
+  background: #131017;
+}
+
+.rating-chip small {
+  color: #89818e;
+  font-size: 9px;
+}
+
+.rating-chip b {
+  margin-left: auto;
+  color: #ffd876;
+  font-size: 13px;
+}
+
+.rating-chip.user {
+  border-color: color-mix(in srgb,var(--accent) 55%,#302a37);
+  background: var(--accent-soft);
+}
+
+.rating-chip.user b {
+  color: color-mix(in srgb,var(--accent) 48%,#fff);
+}
+
+.rating-chip.calculated b {
+  color: #70d5b0;
+}
+
+.rating-chip.community {
+  border-color: #43b9d466;
+  background: #43b9d412;
+}
+
+.rating-chip.community b {
+  color: #69d7ef;
+}
+
+.rating-board.compact {
+  gap: 4px;
+}
+
+.rating-board.compact .rating-chip {
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 7px;
+  gap: 4px;
+}
+
+.rating-board.compact .rating-chip small {
+  font-size: 8px;
+}
+
+.rating-board.compact .rating-chip b {
+  font-size: 10px;
+}
+
+.card-rating-board {
+  margin-top: 9px;
+}
+
+.watch-rating-panel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin: -6px 3px 18px;
+  padding: 14px 16px;
+  border: 1px solid #302a37;
+  border-radius: 14px;
+  background: linear-gradient(110deg,var(--accent-soft),#121016 52%);
+}
+
+.watch-rating-panel>.score-picker {
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.watch-rating-panel .eyebrow {
+  display: block;
+  margin-bottom: 9px;
+}
+
+.season-summary-row {
+  grid-template-columns: minmax(0,1fr) auto 24px;
+}
+
+.season-rating-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.season-rating-summary>span {
+  display: inline-flex;
+  gap: 4px;
+  color: #8f8797;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.season-rating-summary>span b {
+  color: #70d5b0;
+}
+
+.episode-card-shell>.episode-entry {
+  padding-right: 108px;
+}
+
+.episode-card-shell>.episode-score-picker {
+  position: absolute;
+  z-index: 4;
+  right: 33px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ratings-page {
+  min-height: calc(100vh - 74px);
+  padding-top: 42px;
+}
+
+.ratings-page .section-head p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ratings-table-head,.rating-anime-row>summary {
+  display: grid;
+  grid-template-columns: minmax(260px,1fr) 82px 135px minmax(260px,1.1fr) 22px;
+  align-items: center;
+  gap: 14px;
+}
+
+.ratings-table-head {
+  padding: 0 18px 9px;
+  color: #77707d;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.ratings-anime-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.rating-anime-row,.rating-season-row {
+  border: 1px solid #2b2630;
+  border-radius: 13px;
+  background: #121015;
+  overflow: hidden;
+}
+
+.rating-anime-row>summary,.rating-season-row>summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.rating-anime-row>summary::-webkit-details-marker,.rating-season-row>summary::-webkit-details-marker {
+  display: none;
+}
+
+.rating-anime-row>summary {
+  min-height: 76px;
+  padding: 10px 17px;
+}
+
+.rating-anime-row>summary:hover {
+  background: #18141c;
+}
+
+.rating-anime-row>summary>strong {
+  color: #ffd876;
+  font-size: 18px;
+}
+
+.rating-anime-row>summary>strong:nth-of-type(2) {
+  color: #70d5b0;
+}
+
+.rating-anime-row summary>em,.rating-season-row summary>em {
+  color: var(--accent);
+  font-style: normal;
+  transition: transform .2s;
+}
+
+.rating-anime-row[open]>summary>em,.rating-season-row[open]>summary>em {
+  transform: rotate(180deg);
+}
+
+.rating-anime-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rating-anime-title img,.rating-anime-title>i {
+  width: 38px;
+  height: 54px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--accent-soft);
+}
+
+.rating-anime-title>i {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.rating-anime-title>span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rating-anime-title b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rating-anime-title small,.rating-anime-row>summary>span:last-of-type {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.rating-anime-details {
+  padding: 15px 17px 18px;
+  border-top: 1px solid #29242e;
+}
+
+.rating-anime-editor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
+}
+
+.rating-season-list,.rating-episode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.rating-season-row {
+  border-radius: 9px;
+  background: #0e0c11;
+}
+
+.rating-season-row>summary {
+  display: grid;
+  grid-template-columns: minmax(110px,1fr) auto auto auto auto 76px 15px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.rating-season-row>summary>span {
+  color: #89818f;
+  font-size: 9px;
+}
+
+.rating-season-row>summary strong {
+  color: #70d5b0;
+}
+
+.rating-episode-list {
+  padding: 0 12px 11px;
+}
+
+.rating-episode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 5px 7px 5px 12px;
+  border-radius: 7px;
+  background: #17141a;
+  color: #aaa3af;
+  font-size: 10px;
+}
+
+.rating-episode-row>small {
+  margin-left: auto;
+  color: #69d7ef;
+  font-size: 9px;
+}
+
+.rating-tree-empty,.ratings-empty {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.rating-tree-empty {
+  padding: 10px 12px;
+}
+
+.ratings-empty {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+}
+
+html[data-color-scheme="light"] .score-picker select,
+html[data-color-scheme="light"] .rating-chip,
+html[data-color-scheme="light"] .rating-anime-row,
+html[data-color-scheme="light"] .rating-season-row,
+html[data-color-scheme="light"] .rating-episode-row {
+  background: #fff;
+  color: #39333d;
+}
+
+@media(max-width:900px) {
+  .ratings-table-head {
+    display: none;
+  }
+  .rating-anime-row>summary {
+    grid-template-columns: minmax(180px,1fr) 55px 80px 18px;
+  }
+  .rating-anime-row>summary>.rating-board {
+    grid-column: 1 / -1;
+  }
+  .rating-season-row>summary {
+    grid-template-columns: 1fr auto auto;
+  }
+  .rating-season-row>summary>span {
+    display: none;
+  }
+  .season-rating-summary>span {
+    display: none;
+  }
+}
+
+@media(max-width:600px) {
+  .watch-rating-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .watch-rating-panel>.score-picker {
+    align-items: flex-start;
+  }
+  .season-summary-row {
+    grid-template-columns: minmax(0,1fr) auto 21px;
+  }
+  .season-rating-summary {
+    gap: 4px;
+  }
+  .episode-card-shell>.episode-entry {
+    padding-right: 96px;
+  }
+  .episode-card-shell>.episode-score-picker {
+    right: 29px;
+  }
+  .ratings-page {
+    padding-top: 24px;
+  }
+  .rating-anime-row>summary {
+    grid-template-columns: minmax(140px,1fr) 45px 18px;
+  }
+  .rating-anime-row>summary>strong:nth-of-type(2) {
+    display: none;
+  }
+  .rating-anime-editor {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

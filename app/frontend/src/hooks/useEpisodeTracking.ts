@@ -2,10 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { Anime, Tracker, Video } from "../lib/types";
+import type { Tracker } from "../lib/types";
+import { fetchTrackingSnapshot } from "../features/tracking/api";
 import { STORAGE_KEYS as K } from "../lib/settings";
 import { writeLocal as write } from "../lib/storage";
-import { collectPlayableEpisodeDates, reconcileTrackedEpisodes } from "../lib/tracking";
+import { reconcileTrackedEpisodes } from "../lib/tracking";
 
 export function useEpisodeTracking({
   tracked,
@@ -29,68 +30,19 @@ export function useEpisodeTracking({
         for (const item of trackedRef.current) {
           if (cancelled) return;
           if (item.lastCheckedAt && Date.now() - item.lastCheckedAt < 240_000) continue;
+          const snapshot = await fetchTrackingSnapshot(item, () => cancelled);
+          if (cancelled || !snapshot || snapshot.successfulRequests === 0) continue;
 
-          const seeds = [...new Set(item.animeIds?.length ? item.animeIds : [item.animeId])];
-          let animeIds = seeds;
-          try {
-            const response = await fetch(`/api/yummy?mode=details&ids=${seeds.join(",")}`);
-            const payload = await response.json();
-            if (response.ok) {
-              const entries = (payload.anime ?? []) as Anime[];
-              animeIds = [
-                ...new Set([
-                  ...seeds,
-                  ...entries.flatMap((entry) => [
-                    entry.anime_id,
-                    ...(entry.viewing_order ?? []).map((related) => related.anime_id),
-                  ]),
-                ]),
-              ].filter(Number.isFinite);
-            }
-          } catch {}
-
-          const episodeDates = new Map<string, number>();
-          const allDubEpisodeDates = new Map<string, number>();
-          let successfulRequests = 0;
-          for (const animeId of animeIds) {
-            if (cancelled) return;
-            try {
-              const response = await fetch(`/api/yummy?mode=videos&id=${animeId}`);
-              const payload = await response.json();
-              if (!response.ok) continue;
-              successfulRequests++;
-              const playableDates = collectPlayableEpisodeDates(
-                animeId,
-                (payload.videos ?? []) as Video[],
-                item.dubs ?? [],
-              );
-              for (const [key, date] of playableDates) {
-                episodeDates.set(key, Math.max(episodeDates.get(key) ?? 0, date));
-              }
-              const allPlayableDates = collectPlayableEpisodeDates(
-                animeId,
-                (payload.videos ?? []) as Video[],
-              );
-              for (const [key, date] of allPlayableDates) {
-                allDubEpisodeDates.set(key, Math.max(allDubEpisodeDates.get(key) ?? 0, date));
-              }
-            } catch {}
-            await new Promise((resolve) => setTimeout(resolve, 220));
-          }
-
-          // Частичный ответ API не должен становиться новой точкой отсчёта:
-          // иначе временно пропавшие серии появятся как «новые» при следующем запросе.
-          if (cancelled || successfulRequests === 0) continue;
           const now = Date.now();
           setTracked((current) => {
             const target = current.find((entry) => entry.animeId === item.animeId);
             if (!target) return current;
             const nextItem = reconcileTrackedEpisodes(
               target,
-              animeIds,
-              episodeDates,
+              snapshot.animeIds,
+              snapshot.episodeDates,
               now,
-              allDubEpisodeDates,
+              snapshot.allDubEpisodeDates,
             );
             const next = current.map((entry) =>
               entry.animeId === item.animeId ? nextItem : entry,

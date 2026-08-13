@@ -1,0 +1,178 @@
+/* User interface personalization. Values of 1 preserve the original design. */
+
+.episode-grid button.watched {
+  border-color: color-mix(in srgb,var(--watched-episode-color,var(--accent)) 58%,#2c2731);
+  background: color-mix(in srgb,var(--watched-episode-color,var(--accent)) 12%,#19161d);
+}
+
+.episode-grid button.watched>b {
+  background: var(--watched-episode-color,var(--accent));
+}
+
+.poster {
+  height: calc(285px * var(--poster-scale,1));
+}
+
+.hero-episode-preview {
+  width: min(calc(540px * var(--preview-scale,1)),100%)!important;
+}
+
+.anime-card h3 {
+  font-size: calc(14px * var(--interface-font-scale,1));
+}
+
+.anime-card>p,.tagline span,.tags span,.card-progress small,.release-status {
+  font-size: calc(11px * var(--interface-font-scale,1));
+}
+
+.collection-card,.watching-list,.history-list,.tracking-list,.player-toolbar {
+  font-size: calc(1em * var(--interface-font-scale,1));
+}
+
+.section-head h2 {
+  font-size: calc(38px * var(--heading-font-scale,1));
+}
+
+.dashboard-hero .hero-content h1 {
+  font-size: calc(clamp(55px,7vw,94px) * var(--heading-font-scale,1));
+}
+
+.dashboard-hero.with-episode-preview .hero-content h1 {
+  font-size: calc(clamp(32px,3vw,48px) * var(--heading-font-scale,1));
+}
+
+.party-host-now {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: min(1240px,calc(100% - 48px));
+  margin: 24px auto 0;
+  padding: 13px 16px;
+  border: 1px solid color-mix(in srgb,var(--accent) 42%,#302838);
+  border-radius: 13px;
+  background: color-mix(in srgb,var(--accent) 8%,#121016);
+  box-shadow: 0 14px 40px #0004;
+}
+
+.party-host-now>span {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 9px;
+  min-width: 0;
+  padding-left: 14px;
+}
+
+.party-host-now>span>i {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #65d695;
+  box-shadow: 0 0 10px #65d695;
+}
+
+.party-host-now small {
+  grid-column: 1/-1;
+  color: var(--accent);
+  font-size: 8px;
+  letter-spacing: .12em;
+}
+
+.party-host-now b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.party-host-now em {
+  color: #918a98;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.party-host-now .primary {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 9px 13px;
+}
+
+@media(max-width:700px){
+  .party-host-now {
+    align-items: stretch;
+    width: calc(100% - 28px);
+    margin-top: 92px;
+    flex-direction: column;
+  }
+  .party-host-now>span {
+    grid-template-columns: 1fr;
+  }
+  .party-host-now .primary {
+    align-self: flex-start;
+  }
+  .watch-party-room-rule {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.watch-heading h1 {
+  font-size: calc(clamp(38px,5vw,70px) * var(--heading-font-scale,1));
+}
+
+.settings-range {
+  display: grid;
+  grid-template-columns: minmax(150px,240px) 46px;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-range input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.settings-range b {
+  text-align: right;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.settings-color-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-color-value input {
+  width: 48px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid #44394f;
+  border-radius: 8px;
+  background: #19151e;
+}
+
+.settings-color-value code {
+  color: #a9a1ae;
+  font-size: 11px;
+}
+
+@media(max-width:800px){
+  .poster {
+    height: calc(250px * var(--poster-scale,1));
+  }
+}
+
+@media(max-width:550px){
+  .poster {
+    height: calc(230px * var(--poster-scale,1));
+  }
+  .settings-range {
+    grid-template-columns: minmax(120px,1fr) 42px;
+  }
+}

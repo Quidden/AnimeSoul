@@ -2,11 +2,39 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+import tempfile
 import unittest
-from backend.app.services.gdrive import merge_storage_documents, merge_snapshot
+from unittest.mock import AsyncMock
+
+from backend.app.services.gdrive import (
+    GoogleDriveService,
+    merge_storage_documents,
+    merge_snapshot,
+)
 
 
 class GDriveMergeTests(unittest.TestCase):
+    def test_merge_ratings_keeps_latest_edit_per_anime(self) -> None:
+        local = {
+            "ratings": {
+                "1": {"anime": 7, "seasons": {}, "episodes": {}, "updatedAt": 10},
+                "2": {"anime": 8, "seasons": {}, "episodes": {}, "updatedAt": 30},
+            }
+        }
+        cloud = {
+            "ratings": {
+                "1": {"anime": 9, "seasons": {}, "episodes": {}, "updatedAt": 20},
+                "3": {"anime": 6, "seasons": {}, "episodes": {}, "updatedAt": 15},
+            }
+        }
+
+        merged = merge_snapshot(local, cloud)
+
+        self.assertEqual(merged["ratings"]["1"]["anime"], 9)
+        self.assertEqual(merged["ratings"]["2"]["anime"], 8)
+        self.assertEqual(merged["ratings"]["3"]["anime"], 6)
+
     def test_merge_favorites_union(self) -> None:
         local_snap = {"favorites": [1, 2, 3]}
         cloud_snap = {"favorites": [3, 4, 5]}
@@ -180,6 +208,52 @@ class GDriveMergeTests(unittest.TestCase):
             self.assertIn(f"state={state}", url)
             self.assertTrue(svc.consume_oauth_state(state))
             self.assertFalse(svc.consume_oauth_state(state))
+
+    def test_saving_client_id_preserves_omitted_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = GoogleDriveService(Path(tmp))
+            service.save_client_credentials("old.apps.googleusercontent.com", "existing-secret")
+
+            service.save_client_credentials("new.apps.googleusercontent.com", None)
+
+            client_id, client_secret = service.get_client_credentials()
+            self.assertEqual(client_id, "new.apps.googleusercontent.com")
+            self.assertEqual(client_secret, "existing-secret")
+
+            service.save_client_credentials("newer.apps.googleusercontent.com", "   ")
+
+            client_id, client_secret = service.get_client_credentials()
+            self.assertEqual(client_id, "newer.apps.googleusercontent.com")
+            self.assertEqual(client_secret, "existing-secret")
+
+
+class GDriveAutosaveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_schedule_write_compares_document_timestamps(self) -> None:
+        """Autosave must not fail when it compares queued and current saves."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            service = GoogleDriveService(Path(tmp))
+            document = {
+                "schemaVersion": 2,
+                "updatedAt": "2026-08-11T10:00:00Z",
+                "profiles": [],
+            }
+            local_reader = AsyncMock(return_value=document)
+            local_writer = AsyncMock()
+            service.read_cloud_storage = AsyncMock(return_value=({}, None))
+            service.write_cloud_storage = AsyncMock(return_value="cloud-file")
+
+            service.schedule_write(
+                document,
+                local_reader=local_reader,
+                local_writer=local_writer,
+            )
+            self.assertIsNotNone(service._sync_task)
+            await service._sync_task
+
+            self.assertEqual(service.last_sync_error, "")
+            service.write_cloud_storage.assert_awaited_once()
+            local_writer.assert_awaited_once()
 
 
 if __name__ == "__main__":

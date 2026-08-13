@@ -1,6 +1,6 @@
 # AnimeSoul — main application
 
-Current release: **0.2.0**.
+Current release: **0.2.1**.
 
 This folder contains the current AnimeSoul implementation. All new feature
 development happens here. The previous Vinext/Electron implementation is
@@ -87,9 +87,11 @@ app/
 |   `-- tests/            # Python regression tests
 |-- frontend/
 |   `-- src/
-|       |-- components/   # Player, settings, cards and controls
-|       |-- hooks/        # Tracking and watch-party state
-|       |-- lib/          # Types, migrations and domain helpers
+|       |-- pages/        # Screen-level composition
+|       |-- features/     # Catalog, player, settings, storage and party modules
+|       |-- components/   # Shared UI and orchestration shells
+|       |-- hooks/        # Cross-feature effects and subscriptions
+|       |-- lib/          # Shared contracts, migrations and typed events
 |       `-- styles/       # Base, library and player styles
 |-- tools/
 |   `-- transfer_saves.py # Lossless transfer in both directions
@@ -100,6 +102,10 @@ app/
 Comments in source code are intentionally written in English. They explain
 architecture and non-obvious behavior, while clear names document ordinary
 code.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for dependency rules and data flows, and
+[docs/REFACTORING_RECOMMENDATIONS.md](docs/REFACTORING_RECOMMENDATIONS.md) for
+the completed work and the next safe extraction phases.
 
 ## Feature coverage
 
@@ -117,6 +123,8 @@ desktop runtime, installer and Windows shortcuts.
 ```powershell
 cd app
 .\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
+npm --prefix frontend run typecheck
+npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
