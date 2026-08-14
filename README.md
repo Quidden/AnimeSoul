@@ -1,28 +1,49 @@
 # AnimeSoul
 
-The Python + React implementation is now the main AnimeSoul application.
+AnimeSoul — локальное приложение для каталога, просмотра и ведения личной
+аниме-библиотеки. Актуальная реализация находится в [`app/`](app/): интерфейс
+на React/TypeScript работает с локальным FastAPI-сервером и открывается в
+браузере либо в окне PyWebView.
 
-| Folder | Purpose | Stack |
+| Каталог | Статус | Назначение |
 | --- | --- | --- |
-| [`app/`](app/) | Current application for browser and desktop use | React, TypeScript, Vite, Python, FastAPI, PyWebView |
-| [`legacy-old-stack/`](legacy-old-stack/) | Archived previous implementation kept for reference and save migration | React, TypeScript, Vinext, Electron |
+| [`app/`](app/) | актуальный | Python + FastAPI + React + Vite + PyWebView |
+| [`legacy-old-stack/`](legacy-old-stack/) | архив | прежний Vinext/Electron-стек, оставленный для миграции сохранений и справки |
 
-For normal use, open [`app/README.md`](app/README.md) or run the root
-[`Start AnimeSoul.bat`](Start%20AnimeSoul.bat). New development belongs in
-`app/`; the legacy folder should receive only compatibility or security fixes.
+Новая функциональность разрабатывается только в `app/`. Изменять
+`legacy-old-stack/` следует лишь ради совместимости или исправления критической
+уязвимости старой версии.
 
-Contributor documentation: [`app/ARCHITECTURE.md`](app/ARCHITECTURE.md) explains
-module boundaries and data flows; the incremental roadmap is in
-[`app/docs/REFACTORING_RECOMMENDATIONS.md`](app/docs/REFACTORING_RECOMMENDATIONS.md).
+## Запуск
 
-The Git repository metadata stays at this root, while application code is kept
-inside the two version folders.
+В Windows запустите [`Start AnimeSoul.bat`](Start%20AnimeSoul.bat). Скрипт
+передаёт управление актуальному приложению, устанавливает недостающие
+зависимости, собирает интерфейс и запускает сохранённый режим.
 
-## Moving saves between implementations
+Для исходной сборки нужны Python 3.11+, Node.js 22+ и личный **Public token**
+YummyAnime. Private token приложению не нужен и не должен попадать в конфиг.
 
-The two versions use the same profile schema. A single profile can be exported
-and imported through the AnimeSoul settings UI. The full save, including every
-profile, can be copied safely in either direction with automatic backups:
+Инструкции по запуску, разработке и проверкам находятся в
+[`app/README.md`](app/README.md).
+
+## Документация
+
+Единый индекс: [`app/docs/README.md`](app/docs/README.md).
+
+- [`app/docs/TECHNICAL_DOCUMENTATION.md`](app/docs/TECHNICAL_DOCUMENTATION.md) — технический обзор и границы системы;
+- [`app/docs/API_REFERENCE.md`](app/docs/API_REFERENCE.md) — все внутренние маршруты, поля запросов/ответов и используемые поля внешнего API;
+- [`app/docs/ENTRY_POINTS_AND_FLOWS.md`](app/docs/ENTRY_POINTS_AND_FLOWS.md) — точки входа/выхода и цепочки функций;
+- [`app/docs/PROJECT_MAP.md`](app/docs/PROJECT_MAP.md) — назначение каталогов и файлов;
+- [`app/docs/DATA_MODEL.md`](app/docs/DATA_MODEL.md) — схема сохранения, локальное состояние и миграции;
+- [`app/docs/STYLES.md`](app/docs/STYLES.md) — каскад CSS, токены, владельцы стилей и динамическое оформление.
+
+Документы внутри `legacy-old-stack/` описывают только архивную реализацию и не
+являются руководством по текущему коду.
+
+## Перенос сохранений
+
+Один профиль переносится через экспорт/импорт в настройках. Полный документ со
+всеми профилями переносится утилитой после закрытия обеих версий:
 
 ```powershell
 cd app
@@ -30,10 +51,5 @@ cd app
 .\.venv\Scripts\python.exe -m tools.transfer_saves to-legacy
 ```
 
-Close both versions first and run only the direction you need. Full details and
-recovery steps are in
-[`app/SAVE_COMPATIBILITY.md`](app/SAVE_COMPATIBILITY.md).
-
-Both frontends preserve fields they do not recognize during normal automatic
-saves. This allows a save created by a newer implementation to be opened in the
-other implementation without silently deleting newer settings.
+Утилита проверяет источник, создаёт резервную копию существующего назначения и
+заменяет файл атомарно. Подробности: [`app/SAVE_COMPATIBILITY.md`](app/SAVE_COMPATIBILITY.md).

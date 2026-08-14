@@ -1,55 +1,49 @@
-# AnimeSoul — main application
+# AnimeSoul — актуальное приложение
 
-Current release: **0.2.1**.
+Текущая версия: **0.2.1**.
 
-This folder contains the current AnimeSoul implementation. All new feature
-development happens here. The previous Vinext/Electron implementation is
-archived in `legacy-old-stack/` for reference and save migration.
+В этом каталоге находится поддерживаемая реализация AnimeSoul. React 19 и Vite
+отвечают за интерфейс, FastAPI — за локальное хранилище и интеграции, PyWebView
+— за необязательное desktop-окно. Браузерный и desktop-режимы обращаются к
+одному серверу и одному файлу сохранения.
 
-The current feature set is ported without changing the user data model:
+## Возможности
 
-- React 19, TypeScript and Vite render the catalog, library, player, settings
-  and statistics.
-- FastAPI proxies YummyAnime, stores profiles and serves watch-party rooms.
-- PyWebView provides an optional native desktop window.
-- The browser and desktop modes use the same FastAPI process and the same save.
-- The save schema remains compatible with the legacy implementation.
+- каталог, поиск с исправлением раскладки и псевдонимов, фильтры и группировка франшиз;
+- карточка тайтла, сезоны, серии, озвучки, источники и продолжение просмотра;
+- прогресс, ручные отметки, пересмотры, история и статистика;
+- избранное, пользовательские папки, заметки и профили;
+- отслеживание новых серий по всей франшизе и выбранным озвучкам;
+- личные оценки и анонимные агрегированные оценки текущего сервера AnimeSoul;
+- комнаты совместного просмотра;
+- резервное сохранение и синхронизация через Google Drive;
+- темы, размеры элементов и настройки поведения плеера.
 
-## Quick launch on Windows
+Метаданные и iframe-ссылки предоставляет внешний API. Доступность видео,
+таймкодов и кадров зависит от ответа источника.
 
-Use one of these files:
+## Запуск в Windows
 
-- `Start AnimeSoul.bat` — starts the mode saved during setup.
-- `Start AnimeSoul in Browser.bat` — always opens a browser.
-- `Start AnimeSoul Desktop.bat` — always opens the desktop window.
-- `Configure AnimeSoul.bat` — changes the port, Public token and default mode.
+| Файл | Назначение |
+| --- | --- |
+| `Start AnimeSoul.bat` | запустить режим из локальной конфигурации |
+| `Start AnimeSoul in Browser.bat` | принудительно открыть браузер |
+| `Start AnimeSoul Desktop.bat` | принудительно открыть desktop-окно |
+| `Configure AnimeSoul.bat` | повторно настроить порт, Public token и режим |
 
-In desktop mode, hold **Ctrl** and rotate the mouse wheel to scale the complete
-interface from 50% to 200%. Press **Ctrl+0** to return to 100%. The selected
-scale is stored locally and restored on the next desktop launch.
+Для запуска из исходников нужны Python 3.11+, Node.js 22+ и доступ к интернету
+при первой установке зависимостей. Нужен личный **Public token** YummyAnime;
+Private token использовать нельзя.
 
-Prerequisites: Python 3.11+, Node.js 22+ and internet access during the first
-dependency installation.
+Исходный запуск хранит настройки в игнорируемом файле
+`app/animesoul.python.json`. Установленная сборка использует
+`%LOCALAPPDATA%\AnimeSoul\animesoul.python.json`, а пользовательские данные —
+подкаталог `data` рядом с этим конфигом.
 
-The first launch asks for a local port, your own YummyAnime **Public token** and
-the preferred mode. Settings are stored in ignored local file
-`app/animesoul.python.json`. Never enter a Private token.
+В desktop-режиме `Ctrl` + колёсико изменяет масштаб всего интерфейса от 50% до
+200%, `Ctrl+0` возвращает 100%. Значение хранится только на текущем устройстве.
 
-## Save compatibility
-
-Both implementations use schema version 3. Unknown fields are preserved while
-loading, migrating, automatically saving or copying a save.
-
-- For one profile, use **Export config** in one version and **Import config** in
-  the other version.
-- For all profiles, progress and settings, use the transfer tool described in
-  [SAVE_COMPATIBILITY.md](SAVE_COMPATIBILITY.md).
-- On its first run, the main version imports the legacy save if its own
-  save does not exist yet. Existing main-app data is never overwritten silently.
-- Older builds add defaults for fields they understand while retaining fields
-  introduced by the other implementation.
-
-## Development
+## Разработка
 
 Backend:
 
@@ -60,7 +54,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
 ```
 
-Frontend in another terminal:
+Frontend в другом терминале:
 
 ```powershell
 cd app\frontend
@@ -68,57 +62,21 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. Vite forwards API, storage and watch-party calls
-to FastAPI. A packaged frontend is built and served by FastAPI:
+Откройте `http://127.0.0.1:5173`. Vite проксирует `/api`, `/watch-party` и
+`/ws` на `http://127.0.0.1:8000`. Production-сборку раздаёт FastAPI:
 
 ```powershell
 npm --prefix frontend run build
 .\.venv\Scripts\python.exe run.py --mode browser
 ```
 
-## Project map
+Аргументы `run.py`:
 
-```text
-app/
-|-- backend/
-|   |-- app/api/          # Thin HTTP routes
-|   |-- app/services/     # Storage, YummyAnime and watch-party logic
-|   |-- app/config.py     # Environment and filesystem configuration
-|   `-- tests/            # Python regression tests
-|-- frontend/
-|   `-- src/
-|       |-- pages/        # Screen-level composition
-|       |-- features/     # Catalog, player, settings, storage and party modules
-|       |-- components/   # Shared UI and orchestration shells
-|       |-- hooks/        # Cross-feature effects and subscriptions
-|       |-- lib/          # Shared contracts, migrations and typed events
-|       `-- styles/       # Base, library and player styles
-|-- tools/
-|   `-- transfer_saves.py # Lossless transfer in both directions
-|-- run.py                # Browser and desktop launcher
-`-- Start ... .bat        # One-click Windows entry points
-```
+- `--mode browser|desktop` — переопределить режим на один запуск;
+- `--configure` — повторить консольную настройку;
+- `--config <path>` — использовать явный файл машинной конфигурации.
 
-Comments in source code are intentionally written in English. They explain
-architecture and non-obvious behavior, while clear names document ordinary
-code.
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for dependency rules and data flows, and
-[docs/REFACTORING_RECOMMENDATIONS.md](docs/REFACTORING_RECOMMENDATIONS.md) for
-the completed work and the next safe extraction phases.
-
-## Feature coverage
-
-The React application includes catalog search and filters, franchise grouping,
-anime pages, available dubs and sources, progress per episode, resume playback,
-opening and ending skip, favorites, custom folders, history, statistics,
-profiles, themes, release schedules, new-episode tracking, episode previews,
-manual watched marks and synchronized watch-party controls.
-
-The same AnimeSoul `AS` artwork is used for the web favicon and header, launcher,
-desktop runtime, installer and Windows shortcuts.
-
-## Verification
+## Проверка
 
 ```powershell
 cd app
@@ -128,5 +86,28 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
-Huge thanks to the YummyAnime developers for making their API available.
-AnimeSoul could not exist in its current form without their work.
+## Документация для разработчика
+
+Начните с [`docs/README.md`](docs/README.md). Там собраны ссылки на:
+
+- архитектуру и карту модулей;
+- точки входа/выхода и цепочки функций;
+- полный справочник внутренних API и реально используемых полей YummyAnime;
+- формат сохранения и правила Google Drive merge;
+- структуру CSS, порядок импорта и динамические переменные;
+- план дальнейшего рефакторинга.
+
+OpenAPI текущего локального backend доступен после запуска по `/docs`, а схема
+— по `/openapi.json`. Ручной справочник фиксирует дополнительные ограничения и
+связи с frontend, которых нет в автоматически созданной схеме.
+
+## Совместимость данных
+
+Текущая схема сохранения — **3**. Frontend добавляет значения по умолчанию для
+известных полей и сохраняет неизвестные поля документа, профиля и снимка.
+Backend проверяет оболочку и записывает JSON атомарно. До изменения формата
+прочитайте [`SAVE_COMPATIBILITY.md`](SAVE_COMPATIBILITY.md) и
+[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
+
+Спасибо разработчикам YummyAnime за доступный API, на котором основаны каталог
+и воспроизведение AnimeSoul.

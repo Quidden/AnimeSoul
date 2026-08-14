@@ -1,192 +1,244 @@
-# AnimeSoul: refactoring roadmap
+# План дальнейшего рефакторинга AnimeSoul
 
-This document describes the current Python + React application in `app/` and
-the safe path for continuing its refactor. It is deliberately implementation
-oriented: a contributor should be able to pick one phase, understand its
-boundary and verify that behavior did not change.
+Документ относится к актуальному `app/` и описывает безопасные границы
+следующих изменений. Рефакторинг не должен незаметно менять пользовательское
+поведение, сетевые контракты или формат сохранения.
 
-## Non-negotiable compatibility rules
+## Неприкосновенные правила
 
-1. The active application is `app/`. Do not add new product behavior to
-   `legacy-old-stack/` and do not delete the archive as part of refactoring.
-2. Keep storage schema version 3 readable in both implementations. Unknown
-   profile fields must survive migration, local saves, cloud synchronization
-   and import/export.
-3. Preserve the existing HTTP and WebSocket contracts until all callers and
-   packaged desktop builds have migrated.
-4. A refactor must not silently change progress, new-episode tracking,
-   watch-party synchronization or Google Drive merge rules.
-5. Do not change the product version merely because code was reorganized.
+1. Новая продуктовая логика добавляется в `app/`, не в `legacy-old-stack/`.
+2. Schema 3 остаётся читаемой обеими реализациями. Неизвестные поля должны
+   переживать migration, save, cloud merge и import/export.
+3. HTTP/WS contract меняется только вместе со всеми callers, tests и
+   [`API_REFERENCE.md`](API_REFERENCE.md).
+4. Нельзя молча менять progress, rewatch, tracking, Watch Party или Drive merge
+   под видом перемещения кода.
+5. Перемещение/переименование не меняет product version и schema version.
+6. Порядок CSS imports сохраняется, пока визуальный diff не доказал
+   эквивалентность.
 
-## Completed in the current refactor
+## Уже выполненные границы
 
-### Frontend feature boundaries
+### Frontend
 
-Network calls and domain rules have been removed from the largest UI files:
+- Transport каталога вынесен в `features/catalog/api.ts`.
+- Catalog request/filter state находится в `useCatalogController`.
+- Franchise/card presentation находится в `useCatalogPresentation`.
+- Tracking transport находится в `features/tracking/api.ts`.
+- Watch Party transport/types отделены в `features/watch-party/`.
+- Library/history/statistics calculations находятся в чистых selectors.
+- Profile document construction/resolution находится в
+  `features/storage/profileDocument.ts`.
+- Profile lifecycle, migration, mirror и persistence находятся в
+  `features/storage/useProfileStorage.ts`.
+- Ratings transport/retry находятся в `features/ratings/`.
+- Settings разбиты на catalog, common row, appearance, profiles и cloud.
+- Player presentation частично разбит на toolbar, season list, schedule,
+  metadata и Watch Party panel.
+- Home, catalog, ratings, statistics и folder имеют page boundaries.
+- Typed browser events определены в `lib/events.ts`.
+- CSS base разделён на ordered `base-*` modules; feature bundles сохранены.
 
-- `features/catalog/api.ts` owns catalog, details, video and schedule requests.
-- `features/tracking/api.ts` owns tracking refresh requests.
-- `features/watch-party/api.ts` and `types.ts` own the room protocol.
-- `features/library/selectors.ts` calculates history, watching lists, folder
-  progress and statistics without rendering UI.
-- `features/storage/profileDocument.ts` builds and resolves versioned profile
-  documents while preserving unknown fields.
-- `features/settings/` contains the settings catalog, reusable setting row,
-  Google Drive state, cloud-specific panels, appearance controls and profile
-  import/export controls.
-- `features/player/` contains the toolbar, seasons, release schedule, metadata
-  and watch-party presentation.
-- `features/player/useResumePreview.ts` resolves the current resume card;
-  `activeWatchActions.ts` owns progress/tracking mutations for the open title.
-- `features/catalog/useCatalogController.ts` and
-  `useCatalogPresentation.ts` separate request state from derived card data.
-- `features/storage/useProfileStorage.ts` owns profile persistence and transfer.
-- `pages/HomePage.tsx`, `pages/CatalogPage.tsx`, `pages/StatisticsPage.tsx` and
-  `pages/FolderView.tsx` are real page modules. Home sections live in
-  `pages/home/` instead of `App.tsx`.
-- Typed application events live in `lib/events.ts`; API and save status effects
-  live in dedicated hooks.
-- `styles/base.css` is now an ordered manifest for thematic `base-*.css`
-  modules. The original cascade is preserved without one giant stylesheet.
+`App.tsx`, `Player.tsx` и `SettingsCenter.tsx` остаются orchestration shells.
+Это осознанно: их следует уменьшать по одной проверяемой ответственности.
 
-`App.tsx`, `Player.tsx` and `SettingsCenter.tsx` remain orchestration shells.
-They are intentionally still present so this refactor can be reviewed and
-tested in small steps rather than replacing all state management at once.
+### Backend
 
-### Backend isolation
+- Routes являются transport adapters.
+- External/file/room logic находится в services.
+- Drive merge выделен в pure `gdrive_merge.py` и тестируется без сети.
+- Community ratings отделены в SQLite store и aggregate API.
+- Runtime instance ownership отделён от launcher/runtime UI.
 
-- FastAPI routes remain transport adapters.
-- Services own I/O and external integrations.
-- Pure Google Drive merge rules now live in `services/gdrive_merge.py`; they can
-  be tested without OAuth, HTTP or filesystem access.
-
-## Target dependency direction
+## Целевое направление
 
 ```text
-pages/components -> feature hooks -> feature API/domain -> lib contracts
-FastAPI routes   -> application services -> external API/filesystem
+pages/components -> feature hooks/controllers -> feature domain/API -> lib contracts
+FastAPI routes   -> use-case coordination      -> services/pure policy -> I/O
 ```
 
-Dependencies must point inward. A pure selector must never import React; a UI
-component must not construct an upstream YummyAnime URL; an API route must not
-implement merge policy.
+Не нужна абстракция ради симметрии. Новый слой оправдан, если он убирает
+несколько связанных решений из UI/router и даёт самостоятельный тест.
 
-## Remaining phases
+## Этап 1: завершить anime detail boundary
 
-### Phase 1: finish anime-detail extraction
+Сейчас `Watch` и часть detail composition остаются большим экраном. Нужно
+выделить typed page/view model, сохранив lifetime iframe в player feature.
 
-The home layout has been extracted. Move the remaining anime-detail
-composition behind a typed page boundary while keeping routing in `App.tsx`
-and player lifetime in the player feature.
+Кандидаты:
 
-Acceptance criteria:
+- family/load state;
+- detail metadata и rating view model;
+- folder/favorite/tracking actions;
+- route/back intent.
 
-- page modules receive typed view models and callbacks;
-- no page directly reads or writes the storage document;
-- catalog and resume regression tests keep passing;
-- `App.tsx` becomes an application coordinator, not a markup container.
+Критерии:
 
-### Phase 2: split player orchestration
+- page не читает `StorageDocument` напрямую;
+- `App.tsx` передаёт model/actions, а не десятки взаимозависимых state setters;
+- открытие card/resume/new episode остаётся различимым;
+- catalog/resume tests проходят без изменения.
 
-Keep `Player.tsx` as the owner of player lifetime, but extract:
+## Этап 2: разделить player orchestration
 
-- selection state for season, episode, dub and source;
-- resume and progress synchronization;
-- fullscreen episode transition policy;
-- preview-frame loading;
-- embedded-player message adapter.
+`Player.tsx` должен остаться владельцем iframe lifetime, но из него можно
+выделить hooks:
 
-Each hook should expose a small typed interface. Avoid one global player
-context: it would hide dependencies and make watch-party feedback loops harder
-to reason about.
+- selection season/episode/dub/source;
+- family video loading/retry/normalization;
+- resume и progress commit;
+- auto-next и fullscreen transition policy;
+- Kodik message adapter;
+- preview loading/positioning.
 
-Acceptance criteria:
+Не создавайте один глобальный player context: скрытые зависимости усложнят
+защиту от Watch Party feedback loop.
 
-- manually selecting an episode and automatic next episode remain distinct;
-- marked-as-watched episodes are still replayable;
-- resume restores both episode identity and timestamp;
-- fullscreen and watch-party tests cover transitions.
+Критерии:
 
-### Phase 3: finish settings orchestration
+- manual selection и auto-next остаются разными командами;
+- watched episode можно воспроизвести повторно;
+- resume возвращает правильный origin anime/episode и timestamp;
+- remote party command не публикуется обратно;
+- provider без postMessage по-прежнему встраивается.
 
-`SettingsCenter.tsx` now delegates appearance, profiles and Google Drive to
-feature components. Continue until it only owns modal navigation, search,
-watch-party configuration and reset. Keep setting metadata in
-`settingsCatalog.ts`.
+## Этап 3: завершить SettingsCenter
 
-Acceptance criteria:
+`SettingsCenter.tsx` уже делегирует appearance, profiles и Drive. Оставить в
+shell только modal navigation, search и composition, вынеся:
 
-- every setting has one canonical label, description and search entry;
-- cloud controls render only from the Google Drive feature state;
-- closing a modal cannot click controls behind the overlay;
-- reset behavior is covered by a migration or component test.
+- watching/player setting groups;
+- Watch Party settings/guide;
+- reset command;
+- focus/overlay lifecycle при необходимости в modal hook.
 
-### Phase 4: formalize persistence commands
+Критерии:
 
-Replace scattered snapshot mutations with named commands such as
-`markEpisodeWatched`, `updateEpisodeProgress`, `removeFavorite` and
-`updateTrackingBaseline`. Commands return the next immutable snapshot; a single
-persistence boundary writes it.
+- одна canonical label/description/search entry на настройку;
+- persisted setting имеет owner в `lib/settings.ts`/data docs;
+- закрытие modal не кликает фоновые элементы;
+- cloud UI рендерится только из `useGoogleDriveSettings` state;
+- reset покрыт migration/component test.
 
-Acceptance criteria:
+## Этап 4: формализовать persistence commands
 
-- one user action produces one save request;
-- all commands preserve unknown snapshot fields;
-- Google Drive merge tests cover concurrent progress and settings changes;
-- export/import remains byte-safe for Unicode names and notes.
+Заменить разбросанные state mutations именованными pure commands:
 
-### Phase 5: backend application layer
-
-Introduce small use-case functions between routes and infrastructure only where
-a route currently coordinates multiple services. Do not add abstract base
-classes merely for symmetry.
-
-Good candidates are cloud restore, tracking refresh and watch-party host
-transfer. Keep simple health and proxy endpoints simple.
-
-### Phase 6: CSS ownership (initial split complete)
-
-The monolithic file has been split into ordered responsibility modules. Future
-work may colocate narrowly feature-specific selectors with their components.
-Keep design tokens, resets and shared primitives in `base-core.css`; keep
-`base.css` as the stable import manifest.
-
-Acceptance criteria:
-
-- each feature has one obvious stylesheet owner;
-- no new `!important` without an explanation;
-- desktop scaling and responsive layouts are visually checked after moves.
-
-## How to implement one refactor slice
-
-1. Identify one behavior and its existing tests.
-2. Extract pure types and rules first.
-3. Move side effects into an API module or hook.
-4. Leave a small adapter at the old call site.
-5. Run all validation commands before the next slice.
-6. Add a regression test when the old behavior was not covered.
-
-Avoid mixing a feature change with file movement. If a bug is discovered while
-extracting code, first add a failing test, then fix it in a separate reviewable
-change.
-
-## Required validation
-
-From `app/frontend`:
-
-```powershell
-npm run typecheck
-npm test
-npm run build
+```text
+markEpisodeWatched
+updateEpisodeProgress
+removeFavorite
+deleteFolder / restoreFolder
+updateTrackingBaseline
+setPersonalRating
 ```
 
-From `app`:
+Command принимает snapshot/domain state и возвращает новый объект. Одна
+persistence boundary пишет документ.
+
+Критерии:
+
+- одно пользовательское действие создаёт один итоговый save;
+- unknown snapshot fields не теряются;
+- Unicode notes/names проходят round-trip;
+- concurrent progress/settings cloud cases покрыты tests.
+
+## Этап 5: backend use cases только для сложной координации
+
+Простые health/proxy routes оставлять простыми. Use-case функция уместна там,
+где route координирует несколько ресурсов:
+
+- cloud restore/merge/upload;
+- initial OAuth cloud inspection;
+- Watch Party host transfer;
+- при появлении server-side tracking — его refresh.
+
+Критерии:
+
+- route разбирает request и переводит errors;
+- use case описывает последовательность;
+- service владеет I/O;
+- pure policy не знает FastAPI/httpx/filesystem.
+
+## Этап 6: усилить CSS ownership
+
+Первичное разбиение выполнено, но часть одинаковых selectors распределена между
+`base-*` modules и поздними feature bundles. Продолжать постепенно по одному UI.
+
+Правила:
+
+- tokens/reset/primitives — `base-core.css`;
+- settings/cloud/ratings/player/home selectors — у feature owner;
+- `base.css` остаётся только manifest;
+- новый state class scope-ится feature parent;
+- существующий `!important` удаляется только после поиска всех overrides.
+
+Критерии:
+
+- для изменяемой feature один очевидный owner;
+- import order и light theme не ломаются;
+- responsive, reduced-motion, touch и desktop zoom проверены;
+- [`STYLES.md`](STYLES.md) обновлён одновременно.
+
+## Этап 7: усилить контракты API
+
+Некоторые routes принимают свободный `dict`, особенно Watch Party и storage.
+После стабилизации callers можно добавить Pydantic models без изменения JSON.
+
+Приоритет:
+
+1. request/response models для Watch Party;
+2. ограниченный storage envelope model с `extra=allow`;
+3. typed Yummy proxy discriminated responses;
+4. OpenAPI examples и stable error models.
+
+Критерии:
+
+- extra/unknown storage fields разрешены;
+- legacy caller contract не отклоняется;
+- generated `/openapi.json` согласован с ручным справочником;
+- validation status и error body покрыты tests.
+
+## Как выполнить один безопасный срез
+
+1. Зафиксировать текущее поведение test или небольшой characterization fixture.
+2. Выбрать один owner и одну ответственность.
+3. Переместить pure logic первой, transport/lifecycle — отдельным шагом.
+4. Не менять одновременно формат данных, UI и route contract.
+5. Запустить точечные tests, затем полный набор.
+6. Обновить `PROJECT_MAP`, flows/API/data/styles по затронутой границе.
+7. Проверить diff: refactor не должен содержать случайное форматирование
+   несвязанных файлов.
+
+## Обязательная проверка
 
 ```powershell
+cd app
 .\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
-.\.venv\Scripts\python.exe -m compileall backend/app
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
-Finally run `git diff --check` and review the complete diff. Packaging and a
-manual browser/desktop smoke test are required before publishing a release, but
-not for every internal extraction commit.
+Для затронутой подсистемы дополнительно:
+
+| Подсистема | Проверить вручную/тестом |
+| --- | --- |
+| storage | import/export, profile switch, unknown fields, backend 404 bootstrap |
+| progress | resume, manual toggle rollback, rewatch, franchise origin |
+| tracking | selected/all dubs, partial API failure, acknowledge |
+| party | host/shared, follow/free, transfer, stale participant, protocol mismatch |
+| Drive | local/cloud/merge/anime_only, deletion, timestamp, queue coalescing |
+| ratings | score removal/offline tombstone, aggregate isolation, cookie |
+| CSS | dark/light, 1440/960/600, touch hover, desktop 50/100/200% |
+
+## Документация как acceptance criterion
+
+Рефакторинг считается завершённым только когда документация по-прежнему
+указывает фактического владельца:
+
+- файл переехал — `PROJECT_MAP.md`;
+- цепочка изменилась — `ENTRY_POINTS_AND_FLOWS.md`;
+- contract изменился — `API_REFERENCE.md`;
+- данные изменились — `DATA_MODEL.md`;
+- cascade/owner изменился — `STYLES.md`.

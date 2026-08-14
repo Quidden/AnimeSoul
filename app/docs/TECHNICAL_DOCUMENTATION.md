@@ -1,410 +1,285 @@
-# Полная техническая документация AnimeSoul
+# Техническая документация AnimeSoul
 
-Документ содержит исчерпывающее описание архитектуры, точек входа и выхода, цепочек функций, ответственности модулей, сетевых вызовов, переменных и структуры проекта AnimeSoul.
+Актуально для версии **0.2.1**, реализация `app/`. Документ является обзорной
+точкой входа; детальные контракты вынесены в специализированные справочники,
+чтобы поля API, данные и CSS имели по одному владельцу документации.
 
----
+## Навигация
 
-## 1. Карта структуры проекта и расположение файлов
+| Нужно узнать | Документ |
+| --- | --- |
+| что и где находится | [`PROJECT_MAP.md`](PROJECT_MAP.md) |
+| как устроены слои и зависимости | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| откуда начинается и где заканчивается выполнение | [`ENTRY_POINTS_AND_FLOWS.md`](ENTRY_POINTS_AND_FLOWS.md) |
+| какие функции вызывают друг друга | [`ENTRY_POINTS_AND_FLOWS.md`](ENTRY_POINTS_AND_FLOWS.md) |
+| все REST/WS поля | [`API_REFERENCE.md`](API_REFERENCE.md) |
+| какие поля YummyAnime реально используются | раздел upstream fields в [`API_REFERENCE.md`](API_REFERENCE.md#реально-используемые-поля-yummyanime) |
+| схема JSON, progress, settings и localStorage | [`DATA_MODEL.md`](DATA_MODEL.md) |
+| где лежат и как применяются стили | [`STYLES.md`](STYLES.md) |
+| как работает OAuth/Drive merge | [`GDRIVE_SYNC.md`](GDRIVE_SYNC.md) |
+| как переносить данные в legacy и обратно | [`../SAVE_COMPATIBILITY.md`](../SAVE_COMPATIBILITY.md) |
+| что осталось рефакторить | [`REFACTORING_RECOMMENDATIONS.md`](REFACTORING_RECOMMENDATIONS.md) |
+
+## Назначение системы
+
+AnimeSoul объединяет четыре локальные ответственности:
+
+1. React SPA показывает каталог, библиотеку, плеер, оценки, статистику и
+   настройки.
+2. FastAPI скрывает upstream token, проксирует YummyAnime и обслуживает
+   внутренние функции.
+3. Локальные сервисы сохраняют профили, общие оценки и комнаты просмотра.
+4. Runtime/launcher поднимает тот же backend для браузера или PyWebView.
+
+Внешние источники:
+
+- YummyAnime — каталог, метаданные, видео, трейлеры и расписание;
+- Google OAuth/Drive — optional cloud copy;
+- iframe-провайдеры из ответа YummyAnime — воспроизведение.
+
+AnimeSoul не хранит видеофайлы и не выдаёт Private token.
+
+## Технологии
+
+| Слой | Стек | Корневая точка |
+| --- | --- | --- |
+| runtime | Python, Uvicorn, PyWebView | `app/run.py` |
+| launcher | Python, PyWebView bridge | `app/launcher.py` |
+| backend | FastAPI, httpx, SQLite | `app/backend/app/main.py` |
+| frontend | React 19, TypeScript 5.9, Vite 8 | `app/frontend/src/main.tsx` |
+| данные | JSON schema 3, localStorage mirror | `features/storage`, `lib/storage.ts` |
+| стили | глобальный modular CSS | `src/globals.css` |
+| packaging | PyInstaller, Inno Setup | `app/packaging/` |
+
+## Системная схема
+
+```mermaid
+flowchart TD
+    Start["BAT / Launcher / run.py"] --> Api["FastAPI"]
+    Start --> Window["Browser / PyWebView"]
+    Api --> Spa["React production bundle"]
+    Window --> Spa
+    Spa --> Routes["Internal REST / optional WS"]
+    Routes --> Services["Backend services"]
+    Services --> Save["animesoul-storage.json"]
+    Services --> Ratings["community-ratings.sqlite3"]
+    Services --> Rooms["Watch Party memory"]
+    Services --> Yummy["api.yani.tv"]
+    Services --> Drive["Google OAuth / Drive"]
+```
+
+В dev-режиме React bundle отдаёт Vite 5173, а `/api`, `/watch-party`, `/ws`
+проксируются на FastAPI 8000. В production FastAPI обслуживает и API, и SPA.
+
+## Архитектурные слои
+
+### Frontend
 
 ```text
-AnimeSoul/
-├── Start AnimeSoul.bat                  # Главный пакетный скрипт запуска для Windows
-├── app/                                 # Основная директория приложения
-│   ├── ARCHITECTURE.md                  # Краткое руководство по архитектурным слоям
-│   ├── SAVE_COMPATIBILITY.md            # Спецификация обратной совместимости сохранений
-│   ├── Start AnimeSoul Desktop.bat      # Запуск в режиме Desktop WebView
-│   ├── Start AnimeSoul in Browser.bat   # Запуск в режиме браузера
-│   ├── Configure AnimeSoul.bat          # Скрипт переконфигурации ключа и порта
-│   ├── run.py                           # Точка входа Python: CLI, сервер Uvicorn и PyWebView
-│   ├── launcher.py                      # GUI-лаунчер на Tkinter для Windows-сборки
-│   ├── animesoul.python.json            # Локальный файл конфигурации порта и токенов
-│   ├── backend/                         # Backend-сервис на FastAPI
-│   │   ├── app/
-│   │   │   ├── main.py                  # Главный модуль FastAPI, подключение роутеров и static
-│   │   │   ├── config.py                # Центр настроек (переменные окружения и JSON-конфиг)
-│   │   │   ├── api/                     # Слой контроллеров (FastAPI Routers)
-│   │   │   │   ├── yummy.py             # Прокси-эндпоинт к YummyAnime API
-│   │   │   │   ├── storage.py           # Атомарное чтение и запись локальных сохранений
-│   │   │   │   ├── watch_party.py       # REST и WebSocket эндпоинты совместного просмотра
-│   │   │   │   └── gdrive.py            # OAuth2 и облачная синхронизация Google Drive
-│   │   │   └── services/                # Слой бизнес-логики и внешних интеграций
-│   │   │       ├── yummy.py             # Клиент HTTPX для YummyAnime API c нормализацией URL
-│   │   │       ├── storage.py           # Атомарное JSON-сохранение с блокировками (asyncio.Lock)
-│   │   │       ├── watch_party.py       # Управление комнатами, участниками и плеером в памяти
-│   │   │       └── gdrive.py            # Google OAuth2, Google Drive REST v3 API и слияние сохранений
-│   ├── frontend/                        # Frontend-приложение на React + TypeScript (Vite)
-│   │   ├── index.html                   # HTML-шаблон Single Page Application
-│   │   └── src/
-│   │       ├── main.tsx                 # Точка входа React (ReactDOM.createRoot)
-│   │       ├── App.tsx                  # Главный компонент состояния, навигации и экранов
-│   │       ├── components/              # UI-компоненты
-│   │       │   ├── Header.tsx           # Шапка приложения, поиск, выбор профиля
-│   │       │   ├── Player.tsx           # Видеоплеер (Kodik iframe, серии, озвучки, sync)
-│   │       │   ├── SettingsCenter.tsx   # Модальное окно настроек, профили, GDrive, экспорт/импорт
-│   │       │   ├── CollectionOverview.tsx # Библиотека пользователя (избранное, папки, история)
-│   │       │   ├── AnimeCard.tsx        # Карточка аниме в каталоге
-│   │       │   ├── EpisodeHoverPreview.tsx # Превью серий при наведении
-│   │       │   ├── EpisodeSlideshow.tsx # Карусель/слайд-шоу серий
-│   │       │   ├── FolderPicker.tsx     # Диалог добавления аниме в пользовательские папки
-│   │       │   ├── Toggle.tsx           # Переключатель UI
-│   │       │   └── ReleaseMark.tsx      # Метка бета-версии
-│   │       ├── hooks/                   # Кастомные хуки React
-│   │       │   ├── useEpisodeTracking.ts # Авто-трекинг просмотренных серий
-│   │       │   └── useWatchParty.ts     # Поллинг и WebSocket синхронизация совместного просмотра
-│   │       ├── lib/                     # Модули хелперов, типы и контракты
-│   │       │   ├── types.ts             # Интерфейсы TypeScript (AnimeItem, Profile, StorageDocument и др.)
-│   │       │   ├── storage.ts           # Клиент работы с /api/storage и миграции профилей
-│   │       │   ├── anime.ts             # Клиентские вызовы /api/yummy
-│   │       │   ├── kodik.ts             # Парсинг и генерация iframe Kodik
-│   │       │   ├── gdrive.ts            # Клиентские вызовы /api/gdrive
-│   │       │   ├── watchPartyLogic.ts   # Хелперы для комнат Watch Party
-│   │       │   └── settings.ts          # Дефолтные настройки темы и интерфейса
-│   │       └── styles/                  # Таблицы стилей CSS
-│   └── docs/                            # Дополнительная документация
-│       ├── GDRIVE_SYNC.md               # Руководство по работе синхронизации GDrive
-│       └── TECHNICAL_DOCUMENTATION.md   # Этот документ
-└── legacy-old-stack/                    # Легаси-стек (хранится для миграции старых сохранений)
+App.tsx (координатор)
+├─ pages/                    screen composition
+├─ components/               shared UI и orchestration shells
+├─ features/*/hooks          lifecycle, state, subscriptions
+├─ features/*/api.ts         transport adapters
+├─ features/*/selectors      чистые представления
+└─ lib/                      типы, миграции и чистые domain helpers
 ```
 
----
+`App.tsx` выбирает экран и связывает feature controllers. HTTP должен
+находиться в `api.ts`/backend adapter, расчёты — в чистой функции, таймер — в
+hook/effect с cleanup.
 
-## 2. Точки входа и выхода (Entry & Exit Points)
+### Backend
 
-### 2.1 Точки входа (Entry Points)
-
-1. **`Start AnimeSoul.bat` / `app/Start AnimeSoul.bat`**:
-   - Главная консольная точка запуска в системе Windows.
-   - Запускает Python-скрипт `run.py` из локального `.venv` или глобального интерпретатора.
-2. **`app/run.py` (`main()`)**:
-   - Главный исполнимый файл приложения.
-   - Принимает аргументы командной строки (`--mode`, `--configure`, `--config`).
-   - Инициализирует конфигурацию, проверяет доступность порта, при необходимости запускает мастер настройки `ask_settings()` и поднимает либо браузерный (`run_browser`), либо desktop-режим (`run_desktop`).
-3. **`app/launcher.py` (`main()`)**:
-   - Точка входа GUI-лаунчера (Tkinter) для Windows-сборки (`AnimeSoulLauncher.exe`).
-   - Предоставляет графическое окно настройки порта, API-токена YummyAnime и запускает фоновый процесс `run.py` / `AnimeSoulRuntime.exe`.
-4. **`app/backend/app/main.py` (`app = FastAPI(...)`)**:
-   - Точка входа backend-сервера FastAPI. Инициализирует CORS, регистрирует роутеры API (`yummy`, `storage`, `watch_party`, `gdrive`), монтирует статические файлы встроенного React SPA.
-5. **`app/frontend/src/main.tsx`**:
-   - Точка входа веб-клиента React. Рендерит компонент `<App />` в HTML-элемент `#root` файла `index.html`.
-
-### 2.2 Точки выхода и сигналы завершения (Exit Points)
-
-1. **Коды завершения `app/run.py`**:
-   - `SystemExit(0)` — Нормальное завершение работы.
-   - `SystemExit(2)` — Файл конфигурации `animesoul.python.json` повреждён или имеет невалидный JSON.
-   - `SystemExit(3)` — Выбранный сетевой порт занят другим посторонним приложением (и не AnimeSoul).
-   - `SystemExit(4)` — Запрошен режим `desktop`, но библиотека `pywebview` не установлена.
-   - `SystemExit(5)` — FastAPI сервер не поднялся за отведённый таймаут (100 попыток / ~12 сек).
-2. **Завершение фонового сервера Uvicorn (`run_desktop`)**:
-   - При закрытии окна `pywebview` вызывается блок `finally: server.should_exit = True`, после чего поток сервера ждёт завершения `server_thread.join(timeout=5)`.
-3. **Закрытие соединений WebSocket (`/ws/watch-party/{room_id}`)**:
-   - Отключение клиента перехватывается исключением `WebSocketDisconnect`, удаляя сокет из множества `room.sockets`.
-
----
-
-## 3. Цепочки функций и потоки данных (Function Call Chains)
-
-### 3.1 Цепочка 1: Запуск и инициализация приложения
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant Bat as Start AnimeSoul.bat
-    participant Run as run.py (main)
-    participant Config as config.py
-    participant FastAPI as main.py (FastAPI)
-    participant WebView as PyWebView / Browser
-    participant React as App.tsx
-
-    User->>Bat: Запуск скрипта
-    Bat->>Run: python run.py
-    Run->>Run: parse_arguments()
-    Run->>Config: load_runtime_settings()
-    Config-->>Run: runtime dict (port, token, mode)
-    alt Порт занят AnimeSoul
-        Run->>Run: open_existing_client() -> открытие окна/браузера
-    else Старт нового сервера (mode = desktop)
-        Run->>Run: run_desktop(port)
-        Run->>FastAPI: Uvicorn Server in Thread
-        Run->>Run: wait_until_ready(port)
-        Run->>WebView: webview.create_window() + install_desktop_zoom()
-        WebView->>FastAPI: GET http://127.0.0.1:{port}
-        FastAPI-->>WebView: index.html + JS bundle
-        WebView->>React: main.tsx -> <App />
-    end
+```text
+main.py
+└─ api/*.py                  HTTP/WS transport и validation
+   └─ services/*.py          I/O, lifecycle и policy
+      ├─ external HTTP
+      ├─ filesystem
+      ├─ SQLite
+      └─ memory rooms
 ```
 
-### 3.2 Цепочка 2: Чтение и атомарная запись локального сохранения (Storage Sync)
+`gdrive_merge.py` — чистая policy без I/O. Остальные services владеют своими
+внешними ресурсами. Routes не должны повторять доменные правила.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant React as App.tsx / useEpisodeTracking
-    participant LibStorage as lib/storage.ts
-    participant ApiStorage as api/storage.py
-    participant ServiceStorage as services/storage.py
-    participant ServiceGDrive as services/gdrive.py
+## Точки входа и выхода
 
-    note over React: Пользователь посмотрел серию или изменил настройки
-    React->>LibStorage: writeStorage(document)
-    LibStorage->>ApiStorage: PUT /api/storage (body = document)
-    ApiStorage->>ApiStorage: Проверка format (document.profiles is list)
-    ApiStorage->>ServiceStorage: storage.write(document)
-    ServiceStorage->>ServiceStorage: _lock.acquire()
-    ServiceStorage->>ServiceStorage: Запись во временный файл .tmp.json
-    ServiceStorage->>ServiceStorage: Атомарная замена .tmp.json -> storage.json
-    ServiceStorage->>ServiceStorage: _lock.release()
-    alt auto_sync == true && GDrive подключен
-        ApiStorage->>ServiceGDrive: asyncio.create_task(write_cloud_storage)
-    end
-    ApiStorage-->>React: {"saved": true, "path": "..."}
+### Основные входы
+
+- `Start AnimeSoul.bat` — обычный source launch;
+- `run.py::main()` — runtime CLI;
+- `launcher.py::main()` — GUI установленной сборки;
+- `backend.app.main:app` — ASGI application;
+- `frontend/src/main.tsx` — React mount;
+- `tools.transfer_saves::main()` — CLI полного переноса.
+
+### Основные выходы
+
+- HTTP JSON/HTML/static responses;
+- `animesoul-storage.json` и temp replace;
+- Google Drive cloud file;
+- SQLite community ratings;
+- browser export JSON;
+- in-memory room state/WS snapshots;
+- process codes 0/2/3/4/5.
+
+Коды, cleanup и полный вызов каждого входа:
+[`ENTRY_POINTS_AND_FLOWS.md`](ENTRY_POINTS_AND_FLOWS.md).
+
+## API-поверхность
+
+| Подсистема | Prefix | Ключевые входные поля | Ключевые выходные поля |
+| --- | --- | --- | --- |
+| system | `/api/health` | — | `ok`, `stack`, `version`, optional `runtimeInstanceId` |
+| storage | `/api/storage` | document, `auto_sync` | document или `saved/path` |
+| Yummy proxy | `/api/yummy` | `mode`, `id/ids`, `q`, `limit`, `offset` | `anime`, `videos`, `trailers`, `schedule`, `upstreamMs` |
+| ratings | `/api/community-ratings` | IDs или score tree | average/count tree |
+| party | `/watch-party`, `/ws/watch-party` | session, participant, playback, control | protocol 2 room state |
+| cloud | `/api/gdrive` | credentials, OAuth code/state, sync mode | status/result/HTML callback |
+
+Полный справочник, validation, defaults, ошибки и все upstream-поля:
+[`API_REFERENCE.md`](API_REFERENCE.md).
+
+## Ключевые цепочки
+
+| Сценарий | Сокращённая цепочка |
+| --- | --- |
+| запуск | BAT/launcher → `run.main` → Uvicorn → browser/WebView → `main.tsx` → `App` |
+| загрузка данных | `useProfileStorage` → GET storage → `JsonStorage.read` → migrations → React state |
+| сохранение | state → debounce → build snapshot/document → PUT storage → atomic write → optional Drive queue |
+| поиск | `useCatalogController` → catalog API → Yummy router → gateway search variants → cards |
+| player | card → `Watch` → family/details → videos → source/episode → iframe |
+| progress | player event → `updateProgress` → local mirror → profile save → optional tracking acknowledge |
+| tracking | hook timer → details/videos → collect dates → reconcile → save |
+| rating | `ScorePicker` → local rating → storage + async community PUT → SQLite aggregate |
+| party | hook tick → update → state → revision/feedback guard → player command |
+| Drive | settings/header → sync → local/cloud read → pure merge → local/cloud write → reload |
+| styles | `main.tsx` → `globals.css` imports → runtime CSS variables → optional desktop zoom |
+
+Функции и условия каждой ветки приведены в
+[`ENTRY_POINTS_AND_FLOWS.md`](ENTRY_POINTS_AND_FLOWS.md).
+
+## Данные
+
+Portable document:
+
+```text
+StorageDocument
+├─ schemaVersion: 3
+├─ updatedAt
+├─ activeProfile
+└─ profiles[]
+   ├─ id / name
+   └─ snapshot
+      ├─ favorites / folders / notes
+      ├─ progress / episode state / completions
+      ├─ ratings
+      ├─ tracked
+      ├─ theme / toolbar / playerPrefs
+      └─ history/layout fields
 ```
 
-### 3.3 Цепочка 3: Запрос каталога и деталей аниме (YummyAnime Proxy)
+Frontend мигрирует известные поля и сохраняет неизвестные root/profile/snapshot
+fields. Backend валидирует оболочку и записывает документ как opaque JSON.
+Community aggregates, OAuth tokens, runtime state и debug state не входят в
+portable profile. Подробности: [`DATA_MODEL.md`](DATA_MODEL.md).
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant React as App.tsx / Header.tsx
-    participant LibAnime as lib/anime.ts
-    participant ApiYummy as api/yummy.py
-    participant Gateway as services/yummy.py
-    participant ExternalAPI as YummyAnime (api.yani.tv)
+## Стили
 
-    React->>LibAnime: fetchAnimeCatalog(query, limit, offset)
-    LibAnime->>ApiYummy: GET /api/yummy?mode=catalog&q=...&limit=24
-    ApiYummy->>Gateway: gateway.request("/anime", params)
-    Gateway->>ExternalAPI: GET https://api.yani.tv/anime (Header: X-Application)
-    ExternalAPI-->>Gateway: 200 OK (JSON with //media.url)
-    Gateway->>Gateway: _normalize() (замена // на https://)
-    Gateway-->>ApiYummy: Нормализованный список аниме
-    ApiYummy-->>React: {"anime": [...], "hasMore": true}
+- единственный import из TS: `main.tsx -> globals.css`;
+- `base.css` фиксирует порядок 13 `base-*` модулей;
+- поздние feature bundles: library, player, system panels, home, ratings;
+- theme устанавливает `--bg`, `--accent`, `--accent-soft` и light/dark dataset;
+- player preferences устанавливают пять presentation variables;
+- PyWebView zoom применяется отдельным injected script;
+- launcher и OAuth callback имеют независимые inline styles.
+
+Полная карта owners/selectors/import order: [`STYLES.md`](STYLES.md).
+
+## Особенности и ограничения
+
+1. YummyAnime response извлекается из upstream-поля `response`; protocol-relative
+   media URL нормализуются в HTTPS.
+2. Search выполняет до четырёх вариантов параллельно и кешируется на backend и
+   frontend.
+3. `details` ограничен 50 ID, community batch — 100 ID.
+4. Watch Party комнаты живут только в памяти и теряются при restart.
+5. React Watch Party использует REST polling; WebSocket endpoint не является
+   текущим source of truth клиента.
+6. Google OAuth использует authorization code + одноразовый in-memory state,
+   но не PKCE code challenge.
+7. Drive instant autosave объединяет документы, interval запускается из Header,
+   manual — только по действию пользователя.
+8. Полная cloud restore (`mode=cloud`) заменяет локальный document и требует UI
+   подтверждения.
+9. CSS глобальный; порядок импорта и specificity влияют на все экраны.
+10. Видео и управление iframe зависят от провайдера. Расширенное управление
+    реализовано для совместимого Kodik.
+
+## Конфигурация
+
+Основные environment overrides:
+
+```text
+ANIMESOUL_CONFIG_FILE
+ANIMESOUL_PYTHON_PORT
+ANIMESOUL_DATA_DIR
+ANIMESOUL_FRONTEND_DIST
+ANIMESOUL_INSTANCE_ID
+ANIMESOUL_RUNTIME_STATE_FILE
+YUMMYANIME_TOKEN
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
 ```
 
-### 3.4 Цепочка 4: Совместный просмотр (Watch Party Sync Engine)
+Точные приоритеты, JSON-поля и runtime-файлы: [`DATA_MODEL.md`](DATA_MODEL.md).
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant React as Player.tsx
-    participant Hook as useWatchParty.ts
-    participant ApiWP as api/watch_party.py
-    participant ServiceWP as services/watch_party.py
-    participant Socket as WebSocket /ws/watch-party/{room}
+## Изменение подсистемы
 
-    alt Создание комнаты
-        React->>Hook: createRoom(name, mode)
-        Hook->>ApiWP: POST /watch-party/create
-        ApiWP->>ServiceWP: service.create(name, room_mode)
-        ServiceWP-->>ApiWP: {roomId, token, role: "host"}
-        ApiWP-->>Hook: {roomId, token, role}
-    end
+### Новый YummyAnime field
 
-    alt Подключение WebSocket
-        Hook->>Socket: connect ws://127.0.0.1:{port}/ws/watch-party/{roomId}
-        Socket->>ServiceWP: socket.accept(), room.sockets.add(socket)
-        ServiceWP-->>Socket: send_json(room.state)
-    end
+1. Добавить optional field в `lib/types.ts`.
+2. Использовать его в selector/component без прямого upstream URL.
+3. Добавить field и назначение в `API_REFERENCE.md`.
+4. Добавить fallback для отсутствующего значения.
 
-    alt Изменение состояния плеера (Seek / Pause / Play)
-        React->>Hook: sendHeartbeat(playback, action)
-        Hook->>ApiWP: POST /watch-party/update (roomId, token, playback, action)
-        ApiWP->>ServiceWP: service.update(body)
-        ServiceWP->>ServiceWP: Обновление участника & playback комнаты
-        ServiceWP->>ServiceWP: broadcast(room) -> рассылка по всем room.sockets
-        ServiceWP-->>ApiWP: "OK"
-        ApiWP-->>Hook: {"ok": true}
-        Socket-->>Hook: Real-time updated state event
-    end
+### Новый внутренний endpoint
+
+1. Route только разбирает transport и вызывает service.
+2. Frontend transport помещается в feature `api.ts`/`lib` adapter.
+3. Request/response/errors добавляются в `API_REFERENCE.md`.
+4. Цепочка добавляется в flow doc и покрывается тестом.
+
+### Новое сохраняемое поле
+
+1. Тип + default/migration.
+2. Snapshot builder/round-trip неизвестных полей.
+3. Merge policy, если поле конфликтует между устройствами.
+4. Tests и `DATA_MODEL.md`.
+
+### Новый стиль
+
+1. Найти owner в `STYLES.md`.
+2. Проверить одинаковые selectors во всём import chain.
+3. Добавить responsive/focus/light states.
+4. Проверить browser/desktop/mobile/zoom.
+
+## Проверка перед изменением контракта
+
+```powershell
+cd app
+.\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
-### 3.5 Цепочка 5: Синхронизация с Google Drive
+Дополнительно:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant User as Пользователь (SettingsCenter)
-    participant Frontend as lib/gdrive.ts
-    participant ApiGDrive as api/gdrive.py
-    participant ServiceGDrive as services/gdrive.py
-    participant GoogleAPI as Google OAuth2 & Drive API v3
-
-    User->>Frontend: Нажатие "Подключить Google Диск"
-    Frontend->>ApiGDrive: GET /api/gdrive/auth-url
-    ApiGDrive->>ServiceGDrive: get_auth_url(redirect_uri)
-    ServiceGDrive-->>Frontend: OAuth URL
-    Frontend->>User: Открытие всплывающего окна Google Login
-    User->>GoogleAPI: Авторизация в Google
-    GoogleAPI->>ApiGDrive: GET /api/gdrive/oauth2callback?code=...
-    ApiGDrive->>ServiceGDrive: exchange_code(code, redirect_uri)
-    ServiceGDrive->>GoogleAPI: POST oauth2.googleapis.com/token
-    GoogleAPI-->>ServiceGDrive: access_token, refresh_token
-    ServiceGDrive->>ServiceGDrive: save_tokens() в gdrive-tokens.json
-    ApiGDrive-->>User: HTML "Google Диск успешно подключен!"
-
-    note over Frontend, ServiceGDrive: Ручная или автоматическая синхронизация (Merge)
-    Frontend->>ApiGDrive: POST /api/gdrive/sync (mode="merge")
-    ApiGDrive->>ServiceGDrive: read_cloud_storage()
-    ServiceGDrive->>GoogleAPI: GET drive/v3/files (поиск файла animesoul-storage.json)
-    GoogleAPI-->>ServiceGDrive: Cloud Storage JSON
-    ApiGDrive->>ServiceGDrive: merge_storage_documents(local_doc, cloud_doc)
-    ServiceGDrive->>ServiceGDrive: Объединение профилей, избранного, закладок и историй
-    ApiGDrive->>ServiceGDrive: write_cloud_storage(merged_doc)
-    ServiceGDrive->>GoogleAPI: POST/PATCH drive/v3/files (загрузка файла)
-    ApiGDrive-->>Frontend: {"status": "merged", "document": merged_doc}
-```
-
----
-
-## 4. Зоны ответственности модулей (Responsibilities)
-
-### 4.1 Backend (Python / FastAPI)
-
-- **`app/run.py`**: Управление жизненным циклом процесса, аргументы CLI, проверка портов, старт сервера Uvicorn, создание окна PyWebView, инжекция скрипта масштабирования `DESKTOP_ZOOM_SCRIPT`.
-- **`app/launcher.py`**: Утилита графического запуска для сборки под Windows. Сохраняет конфигурацию и запускает бинарник `AnimeSoulRuntime.exe`.
-- **`backend/app/main.py`**: Маршрутизатор нижнего уровня. Объединяет REST API контроллеры, настраивает CORS и раздаёт готовый React бандл для режима продакшн.
-- **`backend/app/config.py`**: Извлекает и валидирует настройки приложения из файлов `.env`, `animesoul.python.json` и переменных окружения OS.
-- **`backend/app/api/yummy.py`**: Прокси-роутер. Защищает клиенты от CORS-блокировок и прячет приватные ключи YummyAnime.
-- **`backend/app/api/storage.py`**: Контроллер чтения и сохранения профиля.
-- **`backend/app/api/watch_party.py`**: REST + WebSocket контроллер для комнат совместного просмотра.
-- **`backend/app/api/gdrive.py`**: Роутер OAuth2 коллбэков и команд синхронизации облака.
-- **`backend/app/services/storage.py`**: Сервис физической записи `animesoul-storage.json`. Гарантирует целостность файлов при сбоях питания за счёт временных файлов и блокировок `asyncio.Lock()`.
-- **`backend/app/services/yummy.py`**: Клиент HTTPX для сервиса YummyAnime, исправляющий неполные схемы URL (например, `//media...` -> `https://media...`).
-- **`backend/app/services/watch_party.py`**: Менеджер комнат в оперативной памяти. Хранит роли, пинги участников, сменяет хостов и управляет состоянием плеера.
-- **`backend/app/services/gdrive.py`**: Модуль работы с Google Drive API v3. Отвечает за поиск/создание папки `AnimeSoul`, чтение и слияние конфликтующих сохранений (`merge_storage_documents`).
-
-### 4.2 Frontend (React / TypeScript)
-
-- **`src/App.tsx`**: Корневой компонент. Содержит главное состояние (активный профиль, просматриваемое аниме, состояние сохранения, текущая вкладка навигации).
-- **`src/components/Header.tsx`**: Верхняя панель. Поиск, логотип, статус синхронизации, быстрый выбор профиля.
-- **`src/components/Player.tsx`**: Модуль воспроизведения. Формирует iframe Kodik, обрабатывает переключение серий/переводов, транслирует и принимает события Watch Party.
-- **`src/components/SettingsCenter.tsx`**: Центр управления. Управление профилями, подключение Google Диска, темы оформления, ручной импорт/экспорт JSON.
-- **`src/components/CollectionOverview.tsx`**: Отображение пользовательской библиотеки (избранное, пользовательские папки, история).
-- **`src/hooks/useEpisodeTracking.ts`**: Автоматически регистрирует просмотренную серию при просмотре видео на определенный процент длительности.
-- **`src/hooks/useWatchParty.ts`**: Автоматизирует поллинг состояния комнаты через REST и поддерживание постоянного WebSocket соединения.
-- **`src/lib/storage.ts`**: Загружает, валидирует и мигрирует структуру сохранения `StorageDocument` под новые версии схемы.
-
----
-
-## 5. Вызовы и сетевые эндпоинты (API Endpoint Reference)
-
-### 5.1 System / Storage API
-
-| Эндпоинт | Метод | Описание | Входные параметры | Ответ |
-| :--- | :--- | :--- | :--- | :--- |
-| `/api/health` | `GET` | Проверка доступности бэкенда | — | `{"ok": true, "stack": "FastAPI + React", "version": "..."}` |
-| `/api/storage` | `GET` | Получить документ сохранения | — | JSON-объект `StorageDocument` |
-| `/api/storage` | `PUT` | Сохранить документ профилей | `document: dict`, `auto_sync: bool` | `{"saved": true, "path": "..."}` |
-
-### 5.2 YummyAnime Proxy API
-
-| Эндпоинт | Метод | `mode` | Описание | Входные параметры |
-| :--- | :--- | :--- | :--- | :--- |
-| `/api/yummy` | `GET` | `catalog` | Поиск и каталог аниме | `q: str`, `limit: int`, `offset: int` |
-| `/api/yummy` | `GET` | `details` | Массовые детали аниме | `ids: str` (через запятую) |
-| `/api/yummy` | `GET` | `videos` | Детали и список видео | `id: int` |
-| `/api/yummy` | `GET` | `schedule` | Расписание выхода серий | — |
-| `/api/yummy` | `GET` | `ping` | Проверка задержки API | — |
-
-### 5.3 Watch Party API & WebSocket
-
-| Эндпоинт | Метод | Описание | Входные параметры | Ответ |
-| :--- | :--- | :--- | :--- | :--- |
-| `/watch-party/create` | `POST` | Создать новую комнату | `name: str`, `roomMode: str` | `{"roomId": "...", "token": "...", "role": "host"}` |
-| `/watch-party/join` | `POST` | Войти в существующую комнату | `roomId: str`, `name: str`, `mode: str` | `{"roomId": "...", "token": "...", "role": "guest"}` |
-| `/watch-party/update` | `POST` | Отправить пинг и состояние плеера | `roomId`, `token`, `playback`, `action` | `{"ok": true}` |
-| `/watch-party/transfer-host` | `POST` | Передать права хоста | `roomId`, `token`, `participantId` | `{"ok": true, "hostId": "..."}` |
-| `/watch-party/state` | `GET` | Получить состояние комнаты | `room: str` (Query) | JSON объекта состояния комнаты |
-| `/watch-party/leave` | `POST` | Выйти из комнаты | `roomId: str`, `token: str` | `{"ok": true}` |
-| `/ws/watch-party/{room_id}` | `WS` | Real-time WebSocket сокет | — | Broadcast события состояния комнаты |
-
-### 5.4 Google Drive Sync API
-
-| Эндпоинт | Метод | Описание | Входные параметры | Ответ |
-| :--- | :--- | :--- | :--- | :--- |
-| `/api/gdrive/status` | `GET` | Статус подключения Google Диска | — | `{"connected": bool, "user_email": "...", ...}` |
-| `/api/gdrive/credentials` | `POST` | Сохранить свой OAuth Client ID | `client_id: str`, `client_secret: str` | `{"saved": true}` |
-| `/api/gdrive/auth-url` | `GET` | Получить ссылку OAuth авторизации | `redirect_uri: str` (optional) | `{"url": "...", "redirect_uri": "..."}` |
-| `/api/gdrive/oauth2callback` | `GET` | Google OAuth2 Redirect Callback | `code: str` (Query) | HTML страница успеха |
-| `/api/gdrive/disconnect` | `POST` | Отключить аккаунт Google | — | `{"disconnected": true}` |
-| `/api/gdrive/sync` | `POST` | Запустить синхронизацию | `mode: "auto"|"local"|"cloud"|"merge"` | `{"status": "merged", "document": {...}}` |
-
----
-
-## 6. Переменные, конфигурации и состояние (Variables & State)
-
-### 6.1 Переменные окружения OS
-
-- `ANIMESOUL_PYTHON_PORT` — Задание порта веб-сервера (по умолчанию: `8000`).
-- `YUMMYANIME_TOKEN` — Публичный API-ключ сервиса YummyAnime.
-- `GOOGLE_CLIENT_ID` — Client ID для интеграции Google OAuth2.
-- `GOOGLE_CLIENT_SECRET` — Client Secret для Google OAuth2.
-- `ANIMESOUL_DATA_DIR` — Путь к директории хранения локальных файлов данных (по умолчанию: `./data`).
-- `ANIMESOUL_FRONTEND_DIST` — Путь к скомпилированному бандлу React (по умолчанию: `./frontend/dist`).
-- `ANIMESOUL_CONFIG_FILE` — Явный путь к файлу конфигурации `animesoul.python.json`.
-
-### 6.2 Конфигурационный файл `animesoul.python.json`
-
-```json
-{
-  "port": 8000,
-  "yummy_public_token": "YOUR_PUBLIC_YUMMY_TOKEN",
-  "data_directory": "data",
-  "launch_mode": "desktop",
-  "gdrive_client_id": "",
-  "gdrive_client_secret": ""
-}
-```
-
-### 6.3 Структура документа сохранения (`animesoul-storage.json`)
-
-```typescript
-interface StorageDocument {
-  schemaVersion: number;       // Версия схемы данных (текущая: 1)
-  activeProfile: string;       // ID выбранного профиля
-  profiles: Profile[];         // Список профилей пользователей
-}
-
-interface Profile {
-  id: string;                  // Уникальный UUID профиля
-  name: string;                // Имя профиля
-  avatarUrl?: string;          // Аватар профиля
-  createdAt: string;           // Дата создания
-  snapshot: Snapshot;          // Состояние данных просмотров и настроек
-}
-
-interface Snapshot {
-  favorites: number[];         // Массив ID аниме в избранном
-  folders: UserFolder[];       // Пользовательские папки
-  history: WatchHistoryItem[]; // История просмотров серий
-  tracked: TrackedAnime[];     // Отслеживаемые аниме
-  playerPrefs: PlayerSettings; // Настройки плеера (громкость, качество, озвучка)
-  theme: string;               // Тема оформления UI
-}
-```
-
-### 6.4 Состояние оперативной памяти Watch Party (`services/watch_party.py`)
-
-- `WatchPartyService.rooms: dict[str, Room]` — Глобальный словарь активных комнат по их 6-символьному `roomId`.
-- `Room`:
-  - `id: str` — Уникальный код комнаты (например, `A8K2P9`).
-  - `host_token: str` — Секретный токен хоста комнаты.
-  - `room_mode: "host" | "shared"` — Режим управления (только хост или общий контроль).
-  - `participants: dict[str, Participant]` — Участники комнаты по их UUID токенам.
-  - `playback: dict` — Текущая позиция воспроизведения, ID аниме, номер серии, статус `playing`.
-  - `sockets: set[WebSocket]` — Набор активных WebSocket-соединений клиентов для трансляции изменений.
-
----
-
-## 7. Сводная таблица расположения ключевой логики
-
-| Задача / Функционал | Backend файл | Frontend файл |
-| :--- | :--- | :--- |
-| **Параметры запуска и GUI** | `app/run.py`, `app/launcher.py` | — |
-| **Чтение и запись сохранения** | `backend/app/api/storage.py`, `backend/app/services/storage.py` | `frontend/src/lib/storage.ts` |
-| **Каталог и поиск аниме** | `backend/app/api/yummy.py`, `backend/app/services/yummy.py` | `frontend/src/lib/anime.ts`, `Header.tsx` |
-| **Видеоплеер и озвучки** | — | `frontend/src/components/Player.tsx`, `lib/kodik.ts` |
-| **Совместный просмотр** | `backend/app/api/watch_party.py`, `backend/app/services/watch_party.py` | `frontend/src/hooks/useWatchParty.ts` |
-| **Синхронизация Google Drive** | `backend/app/api/gdrive.py`, `backend/app/services/gdrive.py` | `frontend/src/lib/gdrive.ts`, `SettingsCenter.tsx` |
-| **Авто-трекинг серий** | — | `frontend/src/hooks/useEpisodeTracking.ts` |
+- открыть `/docs` и сверить изменённый FastAPI route;
+- выполнить round-trip профиля и проверить неизвестные поля;
+- для cloud изменить данные на обеих сторонах и проверить merge/delete policy;
+- для CSS проверить основные breakpoints и обе схемы цвета;
+- для party проверить host/shared, follow/free и отсутствие feedback loop.

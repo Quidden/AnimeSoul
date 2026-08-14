@@ -1,186 +1,211 @@
-# AnimeSoul architecture
+# Архитектура AnimeSoul
 
-AnimeSoul uses a feature-oriented React frontend and a layered FastAPI backend.
-The same backend serves browser and PyWebView desktop modes, so both modes use
-the same API contracts and profile storage.
+AnimeSoul — локальное SPA с единым FastAPI-процессом для браузерного и
+desktop-режима. Интерфейс не обращается к YummyAnime или файловой системе
+напрямую: сетевые и файловые границы проходят через backend.
 
-## System flow
+## Контур системы
 
-```text
-React pages
-  -> feature components and hooks
-  -> same-origin HTTP / WebSocket clients
-  -> FastAPI routes
-  -> services
-  -> YummyAnime, Google Drive, rooms and local JSON storage
+```mermaid
+flowchart LR
+    U["Пользователь"] --> C["React SPA"]
+    C -->|"same-origin REST / WS"| R["FastAPI routes"]
+    R --> S["Сервисы backend"]
+    S --> Y["YummyAnime API"]
+    S --> G["Google OAuth / Drive API"]
+    S --> J["JSON-хранилище"]
+    S --> Q["SQLite общих оценок"]
+    S --> W["Комнаты Watch Party в памяти"]
+    L["run.py / launcher.py"] --> R
+    L --> B["Браузер или PyWebView"]
+    B --> C
 ```
 
-The frontend never receives filesystem paths or private upstream credentials.
-Routes validate transport data and delegate behavior. Services do not import
-React or FastAPI routers.
+В разработке Vite работает на порту 5173 и проксирует относительные маршруты
+на FastAPI 8000. В собранной версии FastAPI раздаёт `frontend/dist`, поэтому
+контракты frontend не зависят от режима запуска.
 
-## Frontend layers
+## Направление зависимостей
 
-### Application shell
+```text
+страницы/компоненты -> feature hooks/controllers -> feature API/domain -> lib/types
+FastAPI routes      -> services/pure policy       -> сеть/файлы/SQLite
+launcher/run.py     -> FastAPI application        -> React static bundle
+```
 
-- `App.tsx` coordinates route state and composes typed page view models.
-- `components/Header.tsx` exposes navigation and global status.
-- `components/AppFooter.tsx` owns the shared product footer.
-- `lib/types.ts` is the shared domain contract.
-- `lib/storage.ts` owns schema migrations and compatibility defaults.
-- `lib/events.ts` defines typed browser events instead of anonymous strings.
+Обратные зависимости запрещены: чистые селекторы не импортируют React,
+компоненты не собирают URL внешнего API, сервисы не импортируют frontend, а
+router не должен содержать правила слияния данных.
 
-The application shell may compose features but must not duplicate their domain
-rules or raw network requests.
+## Frontend
 
-### Pages
+### Инициализация и оболочка
 
-`pages/` contains screen-level composition:
+- `app/frontend/index.html` предоставляет `#root`.
+- `app/frontend/src/main.tsx` устанавливает перехват журнала, импортирует
+  глобальный CSS и монтирует `<App />` в `StrictMode`.
+- `app/frontend/src/App.tsx` — координатор экранов. Он связывает хранилище,
+  каталог, оценки, трекинг и маршрутизацию состояния, но не выполняет raw HTTP.
+- `app/frontend/src/lib/types.ts` — общий TypeScript-контракт доменных данных.
+- `app/frontend/src/lib/events.ts` — единственный реестр межфункциональных
+  `CustomEvent`.
 
-- `StatisticsPage.tsx` renders statistics from library selectors.
-- `FolderView.tsx` renders a selected collection.
-- `CatalogPage.tsx` renders catalog filters, cards, pagination and random pick.
-- `HomePage.tsx` composes the home screen from focused modules in
-  `pages/home/` (`HomeHero`, dashboard widgets and library sections).
+### Страницы и компоненты
 
-Anime-detail composition remains behind the `Watch` feature shell. It is the
-next page boundary to extract when player behavior has sufficient regression
-coverage.
+`pages/` получает готовые view models и callback-функции. `components/` содержит
+повторно используемые элементы и оставшиеся orchestration shells (`Player`,
+`SettingsCenter`). Детальная карта находится в
+[`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md).
 
 ### Features
 
-`features/` is organized by user capability:
+- `features/catalog/` — транспорт каталога, состояние загрузки и presentation;
+- `features/library/` — чистые выборки истории, прогресса и статистики;
+- `features/player/` — части страницы просмотра и действия активного тайтла;
+- `features/ratings/` — чтение/публикация агрегированных оценок;
+- `features/settings/` — вкладки, оформление, профили и Google Drive;
+- `features/storage/` — построение документов и жизненный цикл профилей;
+- `features/tracking/` — загрузка снимка доступных серий;
+- `features/watch-party/` — transport-контракт комнаты.
 
-- `catalog/api.ts`: catalog, anime details, videos and release schedules.
-- `catalog/useCatalogController.ts`: catalog request and filter state.
-- `catalog/useCatalogPresentation.ts`: franchise grouping and card metadata.
-- `library/selectors.ts`: pure history, progress, folder and statistics views.
-- `player/useResumePreview.ts`: the latest resumable episode and preview.
-- `player/activeWatchActions.ts`: progress persistence and tracking
-  acknowledgement for the active title.
-- `player/`: toolbar, seasons, release schedule, metadata and party UI.
-- `settings/`: setting definitions, setting rows, appearance, profiles and
-  Google Drive settings.
-- `storage/profileDocument.ts`: versioned profile document construction.
-- `tracking/api.ts`: new-episode refresh transport.
-- `watch-party/api.ts` and `types.ts`: REST/WebSocket room contract.
+Feature API-файлы отвечают только за HTTP и нормализацию ответа. Чистые правила
+находятся в `lib/` или selector-файлах. Таймеры, подписки и отмена запросов
+принадлежат hooks/controllers.
 
-Feature API modules only perform transport work. Selectors are pure. Hooks own
-subscriptions, timers and request lifetimes. Components own presentation and
-direct user interaction.
+## Backend
 
-### Cross-feature hooks
+### Application и routes
 
-- `useApiActivity.ts` publishes request activity for the header.
-- `usePublishedSaveStatus.ts` publishes local/cloud save feedback.
-- `useEpisodeTracking.ts` reconciles tracking state through its feature API.
-- `useWatchParty.ts` owns room polling and synchronization through its API.
-- `features/storage/useProfileStorage.ts` owns profile loading, persistence,
-  import/export and storage refresh.
+`app/backend/app/main.py` создаёт FastAPI, включает CORS для Vite, регистрирует
+пять router-модулей и при наличии production bundle добавляет static/SPA
+fallback.
 
-### Styles
+| Router | Контракт | Делегирует |
+| --- | --- | --- |
+| `api/yummy.py` | `/api/yummy` | `YummyAnimeGateway` |
+| `api/storage.py` | `/api/storage` | `JsonStorage`, очередь Drive |
+| `api/watch_party.py` | `/watch-party/*`, `/ws/watch-party/*` | `WatchPartyService` |
+| `api/gdrive.py` | `/api/gdrive/*` | общий `GoogleDriveService` |
+| `api/community_ratings.py` | `/api/community-ratings*` | `CommunityRatingStore` |
 
-`styles/base.css` is an ordered import manifest rather than one monolithic
-stylesheet. Its `base-*.css` modules follow UI responsibility: core tokens,
-navigation, home dashboard, catalog, settings, collections, cloud,
-personalization, feedback and branding. Their import order intentionally
-preserves the previous cascade. Player- and library-specific styles remain in
-their dedicated files.
+Router разбирает transport-поля, применяет ограничения HTTP и переводит
+известные ошибки в статус/JSON. Полный контракт — в
+[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md).
 
-## Backend layers
+### Services и policy
 
-### Routes (`backend/app/api`)
+- `services/yummy.py` — заголовки, таймауты, поиск с вариантами, кеш и
+  рекурсивная нормализация URL;
+- `services/storage.py` — последовательная атомарная JSON-запись и одноразовый
+  импорт legacy-сохранения;
+- `services/watch_party.py` — комнаты, участники, роли и playback в памяти;
+- `services/gdrive.py` — OAuth, refresh token, Drive I/O и очередь autosave;
+- `services/gdrive_merge.py` — чистые детерминированные правила merge;
+- `services/community_ratings.py` — SQLite, одна заменяемая оценка на
+  `(voter_id, anime_id)` и публичные агрегаты.
 
-Routes define HTTP and WebSocket contracts. Notable modules are:
+`gdrive_merge.py` не выполняет сеть или файловые операции. Это намеренная
+граница: конфликтную политику можно тестировать без OAuth.
 
-- `yummy.py`: stable proxy contract consumed by React;
-- `storage.py`: shared save document endpoint;
-- `watch_party.py`: room and playback protocol;
-- `gdrive.py`: Google Drive authentication and synchronization endpoints;
-- `community_ratings.py`: anonymous shared-rating reads, writes and public export.
+## Данные и сохранение
 
-Routes should parse input, call a service and translate known errors. Business
-rules do not belong in a router.
+Основной документ имеет `schemaVersion: 3`, содержит список профилей и активный
+профиль. Backend проверяет наличие массива `profiles`, после чего обращается с
+остальной частью как с непрозрачным JSON. Миграция известных полей выполняется
+в frontend через `migrateDocument`/`migrateSnapshot`.
 
-### Services (`backend/app/services`)
+Неизвестные поля сохраняются на трёх уровнях:
 
-- `yummy.py` owns upstream authentication, timeouts and response acquisition.
-- `storage.py` owns serialized atomic writes and first-run legacy import.
-- `watch_party.py` owns participants, roles and playback state.
-- `gdrive.py` owns OAuth and Drive I/O.
-- `gdrive_merge.py` owns pure, deterministic save merge policy.
-- `community_ratings.py` owns the SQLite vote store and aggregate calculation.
+- корень `StorageDocument`;
+- `ConfigProfile`;
+- `ConfigSnapshot` при построении следующего снимка.
 
-Pure policy modules accept values and return values. Infrastructure modules own
-HTTP, filesystem, clocks and credentials.
+Это обеспечивает двустороннюю совместимость с legacy и будущими версиями.
+Полная схема и localStorage-ключи описаны в
+[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
 
-## Persistence and compatibility
+## Основные потоки
 
-Storage uses a versioned document containing multiple profiles. React migrates
-known fields by adding defaults. Unknown fields are spread back into the next
-snapshot so a newer save is not silently damaged by an older build.
-
-`features/storage/profileDocument.ts` is the single place for building and
-resolving profile documents. `lib/storage.ts` remains the migration boundary.
-The backend validates the envelope and otherwise treats the document as opaque
-JSON. Google Drive applies deterministic rules from `gdrive_merge.py`.
-
-Personal ratings remain part of the portable profile document. They are also
-published as one replaceable anonymous vote per browser and anime to
-`data/community-ratings.sqlite3`. The server exposes aggregate-only reads at
-`GET /api/community-ratings`, a single-anime read at
-`GET /api/community-ratings/{anime_id}`, and replacement writes at
-`PUT /api/community-ratings/{anime_id}`. The paginated collection endpoint is
-the public export boundary for a hosted deployment; raw voter identifiers are
-never returned.
-
-See [SAVE_COMPATIBILITY.md](SAVE_COMPATIBILITY.md) before changing any stored
-field.
-
-## Important event flows
-
-### Save
+### Загрузка профиля
 
 ```text
-user action -> immutable snapshot update -> local storage request
-            -> published save event -> header status / optional Drive sync
+main.tsx -> App -> useProfileStorage
+         -> GET /api/storage
+         -> JsonStorage.read
+         -> resolveActiveProfileDocument
+         -> migrateDocument + migrateSnapshot
+         -> React state + localStorage mirror
 ```
 
-### Tracking
+### Сохранение
 
 ```text
-tracked title -> tracking API refresh -> compare dub episode identities
-              -> update baseline/new marker -> persist snapshot
+изменение React state
+-> useProfileStorage (debounce 400 ms)
+-> buildProfileSnapshot -> buildStorageDocument
+-> PUT /api/storage?auto_sync=...
+-> JsonStorage.write (temp + atomic replace)
+-> optional GoogleDriveService.schedule_write
 ```
 
-### Watch party
+### Каталог
 
 ```text
-player event -> room command -> server room state -> participant hook
-             -> guarded player update
+UI -> useCatalogController -> features/catalog/api.ts
+-> GET /api/yummy -> api/yummy.py
+-> YummyAnimeGateway -> https://api.yani.tv
+-> нормализованный JSON -> selectors/components
 ```
 
-The guard is essential: a remote update must not be emitted again as a new local
-command.
+### Совместный просмотр
 
-## Rules for new code
+```text
+Player -> useWatchParty (раз в 1 секунду)
+-> POST /watch-party/update
+-> GET /watch-party/state
+-> guard playbackChangedByUser / roomPlaybackRevision
+-> onHostState -> Player
+```
 
-1. Put upstream calls in a feature API or backend service, never in JSX.
-2. Put calculations in pure selectors and add direct tests.
-3. Put subscriptions and timers in hooks with explicit cleanup.
-4. Keep page components declarative; pass view models rather than raw storage
-   documents when practical.
-5. Preserve unknown save fields and do not bump schema/version for file moves.
-6. Add regression tests for progress, tracking, cloud merge and watch-party
-   changes.
-7. Write comments for reasons and protocol constraints, not obvious syntax.
+WebSocket endpoint существует для push-совместимости, но текущий React-клиент
+считает REST-поллинг авторитетным и WebSocket не открывает.
 
-## Adding a feature
+Подробные цепочки с именами функций находятся в
+[`docs/ENTRY_POINTS_AND_FLOWS.md`](docs/ENTRY_POINTS_AND_FLOWS.md).
 
-Create a folder under `features/<name>`. Start with domain types and pure rules,
-then add an API adapter or hook only if required. Expose a small public surface
-to a page or orchestration component. Keep feature styles with that feature or
-in the closest existing responsibility stylesheet.
+## Стили
 
-The incremental implementation plan and acceptance criteria live in
-[docs/REFACTORING_RECOMMENDATIONS.md](docs/REFACTORING_RECOMMENDATIONS.md).
+`src/main.tsx` импортирует `globals.css`; он последовательно импортирует общий
+манифест и feature-файлы. Порядок — часть контракта каскада. Темы и масштабы
+применяются через CSS custom properties из `useProfileStorage`, а desktop zoom
+дополнительно устанавливает `documentElement.style.zoom`.
+
+Владельцы файлов, токены, точки inline-стилей и правила изменения описаны в
+[`docs/STYLES.md`](docs/STYLES.md).
+
+## Внешние границы и безопасность
+
+- Public token YummyAnime остаётся на backend и передаётся upstream в
+  `X-Application`; Private token не используется.
+- Google OAuth-токены и credentials хранятся в локальном data-каталоге и не
+  входят в профиль/экспорт.
+- Cookie общих оценок — `HttpOnly`, `SameSite=Lax`; API возвращает только
+  агрегаты, не `voter_id`.
+- Watch Party token является идентификатором участника комнаты и хранится в
+  `sessionStorage`; комнаты исчезают при завершении процесса.
+- Frontend получает iframe URL от внешнего API. Возможности управления зависят
+  от провайдера; специальные команды реализованы только для совместимого Kodik.
+
+## Правила расширения
+
+1. Новый upstream-вызов добавляется в backend service и feature API, не в JSX.
+2. Новое сохраняемое поле добавляется в тип, миграцию, документацию данных и
+   тест round-trip/merge.
+3. Расчёт без I/O оформляется чистой функцией и тестируется напрямую.
+4. Подписка или таймер оформляются hook с явным cleanup.
+5. Новый CSS владелец подключается через существующий манифест; порядок импорта
+   меняется только после визуальной проверки.
+6. Изменение HTTP/WS-контракта одновременно отражается в ручном API-справочнике
+   и тестах вызывающей стороны.
+7. Перемещение кода без изменения поведения не повышает версию продукта или
+   схему сохранения.

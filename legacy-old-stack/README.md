@@ -1,8 +1,8 @@
 # AnimeSoul
 
-> **Archived legacy stack.** This Vinext/Electron implementation is preserved
-> for reference and save migration only. The maintained Python + React
-> application is in [`../app`](../app), and new development belongs there.
+> **Архивный legacy-стек.** Реализация Vinext/Electron сохранена только для
+> справки и миграции сохранений. Поддерживаемая Python + React версия находится
+> в [`../app`](../app); новая разработка ведётся там.
 
 ## Десктопное приложение для Windows
 

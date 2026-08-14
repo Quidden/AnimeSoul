@@ -1,42 +1,42 @@
 # AnimeSoul 0.1.9 Beta 1
 
-This beta promotes the Python + React implementation to the main AnimeSoul
-application. The previous Vinext/Electron implementation remains in
-`legacy-old-stack/` for reference and save migration.
+Эта beta сделала Python + React реализацию основной версией AnimeSoul.
+Предыдущий Vinext/Electron-стек сохранён в `legacy-old-stack/` для справки и
+миграции сохранений.
 
-## Main changes
+## Основные изменения
 
-- Python/FastAPI backend, React 19 frontend and optional PyWebView desktop mode.
-- Compatible import, export and automatic migration of existing AnimeSoul saves.
-- Fixed continuation from the real saved episode and timestamp, including
-  rewatches and seasons grouped into a franchise.
-- Marking an episode as watched no longer prevents it from being replayed.
-- Favorites, folders and tracking previews open their detailed views from the
-  whole card while their action buttons remain independent.
-- Replaced unstable text trash symbols with aligned SVG controls.
-- A second launcher start now opens the already-running AnimeSoul instance
-  instead of reporting the configured port as broken.
-- Critical regression coverage for progress, resume selection, storage and
-  watch-party services.
+- Backend на Python/FastAPI, frontend на React 19 и optional desktop-режим
+  PyWebView.
+- Совместимые import, export и автоматическая миграция старых сохранений.
+- Продолжение с реально сохранённой серии и позиции, включая пересмотры и
+  сезоны внутри франшизы.
+- Ручная отметка серии просмотренной больше не мешает воспроизвести её снова.
+- Карточки избранного, папок и tracking открывают подробности всей поверхностью,
+  а action buttons остаются независимыми.
+- Нестабильные текстовые символы корзины заменены выровненными SVG controls.
+- Повторный запуск launcher открывает уже работающий AnimeSoul вместо ошибки
+  занятого порта.
+- Добавлены критические regression tests прогресса, resume, storage и Watch
+  Party services.
 
-## Installation
+## Установка
 
-1. Extract the archive into a folder where AnimeSoul may keep local data.
-2. Install Python 3.11+ and Node.js 22+ if they are not already installed.
-3. Run `Start AnimeSoul.bat`.
-4. On first launch, enter a free port (3001 by default) and your own YummyAnime
-   Public token. Never enter a Private token.
+1. Распакуйте архив в каталог, где AnimeSoul может хранить локальные данные.
+2. Установите Python 3.11+ и Node.js 22+, если их ещё нет.
+3. Запустите `Start AnimeSoul.bat`.
+4. При первом запуске укажите свободный порт (по умолчанию 3001) и личный
+   YummyAnime Public token. Private token вводить нельзя.
 
-Dependencies are installed automatically on the first launch, so it can take
-longer than later starts.
+Первый запуск дольше последующих, потому что зависимости устанавливаются
+автоматически.
 
-## Beta notes
+## Примечания beta
 
-- This is a beta of the new main stack; keep an exported config backup before
-  migrating an important library.
-- Video availability, screenshots, precise opening/ending timing and release
-  metadata depend on the selected external source.
-- AnimeSoul does not include or distribute a shared YummyAnime token.
+- Перед миграцией важной библиотеки сохраните export config.
+- Доступность видео, кадров, точных таймкодов опенинга/эндинга и release metadata
+  зависит от внешнего источника.
+- AnimeSoul не включает и не распространяет общий YummyAnime token.
 
-Huge thanks to the YummyAnime developers for providing the API that made
-AnimeSoul possible.
+Спасибо разработчикам YummyAnime за API, благодаря которому стал возможен
+AnimeSoul.

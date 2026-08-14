@@ -1,5 +1,9 @@
 # Архитектура AnimeSoul
 
+> Архивный документ Vinext/Electron-версии. Архитектура актуального приложения
+> описана в [`../../app/ARCHITECTURE.md`](../../app/ARCHITECTURE.md), а полный
+> индекс — в [`../../app/docs/README.md`](../../app/docs/README.md).
+
 ## Поток данных
 
 ```text
