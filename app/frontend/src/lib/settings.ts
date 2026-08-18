@@ -43,6 +43,7 @@ export const DEFAULT_PLAYER_PREFS: PlayerPrefs = {
   homePreviewMode: "poster",
   playerEpisodeCarousel: true,
   episodeHoverPreview: true,
+  toolbarIconOnly: false,
   watchedEpisodeColor: "#9a78ff",
   interfaceFontScale: 1,
   headingFontScale: 1,

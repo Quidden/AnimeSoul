@@ -20,7 +20,7 @@ import {
 
 export type { WatchPartySession } from "../features/watch-party/types";
 export { WATCH_PARTY_SESSION_KEY } from "../features/watch-party/api";
-export function useWatchParty({ enabled, server, name, mode, roomMode, playback, onHostState }: {
+export function useWatchParty({ enabled, server, name, mode, roomMode, playback, onHostState, onSessionChange }: {
   enabled: boolean;
   server: string;
   name: string;
@@ -28,6 +28,8 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
   roomMode: "host" | "shared";
   playback: PartyPlayback;
   onHostState: (playback: PartyPlayback, force?: boolean) => void;
+  /** Lets the player switch away from local files before room polling begins. */
+  onSessionChange?: (active: boolean) => void;
 }) {
   const [session, setSession] = useState<WatchPartySession | null>(readWatchPartySession);
   const [party, setParty] = useState<PartyState | null>(null);
@@ -41,9 +43,10 @@ export function useWatchParty({ enabled, server, name, mode, roomMode, playback,
   hostHandlerRef.current = onHostState;
 
   const remember = useCallback((next: WatchPartySession | null) => {
+    onSessionChange?.(Boolean(next?.roomId));
     setSession(next);
     saveWatchPartySession(next);
-  }, []);
+  }, [onSessionChange]);
   const createRoom = useCallback(async () => {
     setError("");
     try {

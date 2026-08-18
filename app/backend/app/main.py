@@ -18,6 +18,7 @@ from .api.community_ratings import router as community_ratings_router
 from .api.storage import router as storage_router
 from .api.watch_party import router as party_router
 from .api.yummy import router as yummy_router
+from .api.downloads import router as downloads_router
 from .config import settings
 
 app = FastAPI(
@@ -37,6 +38,7 @@ app.add_middleware(
 
 # Register API routers
 app.include_router(yummy_router)
+app.include_router(downloads_router)
 app.include_router(storage_router)
 app.include_router(party_router)
 app.include_router(gdrive_router)

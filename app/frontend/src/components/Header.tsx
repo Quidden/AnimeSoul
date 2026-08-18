@@ -16,6 +16,7 @@ type HeaderProps = {
   onCatalog: () => void;
   onLibrary: () => void;
   onRatings: () => void;
+  onDownloads: () => void;
   theme?: Theme;
   setTheme?: (theme: Theme) => void;
   playerPrefs?: PlayerPrefs;
@@ -51,6 +52,7 @@ export function Header({
   onCatalog,
   onLibrary,
   onRatings,
+  onDownloads,
   theme,
   setTheme,
   playerPrefs,
@@ -307,7 +309,7 @@ export function Header({
 
   return <header>
     <Brand />
-    <nav><button onClick={onCatalog}>Каталог</button><button onClick={onLibrary}>Статистика</button><button onClick={onRatings}>Оценки</button></nav>
+    <nav><button onClick={onCatalog}>Каталог</button><button onClick={onDownloads}>Скачанные</button><button onClick={onLibrary}>Статистика</button><button onClick={onRatings}>Оценки</button></nav>
     {!compact && <div className="search-wrap" onBlur={event => {
       if (!event.currentTarget.contains(event.relatedTarget)) setSuggestionsOpen(false);
     }}>

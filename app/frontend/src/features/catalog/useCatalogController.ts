@@ -22,7 +22,7 @@ import {
     prefetchCatalogSearch,
 } from "./api";
 
-export type ApplicationView = "home" | "catalog" | "stats" | "ratings";
+export type ApplicationView = "home" | "catalog" | "stats" | "ratings" | "downloads";
 
 interface UseCatalogControllerOptions {
     favorites: number[];

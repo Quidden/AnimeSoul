@@ -25,6 +25,13 @@ export type Anime = {
   views?: number;
   anime_status?: { value?: number; title?: string; alias?: string };
   viewing_order?: Anime[];
+  remote_ids?: {
+    shikimori_id?: number | string;
+    kp_id?: number | string;
+    imdb_id?: number | string;
+    worldart_id?: number | string;
+    worldart_type?: string;
+  };
   franchiseCount?: number;
   franchiseEntries?: Anime[];
   random_screenshots?: AnimeScreenshot[];
@@ -95,6 +102,13 @@ export type Video = {
   skips?: {
     opening?: { time: number; length: number } | null;
     ending?: { time: number; length: number } | null;
+  };
+  /** A fully downloaded local copy. It is preferred outside Watch Party. */
+  offline?: {
+    episodeId: string;
+    quality: number;
+    mediaUrl: string;
+    previewUrl?: string;
   };
 };
 
@@ -191,6 +205,7 @@ export type PlayerPrefs = {
   homePreviewMode: "screenshots" | "poster";
   playerEpisodeCarousel: boolean;
   episodeHoverPreview: boolean;
+  toolbarIconOnly: boolean;
   watchedEpisodeColor: string;
   interfaceFontScale: number;
   headingFontScale: number;

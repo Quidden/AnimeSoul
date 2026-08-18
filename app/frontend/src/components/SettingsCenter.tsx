@@ -21,6 +21,7 @@ import { CloudSettings } from "../features/settings/CloudSettings";
 import { GoogleDriveInitialSyncModal } from "../features/settings/GoogleDriveInitialSyncModal";
 import { AppearanceSettings } from "../features/settings/AppearanceSettings";
 import { ProfileSettings } from "../features/settings/ProfileSettings";
+import { OfflineSettings } from "../features/settings/OfflineSettings";
 
 type Props = {
   theme: Theme;
@@ -94,22 +95,12 @@ export function SettingsCenter(props: Props) {
     const close = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    const closeOutside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !modalRef.current?.contains(event.target)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        setOpen(false);
-      }
-    };
     window.addEventListener("keydown", close);
-    document.addEventListener("pointerdown", closeOutside, true);
     return () => {
       window.clearInterval(statusTimer);
       window.removeEventListener("message", handleMessage);
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", close);
-      document.removeEventListener("pointerdown", closeOutside, true);
     };
   }, [open]);
 
@@ -427,6 +418,8 @@ export function SettingsCenter(props: Props) {
                   onExport={props.onExport}
                   onImport={props.onImport}
                 />
+
+                <OfflineSettings />
 
                 <CloudSettings state={googleDrive} />
 

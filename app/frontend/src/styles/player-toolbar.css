@@ -1,0 +1,629 @@
+/*
+ * Player toolbar geometry lives here rather than being spread across the old
+ * player stylesheet.  These rules are deliberately placed last in globals.css
+ * so each toolbar position has one authoritative layout.
+ */
+
+:root {
+  --toolbar-side-width: 252px;
+  --toolbar-compact-side-width: 68px;
+  --toolbar-control-size: 40px;
+  --toolbar-gap: 10px;
+}
+
+.video-layout.toolbar-right,
+.video-layout.toolbar-left {
+  display: block !important;
+  position: relative !important;
+}
+
+.video-layout.toolbar-top,
+.video-layout.toolbar-bottom {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.video-layout.toolbar-right { padding-right: var(--toolbar-side-width) !important; }
+.video-layout.toolbar-left { padding-left: var(--toolbar-side-width) !important; }
+
+.video-layout.toolbar-right:has(> .player-toolbar.is-icon-only) {
+  padding-right: var(--toolbar-compact-side-width) !important;
+}
+
+.video-layout.toolbar-left:has(> .player-toolbar.is-icon-only) {
+  padding-left: var(--toolbar-compact-side-width) !important;
+}
+
+.video-layout > .player-toolbar {
+  box-sizing: border-box;
+  display: flex !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 0 1 auto !important;
+  flex-wrap: nowrap !important;
+  align-items: flex-end !important;
+  gap: 12px !important;
+  min-width: 0;
+  min-height: 66px;
+  padding: 12px 16px !important;
+  background: #100d13;
+}
+
+.video-layout > .player-toolbar > .player-toolbar-controls {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, .75fr) minmax(0, 1fr);
+  flex: 1 1 auto;
+  align-items: end;
+  min-width: 0;
+  gap: var(--toolbar-gap);
+}
+
+.video-layout > .player-toolbar > .player-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.video-layout > .player-toolbar .toolbar-select {
+  display: grid !important;
+  grid-template-rows: auto 40px;
+  min-width: 0;
+  gap: 6px;
+  color: #aaa2b0;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.video-layout > .player-toolbar .toolbar-select > span { min-width: 0; }
+
+.video-layout > .player-toolbar .toolbar-select select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 40px;
+  padding: 7px 34px 7px 11px;
+  border: 1px solid #3b3344;
+  border-radius: 10px;
+  background: #211c27;
+  color: #f5f1f7;
+  font-size: 14px;
+  text-overflow: ellipsis;
+}
+
+.video-layout > .player-toolbar .toolbar-skip {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid #44374f;
+  border-radius: 10px;
+  background: #211a2a;
+  color: #f5f1f7;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* Download and settings are always actual icon buttons.  Their text remains
+ * available through accessible labels and browser tooltips. */
+.video-layout > .player-toolbar .offline-download-controls {
+  display: block !important;
+  width: var(--toolbar-control-size);
+  min-width: var(--toolbar-control-size);
+  flex: 0 0 var(--toolbar-control-size);
+}
+
+.video-layout > .player-toolbar .offline-download-menu {
+  position: relative;
+  width: var(--toolbar-control-size);
+}
+
+.video-layout > .player-toolbar .offline-download-menu summary,
+.video-layout > .player-toolbar .player-settings-trigger {
+  box-sizing: border-box;
+  display: grid !important;
+  width: var(--toolbar-control-size);
+  height: var(--toolbar-control-size);
+  min-height: var(--toolbar-control-size);
+  place-items: center;
+  padding: 0 !important;
+  border: 1px solid #39313f;
+  border-radius: 12px;
+  background: #1b1720;
+  color: #ebe5ef;
+  cursor: pointer;
+  list-style: none;
+}
+
+.video-layout > .player-toolbar .player-settings-trigger { flex: 0 0 var(--toolbar-control-size); }
+
+.video-layout > .player-toolbar .offline-download-menu summary::-webkit-details-marker { display: none; }
+.video-layout > .player-toolbar .offline-download-menu summary span { display: none; }
+
+.video-layout > .player-toolbar .offline-download-menu summary::before {
+  width: 21px;
+  height: 21px;
+  content: "";
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v11m0 0 4-4m-4 4-4-4M5 21h14' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v11m0 0 4-4m-4 4-4-4M5 21h14' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+.video-layout > .player-toolbar .player-settings-trigger::before {
+  content: "⚙";
+  color: currentColor;
+  font-family: "Segoe UI Symbol", sans-serif;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.video-layout > .player-toolbar .offline-download-menu summary:hover,
+.video-layout > .player-toolbar .player-settings-trigger:hover {
+  border-color: #7651a9;
+  color: #fff;
+}
+
+.video-layout > .player-toolbar .offline-download-menu-content {
+  position: absolute !important;
+  z-index: 60;
+  right: 0;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  width: 252px;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 10px;
+  border: 1px solid #39313f;
+  border-radius: 12px;
+  background: #17131bd9;
+  box-shadow: 0 14px 38px #000a;
+  backdrop-filter: blur(16px);
+}
+
+.toolbar-top > .player-toolbar .offline-download-menu-content { top: calc(100% + 8px); }
+.toolbar-bottom > .player-toolbar .offline-download-menu-content { bottom: calc(100% + 8px); }
+
+.video-layout > .player-toolbar .offline-download-menu-content label {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.video-layout > .player-toolbar .offline-download-menu-content select,
+.video-layout > .player-toolbar .offline-download-menu-content button {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 38px;
+  border-radius: 9px;
+}
+
+.video-layout > .player-toolbar .offline-download-menu-content button:last-child { grid-column: 1 / -1; }
+
+.video-layout > .player-toolbar .offline-download-controls.is-active .offline-download-menu summary {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: offline-download-pulse 1.6s ease-in-out infinite;
+}
+
+.video-layout > .player-toolbar .offline-download-status {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid #46365a;
+  border-radius: 9px;
+  background: rgba(126, 82, 188, .12);
+}
+
+.video-layout > .player-toolbar .offline-download-status > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: #e9e0ef;
+  font-size: 12px;
+}
+
+.video-layout > .player-toolbar .offline-download-status > div:first-child span {
+  overflow: hidden;
+  color: #bdb2c5;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-layout > .player-toolbar .offline-download-status.is-error {
+  border-color: #7e3f55;
+  background: rgba(157, 61, 91, .13);
+}
+
+.video-layout > .player-toolbar .offline-download-status-progress {
+  overflow: hidden;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+}
+
+.video-layout > .player-toolbar .offline-download-status-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width .35s ease;
+}
+
+.video-layout > .player-toolbar .offline-download-menu-content button:disabled {
+  border-color: #342c3a;
+  color: #7f7585;
+  cursor: wait;
+}
+
+.offline-download-notice {
+  position: fixed;
+  z-index: 5100;
+  left: 50%;
+  bottom: 22px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 11px;
+  width: min(440px, calc(100vw - 32px));
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid #4d3d61;
+  border-radius: 12px;
+  background: #17131bf5;
+  box-shadow: 0 14px 38px #0009;
+  color: #eee7f4;
+  font-size: 13px;
+  transform: translateX(-50%);
+}
+
+.offline-download-notice strong { color: #d9c5f3; }
+.offline-download-notice span { min-width: 0; color: #d7cedc; }
+.offline-download-notice.is-error { border-color: #7e3f55; }
+.offline-download-notice.is-completed { border-color: #3e745b; }
+
+@keyframes offline-download-pulse {
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 4%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video-layout > .player-toolbar .offline-download-controls.is-active .offline-download-menu summary { animation: none; }
+}
+
+/* Side panels are real vertical columns.  The actions are pinned to the
+ * bottom-right (download immediately to the left of settings). */
+.toolbar-right > .player-toolbar,
+.toolbar-left > .player-toolbar {
+  position: absolute !important;
+  top: 0;
+  bottom: 0;
+  z-index: 4;
+  width: var(--toolbar-side-width) !important;
+  padding: 14px 12px !important;
+  overflow: visible !important;
+}
+
+.toolbar-right > .player-toolbar { right: 0; }
+.toolbar-left > .player-toolbar { left: 0; }
+
+.toolbar-right > .player-toolbar > .player-toolbar-controls,
+.toolbar-left > .player-toolbar > .player-toolbar-controls {
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-content: start;
+  align-items: start;
+  width: 100%;
+}
+
+.toolbar-right > .player-toolbar > .player-toolbar-actions,
+.toolbar-left > .player-toolbar > .player-toolbar-actions {
+  position: absolute;
+  bottom: 14px;
+  z-index: 5;
+  display: grid !important;
+  grid-template-columns: repeat(2, var(--toolbar-control-size)) !important;
+  grid-template-rows: var(--toolbar-control-size) !important;
+  grid-auto-flow: row !important;
+  width: calc(var(--toolbar-control-size) * 2 + 10px) !important;
+  gap: 10px;
+}
+
+.toolbar-right > .player-toolbar > .player-toolbar-actions { right: 14px; }
+.toolbar-left > .player-toolbar > .player-toolbar-actions { left: 14px; }
+
+/* The legacy side layout positioned the download wrapper independently. Keep
+ * both actions in this grid, otherwise the download icon escapes to the left. */
+.toolbar-right > .player-toolbar > .player-toolbar-actions .offline-download-controls,
+.toolbar-left > .player-toolbar > .player-toolbar-actions .offline-download-controls {
+  position: static !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  align-self: auto !important;
+  width: var(--toolbar-control-size) !important;
+  min-width: var(--toolbar-control-size) !important;
+}
+
+.toolbar-right > .player-toolbar > .player-toolbar-actions .player-settings-trigger,
+.toolbar-left > .player-toolbar > .player-toolbar-actions .player-settings-trigger {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+
+.toolbar-right > .player-toolbar .offline-download-menu-content,
+.toolbar-left > .player-toolbar .offline-download-menu-content {
+  right: 0;
+  bottom: calc(100% + 8px);
+  grid-template-columns: 1fr;
+  width: calc(var(--toolbar-side-width) - 24px);
+}
+
+.toolbar-left > .player-toolbar .offline-download-menu-content { left: 0; right: auto; }
+
+/* Compact mode has no text, yet remains wide enough to keep the two bottom
+ * action buttons inside the panel without overlapping. */
+.toolbar-right > .player-toolbar.is-icon-only,
+.toolbar-left > .player-toolbar.is-icon-only {
+  width: var(--toolbar-compact-side-width) !important;
+}
+
+.toolbar-right > .player-toolbar.is-icon-only > .player-toolbar-controls,
+.toolbar-left > .player-toolbar.is-icon-only > .player-toolbar-controls {
+  grid-template-columns: var(--toolbar-control-size) !important;
+}
+
+.toolbar-right > .player-toolbar.is-icon-only > .player-toolbar-controls {
+  justify-content: start;
+  justify-items: start;
+}
+
+.toolbar-left > .player-toolbar.is-icon-only > .player-toolbar-controls {
+  justify-content: end;
+  justify-items: end;
+}
+
+/* In compact side mode the single icon column stays next to the video, not
+ * against the outer edge of an unnecessarily wide panel. */
+.toolbar-right > .player-toolbar.is-icon-only > .player-toolbar-actions {
+  right: auto;
+  left: 14px;
+}
+
+.toolbar-left > .player-toolbar.is-icon-only > .player-toolbar-actions {
+  right: 14px;
+  left: auto;
+}
+
+.toolbar-right > .player-toolbar.is-icon-only > .player-toolbar-actions,
+.toolbar-left > .player-toolbar.is-icon-only > .player-toolbar-actions {
+  grid-template-columns: var(--toolbar-control-size) !important;
+  grid-template-rows: repeat(2, var(--toolbar-control-size)) !important;
+  width: var(--toolbar-control-size) !important;
+}
+
+.toolbar-right > .player-toolbar.is-icon-only > .player-toolbar-actions .player-settings-trigger,
+.toolbar-left > .player-toolbar.is-icon-only > .player-toolbar-actions .player-settings-trigger {
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-select {
+  position: relative;
+  display: block !important;
+  width: var(--toolbar-control-size);
+  height: var(--toolbar-control-size);
+  min-height: var(--toolbar-control-size);
+  justify-self: center;
+  border: 1px solid #39313f;
+  border-radius: 12px;
+  background: #211c27;
+  overflow: hidden;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-select > span { display: none; }
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-select::before {
+  position: absolute;
+  inset: auto !important;
+  top: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: 50% !important;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: #e9e1ed;
+  width: 21px !important;
+  height: 21px !important;
+  content: "" !important;
+  background: currentColor !important;
+  -webkit-mask: none !important;
+  mask: none !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+  font-size: 0 !important;
+  pointer-events: none;
+  transform: translate(-50%, -50%) !important;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-select::after {
+  display: none !important;
+  content: none !important;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-select-dubbing::before {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 10v4h4l5 4V6l-5 4H4Zm12.5-.7a4.5 4.5 0 0 1 0 5.4M19 7a7.5 7.5 0 0 1 0 10' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat !important;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 10v4h4l5 4V6l-5 4H4Zm12.5-.7a4.5 4.5 0 0 1 0 5.4M19 7a7.5 7.5 0 0 1 0 10' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat !important;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-select-episode::before {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") center/contain no-repeat !important;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") center/contain no-repeat !important;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-select-source::before {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='5' width='18' height='14' rx='2' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath d='m10 9 5 3-5 3z' fill='black'/%3E%3C/svg%3E") center/contain no-repeat !important;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='5' width='18' height='14' rx='2' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath d='m10 9 5 3-5 3z' fill='black'/%3E%3C/svg%3E") center/contain no-repeat !important;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-select select {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-skip {
+  width: var(--toolbar-control-size);
+  min-height: var(--toolbar-control-size);
+  justify-self: center;
+  padding: 0;
+  font-size: 0;
+}
+
+.video-layout > .player-toolbar.is-icon-only .toolbar-skip > span { display: none; }
+.video-layout > .player-toolbar.is-icon-only .toolbar-skip-opening::before { content: "↷"; font-size: 22px; }
+.video-layout > .player-toolbar.is-icon-only .toolbar-skip-ending::before { content: "↶"; font-size: 22px; }
+
+.video-layout > .player-toolbar.is-icon-only > .player-toolbar-controls {
+  grid-template-columns: repeat(3, var(--toolbar-control-size));
+  flex: 0 1 auto;
+  align-items: center;
+}
+
+.toolbar-right > .player-toolbar.is-icon-only .offline-download-menu-content,
+.toolbar-left > .player-toolbar.is-icon-only .offline-download-menu-content {
+  width: 252px;
+}
+
+/* Rendered through a portal, so it is centered in the browser viewport and is
+ * never clipped by the player frame or an animated ancestor. */
+.player-settings-layer {
+  position: fixed;
+  z-index: 5000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(5, 4, 8, .72);
+  backdrop-filter: blur(8px);
+}
+
+.player-settings-dialog {
+  box-sizing: border-box;
+  width: min(430px, calc(100vw - 32px));
+  max-height: min(720px, calc(100dvh - 32px));
+  overflow: auto;
+  border: 1px solid #57416d;
+  border-radius: 16px;
+  background: #151118;
+  box-shadow: 0 24px 72px #000c;
+}
+
+.player-settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 50px;
+  padding: 0 12px 0 18px;
+  border-bottom: 1px solid #322a39;
+  background: #19141e;
+  color: #f3edf5;
+}
+
+.player-settings-header button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #d8cfe0;
+  cursor: pointer;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.player-settings-header button:hover { background: #2b2331; color: #fff; }
+
+.player-settings-content {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.player-settings-content > .toggle-row {
+  justify-content: space-between;
+  flex-direction: row-reverse;
+  gap: 18px;
+}
+
+.player-settings-content > .toggle-row > span { color: #d7cedc; font-size: 14px; }
+
+.player-settings-content > label:not(.toggle-row) {
+  display: grid;
+  gap: 6px;
+  color: #aaa2b0;
+  font-size: 13px;
+}
+
+.player-settings-content > label select {
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid #3b3344;
+  border-radius: 10px;
+  background: #211c27;
+  color: #f5f1f7;
+}
+
+@media (max-width: 720px) {
+  .video-layout.toolbar-right,
+  .video-layout.toolbar-left,
+  .video-layout.toolbar-right:has(> .player-toolbar.is-icon-only),
+  .video-layout.toolbar-left:has(> .player-toolbar.is-icon-only) {
+    padding: 0 !important;
+  }
+
+  .toolbar-right > .player-toolbar,
+  .toolbar-left > .player-toolbar,
+  .toolbar-right > .player-toolbar.is-icon-only,
+  .toolbar-left > .player-toolbar.is-icon-only {
+    position: relative !important;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: auto !important;
+  }
+
+  .toolbar-right > .player-toolbar > .player-toolbar-actions,
+  .toolbar-left > .player-toolbar > .player-toolbar-actions {
+    position: static;
+  }
+
+  .video-layout > .player-toolbar > .player-toolbar-controls {
+    grid-template-columns: minmax(150px, 1.3fr) minmax(110px, .8fr) minmax(140px, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .video-layout > .player-toolbar { align-items: start !important; }
+
+  .video-layout > .player-toolbar > .player-toolbar-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .video-layout > .player-toolbar .toolbar-select-source { grid-column: 1 / span 2; }
+
+  .video-layout > .player-toolbar.is-icon-only > .player-toolbar-controls {
+    grid-template-columns: repeat(3, var(--toolbar-control-size));
+  }
+}
