@@ -9,6 +9,7 @@ import type { ApiStatus, PlayerPrefs, SaveStatus, ToolbarPosition } from "./type
 export type AppEventMap = {
   "save-status": SaveStatus;
   "api-status": ApiStatus;
+  "kodik-api-status": ApiStatus;
   "party-ping": {
     state: "idle" | "connected" | "error";
     ms?: number;

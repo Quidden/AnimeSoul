@@ -153,7 +153,8 @@
 | Путь | Назначение |
 | --- | --- |
 | `components/Header.tsx` | бренд, навигация, поиск, профили и статусы API/save/cloud/party |
-| `components/Player.tsx` | lifetime iframe-плеера, сезоны, sources, progress, Kodik messages и Watch Party |
+| `components/Player.tsx` | выбор direct/iframe-плеера, сезоны, sources, progress, Kodik messages и Watch Party |
+| `features/player/AnimeSoulPlayer.tsx` | собственные HLS controls, качество, субтитры, continuity и skip-маркеры |
 | `components/SettingsCenter.tsx` | modal shell, вкладки, поиск и orchestration настроек |
 | `components/AnimeCard.tsx` | карточка каталога и progress bar |
 | `components/RatingBoard.tsx` | сводка источников рейтинга |
@@ -184,6 +185,8 @@
 | `lib/tracking.ts` | episode keys, reconciliation, sort и acknowledge |
 | `lib/ratings.ts` | rating tree, averages и mapping внешних источников |
 | `lib/kodik.ts` | iframe identity/URL и нормализация Kodik postMessage fields |
+| `lib/kodikStream.ts` | typed запрос прямого потока и кратковременный cache ссылок |
+| `lib/playerPreferences.ts` | приоритет любимой озвучки и плеера тайтла |
 | `lib/watchPartyLogic.ts` | user-change/target/revision guards |
 | `lib/gdrive.ts` | typed frontend client `/api/gdrive/*` |
 | `lib/events.ts` | typed event map и emit/listen adapters |

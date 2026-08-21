@@ -1,3 +1,5 @@
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { PlayerPrefs, ToolbarPosition } from "../../lib/types";
 import { Toggle } from "../../components/Toggle";
 
@@ -9,7 +11,13 @@ export type PlayerSelectOption = {
 type PlayerToolbarProps = {
   dubbings: string[];
   dubbing: string;
+  favoriteDubbings?: string[];
+  titleDubbing?: string;
   onDubbingChange: (value: string) => void;
+  dubbingFavorite: boolean;
+  onDubbingFavoriteToggle: () => void;
+  dubbingPreferredForTitle: boolean;
+  onDubbingPreferredForTitleToggle: () => void;
   episodes: PlayerSelectOption[];
   episode: string;
   onEpisodeChange: (value: string) => void;
@@ -36,6 +44,7 @@ type PlayerToolbarProps = {
   onPrefsChange: (patch: Partial<PlayerPrefs>) => void;
   position: ToolbarPosition;
   onPositionChange: (position: ToolbarPosition) => void;
+  downloadControls?: ReactNode;
 };
 
 /**
@@ -48,7 +57,13 @@ type PlayerToolbarProps = {
 export function PlayerToolbar({
   dubbings,
   dubbing,
+  favoriteDubbings = [],
+  titleDubbing = "",
   onDubbingChange,
+  dubbingFavorite,
+  onDubbingFavoriteToggle,
+  dubbingPreferredForTitle,
+  onDubbingPreferredForTitleToggle,
   episodes,
   episode,
   onEpisodeChange,
@@ -75,47 +90,95 @@ export function PlayerToolbar({
   onPrefsChange,
   position,
   onPositionChange,
+  downloadControls,
 }: PlayerToolbarProps) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSettingsOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [settingsOpen]);
+
   return (
-    <div className="player-toolbar">
-      <label>
-        Озвучка
-        <select value={dubbing} onChange={event => onDubbingChange(event.target.value)}>
-          {dubbings.map(value => <option key={value} value={value}>{value}</option>)}
-        </select>
-      </label>
+    <div className={`player-toolbar${prefs.toolbarIconOnly ? " is-icon-only" : ""}`}>
+      <div className="player-toolbar-controls">
+        <label className="toolbar-select toolbar-select-dubbing" data-icon="♫" title="Озвучка">
+          <span>Озвучка</span>
+          <select aria-label="Озвучка" value={dubbing} onChange={event => onDubbingChange(event.target.value)}>
+            {dubbings.map(value => (
+              <option key={value} value={value}>
+                {favoriteDubbings.includes(value) ? "★ " : ""}{titleDubbing === value ? "♥ " : ""}{value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className={`toolbar-dubbing-action${dubbingFavorite ? " active" : ""}`}
+          title={dubbingFavorite ? "Убрать озвучку из общего избранного" : "Добавить озвучку в общее избранное"}
+          aria-label={dubbingFavorite ? "Убрать озвучку из избранного" : "Добавить озвучку в избранное"}
+          aria-pressed={dubbingFavorite}
+          onClick={onDubbingFavoriteToggle}
+        >★</button>
+        <button
+          type="button"
+          className={`toolbar-dubbing-action title-default${dubbingPreferredForTitle ? " active" : ""}`}
+          title={dubbingPreferredForTitle ? "Снять озвучку по умолчанию для этого аниме" : "Сделать озвучкой по умолчанию для этого аниме"}
+          aria-label={dubbingPreferredForTitle ? "Снять любимую озвучку тайтла" : "Назначить любимой озвучкой тайтла"}
+          aria-pressed={dubbingPreferredForTitle}
+          onClick={onDubbingPreferredForTitleToggle}
+        >♥</button>
 
-      <label>
-        Серия
-        <select value={episode} onChange={event => onEpisodeChange(event.target.value)}>
-          {episodes.map(option => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </label>
+        <label className="toolbar-select toolbar-select-episode" data-icon="≣" title="Серия">
+          <span>Серия</span>
+          <select aria-label="Серия" value={episode} onChange={event => onEpisodeChange(event.target.value)}>
+            {episodes.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
 
-      <label>
-        Источник
-        <select value={source} onChange={event => onSourceChange(event.target.value)}>
-          {sources.map(value => <option key={value} value={value}>{value}</option>)}
-        </select>
-      </label>
+        <label className="toolbar-select toolbar-select-source" data-icon="◉" title="Источник">
+          <span>Источник</span>
+          <select aria-label="Источник" value={source} onChange={event => onSourceChange(event.target.value)}>
+            {sources.map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
 
-      {openingLabel && <button onClick={onSkipOpening}>{openingLabel}</button>}
-      {endingLabel && <button onClick={onSkipEnding}>{endingLabel}</button>}
+        {openingLabel && <button className="toolbar-skip toolbar-skip-opening" title={openingLabel} aria-label={openingLabel} onClick={onSkipOpening}><span>{openingLabel}</span></button>}
+        {endingLabel && <button className="toolbar-skip toolbar-skip-ending" title={endingLabel} aria-label={endingLabel} onClick={onSkipEnding}><span>{endingLabel}</span></button>}
 
-      <details
-        className="compact-options player-options"
-        onClick={event => {
-          if (event.target === event.currentTarget && event.currentTarget.open) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.currentTarget.open = false;
-          }
-        }}
-      >
-        <summary>⚙ Настройки просмотра</summary>
-        <div>
+      </div>
+
+      <div className="player-toolbar-actions">
+        {downloadControls}
+        <button
+          type="button"
+          className="player-settings-trigger"
+          title="Настройки просмотра"
+          aria-label="Настройки просмотра"
+          onClick={() => setSettingsOpen(true)}
+        />
+      </div>
+
+      {settingsOpen && typeof document !== "undefined" && createPortal(
+        <div className="player-settings-layer" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
+          <section
+            className="player-settings-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Настройки просмотра"
+            onMouseDown={event => event.stopPropagation()}
+          >
+            <header className="player-settings-header">
+              <strong>Настройки просмотра</strong>
+              <button type="button" aria-label="Закрыть настройки" title="Закрыть" onClick={() => setSettingsOpen(false)}>×</button>
+            </header>
+            <div className="player-settings-content">
           <Toggle label="Автоскип опенинга" value={autoSkipOpening} onChange={onAutoSkipOpeningChange} />
           <Toggle label="Автоскип эндинга" value={autoSkipEnding} onChange={onAutoSkipEndingChange} />
           <Toggle label="Автосерия" value={autoNext} onChange={onAutoNextChange} />
@@ -125,6 +188,11 @@ export function PlayerToolbar({
             label="Предпросмотр серии при наведении"
             value={episodeHoverPreview}
             onChange={onEpisodeHoverPreviewChange}
+          />
+          <Toggle
+            label="Компактная панель (только иконки)"
+            value={prefs.toolbarIconOnly}
+            onChange={toolbarIconOnly => onPrefsChange({ toolbarIconOnly })}
           />
           <Toggle
             label="Совместный режим"
@@ -189,8 +257,11 @@ export function PlayerToolbar({
               <option value="right">Справа</option>
             </select>
           </label>
-        </div>
-      </details>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

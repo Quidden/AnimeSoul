@@ -53,6 +53,12 @@ export function WatchPartyPanel({
         )}
       </div>
 
+      {!party.session && (
+        <small className="watch-party-notice">
+          Совместный просмотр работает только с онлайн-источником. Локальная копия временно отключится после подключения к комнате.
+        </small>
+      )}
+
       {!party.session ? (
         <div className="watch-party-connect">
           <button type="button" onClick={() => void party.createRoom()}>Создать комнату</button>

@@ -66,6 +66,7 @@ import { fetchAnimeDetails } from "./features/catalog/api";
 import { hasUserRatings, setUserRating, type RatingTarget } from "./lib/ratings";
 import { RatingsPage } from "./pages/RatingsPage";
 import { useCommunityRatings } from "./features/ratings/useCommunityRatings";
+import { DownloadsPage } from "./features/downloads/DownloadsPage";
 
 export default function Home() {
     const catalogRef = useRef<Anime[]>([]);
@@ -352,6 +353,13 @@ export default function Home() {
         setView("ratings");
         window.scrollTo({top: 0, behavior: "smooth"});
     };
+    const showDownloads = () => {
+        setActive(null);
+        setResumeRequested(false);
+        setNewEpisodeRequested(false);
+        setView("downloads");
+        window.scrollTo({top: 0, behavior: "smooth"});
+    };
     const updateRating = (
         animeId: number,
         title: string,
@@ -383,6 +391,7 @@ export default function Home() {
         setQuery,
         onLibrary: openLibrary,
         onRatings: showRatings,
+        onDownloads: showDownloads,
         theme,
         setTheme,
         playerPrefs,
@@ -630,6 +639,9 @@ export default function Home() {
                     onOpen={openAnime}
                     onRatingChange={updateRating}
                 />
+            )}
+            {view === "downloads" && (
+                <DownloadsPage onHome={goHome} onOpen={openAnime} />
             )}
             {view === "catalog" && (
                 <CatalogPage

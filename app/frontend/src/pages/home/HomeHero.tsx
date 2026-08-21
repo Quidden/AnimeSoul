@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 
 import { EpisodeSlideshow, episodePreviewImages } from "../../components/EpisodeSlideshow";
-import { Toggle } from "../../components/Toggle";
 import { formatTime } from "../../lib/anime";
 import { homeTrailerEmbedUrl, isYouTubeTrailer } from "../../lib/trailer";
-import type { HeroTrailer, PlayerPrefs } from "../../lib/types";
+import type { HeroTrailer } from "../../lib/types";
 import type { HomePageActions, HomePageModel, HomePageProps } from "./types";
 
 const YOUTUBE_UI_SETTLE_MS = 2300;
@@ -128,10 +127,6 @@ export function HomeHero({ model, actions }: HomePageProps) {
           </>
         )}
       </div>
-
-      <div className="home-hero-settings-wrap" onClick={event => event.stopPropagation()}>
-        <ResumeSettings prefs={playerPrefs} onUpdate={actions.updatePlayerPrefs} />
-      </div>
     </section>
   );
 }
@@ -186,6 +181,7 @@ function TrailerMedia({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const revealTimerRef = useRef<number | null>(null);
   const revealAtRef = useRef(0);
+  const lastYoutubeLoopAtRef = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const poster = trailer.poster ?? fallback;
 
@@ -237,6 +233,25 @@ function TrailerMedia({
         ? payload.info
         : info?.playerState;
       const currentTime = info?.currentTime;
+      if (playerState === 0) {
+        const now = performance.now();
+        if (now - lastYoutubeLoopAtRef.current >= 1_200) {
+          lastYoutubeLoopAtRef.current = now;
+          const target = iframeRef.current?.contentWindow;
+          target?.postMessage(JSON.stringify({
+            event: "command",
+            func: "seekTo",
+            args: [startAt, true],
+            id: "animesoul-home-trailer",
+          }), "*");
+          target?.postMessage(JSON.stringify({
+            event: "command",
+            func: "playVideo",
+            args: [],
+            id: "animesoul-home-trailer",
+          }), "*");
+        }
+      }
       // YouTube briefly draws its central pause glyph after autoplay begins,
       // even with controls=0. Keep the preview image above the iframe until
       // that transient overlay has finished fading out.
@@ -262,7 +277,7 @@ function TrailerMedia({
       window.removeEventListener("message", handlePlayerMessage);
       window.clearInterval(poll);
     };
-  }, [reveal, trailer.kind, trailer.url]);
+  }, [reveal, startAt, trailer.kind, trailer.url]);
 
   useEffect(() => () => {
     if (revealTimerRef.current !== null) {
@@ -291,8 +306,6 @@ function TrailerMedia({
           onPlaying={() => reveal()}
           onLoadedMetadata={event => {
             const video = event.currentTarget;
-            const maxStart = Math.max(0, video.duration - 8);
-            video.currentTime = Math.min(startAt, maxStart);
             void video.play().catch(() => undefined);
           }}
         />
@@ -323,54 +336,4 @@ function TrailerMedia({
 
 function randomTrailerStart() {
   return 8 + Math.floor(Math.random() * 29);
-}
-
-function ResumeSettings({
-  prefs,
-  onUpdate,
-}: {
-  prefs: PlayerPrefs;
-  onUpdate: HomePageActions["updatePlayerPrefs"];
-}) {
-  const previewClass = prefs.homeEpisodePreview ? "enabled" : "disabled";
-
-  return (
-    <details className="compact-options hero-options">
-      <summary>⚙ Настройки продолжения</summary>
-      <div>
-        <Toggle
-          label="Автоматически запускать продолжение"
-          value={prefs.autoPlayResume}
-          onChange={autoPlayResume => onUpdate({ autoPlayResume })}
-        />
-        <Toggle
-          label="Трейлер или предпросмотр на главной"
-          value={prefs.homeEpisodePreview}
-          onChange={homeEpisodePreview => onUpdate({ homeEpisodePreview })}
-        />
-        <div className={`preview-mode-field ${previewClass}`}>
-          <span>Резерв, если трейлера нет</span>
-          <div className="preview-mode-switch" role="group" aria-label="Режим предпросмотра">
-            <button
-              type="button"
-              disabled={!prefs.homeEpisodePreview}
-              className={prefs.homePreviewMode === "poster" ? "active" : ""}
-              onClick={() => onUpdate({ homePreviewMode: "poster" })}
-            >
-              HD-картинка
-            </button>
-            <button
-              type="button"
-              disabled={!prefs.homeEpisodePreview}
-              className={prefs.homePreviewMode === "screenshots" ? "active" : ""}
-              onClick={() => onUpdate({ homePreviewMode: "screenshots" })}
-            >
-              Кадры серии
-            </button>
-          </div>
-          <small>Приоритет: трейлер сезона → трейлер аниме → выбранный резерв.</small>
-        </div>
-      </div>
-    </details>
-  );
 }

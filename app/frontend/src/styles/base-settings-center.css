@@ -241,7 +241,7 @@
   display: none!important;
 }
 
-.settings-scroll[data-active-tab="watching"]>[data-settings-tab="watching"],.settings-scroll[data-active-tab="player"]>[data-settings-tab="player"],.settings-scroll[data-active-tab="appearance"]>[data-settings-tab="appearance"],.settings-scroll[data-active-tab="cloud"]>[data-settings-tab="cloud"],.settings-scroll[data-active-tab="party"]>[data-settings-tab="party"],.settings-scroll[data-active-tab="profiles"]>[data-settings-tab="profiles"],.settings-scroll[data-active-tab="debug"]>[data-settings-tab="debug"] {
+.settings-scroll[data-active-tab="watching"]>[data-settings-tab="watching"],.settings-scroll[data-active-tab="player"]>[data-settings-tab="player"],.settings-scroll[data-active-tab="appearance"]>[data-settings-tab="appearance"],.settings-scroll[data-active-tab="offline"]>[data-settings-tab="offline"],.settings-scroll[data-active-tab="cloud"]>[data-settings-tab="cloud"],.settings-scroll[data-active-tab="party"]>[data-settings-tab="party"],.settings-scroll[data-active-tab="profiles"]>[data-settings-tab="profiles"],.settings-scroll[data-active-tab="debug"]>[data-settings-tab="debug"] {
   display: grid!important;
 }
 

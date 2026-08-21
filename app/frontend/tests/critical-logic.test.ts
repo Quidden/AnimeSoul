@@ -29,6 +29,194 @@ import {
   seasonEpisodeAverage,
   setUserRating,
 } from "../src/lib/ratings.ts";
+import {
+  dubbingDurationDeficit,
+  dubbingHasEpisode,
+  isSubtitleTranslation,
+  preferredDubbing,
+  preferredDubbingForEpisode,
+  preferredOfflineVideo,
+  preferredPlayer,
+  subtitleTranslationLabel,
+} from "../src/lib/playerPreferences.ts";
+import {
+  fetchKodikStream,
+  hlsLevelForQuality,
+  isSameEpisodeDubbingSwitch,
+  lowestQualitySource,
+} from "../src/lib/kodikStream.ts";
+import { hasKodikSecretAccess } from "../src/lib/downloads.ts";
+
+test("custom player and downloads require the complete Kodik secret access pair", () => {
+  assert.equal(hasKodikSecretAccess({ kodikPublicKeyConfigured: true, kodikPrivateKeyConfigured: true }), true);
+  assert.equal(hasKodikSecretAccess({ kodikPublicKeyConfigured: true, kodikPrivateKeyConfigured: false }), false);
+  assert.equal(hasKodikSecretAccess({ kodikPublicKeyConfigured: false, kodikPrivateKeyConfigured: true }), false);
+});
+
+test("player preferences follow title voice, global favourites, then Kodik default", () => {
+  const available = ["Kodik default", "AniLibria", "Dream Cast"];
+  assert.equal(preferredDubbing(available, "Dream Cast", ["AniLibria"], "Kodik default"), "Dream Cast");
+  assert.equal(preferredDubbing(available, "Missing", ["AniLibria", "Dream Cast"], "Kodik default"), "AniLibria");
+  assert.equal(preferredDubbing(available, "", ["Missing"], "Kodik default"), "Kodik default");
+  assert.equal(preferredDubbing(available, "", [], ""), "Kodik default");
+});
+
+test("dubbing switches never substitute another episode", () => {
+  const videos = [
+    { number: "5", data: { dubbing: "Voice A" } },
+    { number: "6", data: { dubbing: "Voice B" } },
+  ];
+  assert.equal(dubbingHasEpisode(videos, "Voice A", "5"), true);
+  assert.equal(dubbingHasEpisode(videos, "Voice B", "5"), false);
+});
+
+test("resume keeps the requested episode before applying a favourite dubbing", () => {
+  const videos = [
+    { number: "1", data: { dubbing: "Favourite" } },
+    { number: "3", data: { dubbing: "Resume voice" } },
+    { number: "3", data: { dubbing: "Fallback" } },
+  ];
+  assert.equal(
+    preferredDubbingForEpisode(videos, "3", "Resume voice", "Favourite", ["Favourite"], "Fallback"),
+    "Resume voice",
+  );
+  assert.equal(
+    preferredDubbingForEpisode(videos, "3", "Missing", "Favourite", ["Favourite"], "Fallback"),
+    "Fallback",
+  );
+});
+
+test("downloaded video has priority and returns when its dubbing is selected again", () => {
+  const videos = [
+    { number: "3", data: { dubbing: "Voice A" }, offline: { quality: 480 }, source: "local-480" },
+    { number: "3", data: { dubbing: "Voice A" }, offline: { quality: 720 }, source: "local-720" },
+    { number: "3", data: { dubbing: "Voice A" }, source: "online" },
+    { number: "3", data: { dubbing: "Voice B" }, source: "online-b" },
+  ];
+  assert.equal(preferredOfflineVideo(videos, "Voice A", "3", 480)?.source, "local-480");
+  assert.equal(preferredOfflineVideo(videos, "Voice A", "3", 1080)?.source, "local-720");
+  assert.equal(preferredOfflineVideo(videos, "Voice B", "3", 720), undefined);
+});
+
+test("player flags a materially shorter Kodik dubbing without calling it censorship", () => {
+  const videos = [
+    { number: "6", duration: 1_421, data: { dubbing: "Full", player: "Kodik" } },
+    { number: "6", duration: 1_100, data: { dubbing: "Short", player: "Kodik" } },
+    { number: "6", duration: 1_420, data: { dubbing: "Short", player: "Alloha" } },
+  ];
+  assert.equal(dubbingDurationDeficit(videos, "Short", "6"), 321);
+  assert.equal(dubbingDurationDeficit(videos, "Full", "6"), 0);
+});
+
+test("Kodik subtitle translations are separated from voice dubbings", () => {
+  assert.equal(isSubtitleTranslation("Субтитры Crunchyroll"), true);
+  assert.equal(isSubtitleTranslation("Crunchyroll.Subtitles", "subtitles"), true);
+  assert.equal(isSubtitleTranslation("ТО Дубляжная", "voice"), false);
+  assert.equal(subtitleTranslationLabel("Субтитры Crunchyroll"), "Crunchyroll");
+  assert.equal(subtitleTranslationLabel("Crunchyroll.Subtitles"), "Crunchyroll");
+});
+
+test("AnimeSoul is the default Kodik provider but a title choice wins", () => {
+  const available = ["AnimeSoul", "Kodik", "YummyAnime"];
+  assert.equal(preferredPlayer(available, "Kodik", true, "YummyAnime"), "Kodik");
+  assert.equal(preferredPlayer(available, "", true, "YummyAnime"), "AnimeSoul");
+  assert.equal(preferredPlayer(["YummyAnime"], "", false, "YummyAnime"), "YummyAnime");
+});
+
+test("custom player explains when the running backend predates direct streams", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ detail: "Method Not Allowed" }),
+    { status: 405, headers: { "content-type": "application/json" } },
+  );
+
+  try {
+    await assert.rejects(
+      fetchKodikStream({
+        videoId: "stale-backend-probe",
+        season: 1,
+        episode: "1",
+        dubbing: "Test",
+        iframeUrl: "https://kodik.example/player",
+      }),
+      /старая версия сервера AnimeSoul/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("custom player pins HLS to the requested quality instead of auto ABR", () => {
+  const levels = [{ height: 360 }, { height: 480 }, { height: 720 }, { height: 1080 }];
+  assert.equal(hlsLevelForQuality(levels, 720), 2);
+  assert.equal(hlsLevelForQuality(levels, 900), 2);
+  assert.equal(hlsLevelForQuality(levels, 240), 0);
+});
+
+test("custom player keeps the picture when only the dubbing changes", () => {
+  const previous = {
+    videoId: 1,
+    season: 3,
+    episode: "5",
+    dubbing: "Voice A",
+    translationId: 101,
+    iframeUrl: "https://kodik.example/a",
+  };
+  assert.equal(isSameEpisodeDubbingSwitch(previous, {
+    ...previous,
+    videoId: 2,
+    dubbing: "Voice B",
+    translationId: 202,
+    iframeUrl: "https://kodik.example/b",
+  }), true);
+  assert.equal(isSameEpisodeDubbingSwitch(previous, {
+    ...previous,
+    videoId: 3,
+    episode: "6",
+    dubbing: "Voice B",
+  }), false);
+  assert.equal(isSameEpisodeDubbingSwitch(previous, {
+    ...previous,
+    videoId: 4,
+    iframeUrl: "https://kodik.example/another-source",
+  }), false);
+});
+
+test("downloaded episodes use a direct local stream without calling Kodik", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(null, { status: 500 });
+  };
+
+  try {
+    const directStream = {
+      sources: [{ quality: 720, src: "/api/downloads/media/local-episode", type: "video/mp4" }],
+      subtitles: [],
+    };
+    const resolved = await fetchKodikStream({
+      videoId: "offline:local-episode",
+      season: 3,
+      episode: "5",
+      dubbing: "Voice A",
+      iframeUrl: "/api/downloads/media/local-episode",
+      directStream,
+    });
+    assert.equal(calls, 0);
+    assert.deepEqual(resolved, directStream);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("hidden dubbing audio uses the lightest available rendition", () => {
+  assert.equal(lowestQualitySource([
+    { quality: 720, src: "720.m3u8", type: "hls" },
+    { quality: 360, src: "360.m3u8", type: "hls" },
+    { quality: 480, src: "480.m3u8", type: "hls" },
+  ])?.quality, 360);
+});
 
 test("home trailer URL removes playlist controls and keeps muted autoplay", () => {
   const url = new URL(homeTrailerEmbedUrl(

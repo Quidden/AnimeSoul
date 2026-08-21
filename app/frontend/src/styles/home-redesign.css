@@ -9,7 +9,7 @@
 .home-cinema-hero {
   position: relative;
   isolation: isolate;
-  min-height: calc(100svh - 74px);
+  min-height: 100svh;
   display: flex;
   align-items: flex-end;
   overflow: hidden;

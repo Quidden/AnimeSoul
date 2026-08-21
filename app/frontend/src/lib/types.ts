@@ -25,6 +25,14 @@ export type Anime = {
   views?: number;
   anime_status?: { value?: number; title?: string; alias?: string };
   viewing_order?: Anime[];
+  remote_ids?: {
+    shikimori_id?: number | string;
+    kp_id?: number | string;
+    imdb_id?: number | string;
+    worldart_id?: number | string;
+    worldart_type?: string;
+    kodik_id?: number | string;
+  };
   franchiseCount?: number;
   franchiseEntries?: Anime[];
   random_screenshots?: AnimeScreenshot[];
@@ -91,10 +99,18 @@ export type Video = {
     /** Provider identifiers report translation reliably across locales. */
     player_id?: number | string;
     translation_id?: number | string;
+    translation_type?: string;
   };
   skips?: {
     opening?: { time: number; length: number } | null;
     ending?: { time: number; length: number } | null;
+  };
+  /** A fully downloaded local copy. It is preferred outside Watch Party. */
+  offline?: {
+    episodeId: string;
+    quality: number;
+    mediaUrl: string;
+    previewUrl?: string;
   };
 };
 
@@ -115,6 +131,9 @@ export type EpisodeState = {
   /** Origin anime ID for franchise cross-referencing. */
   originAnimeId?: number;
   originEpisode?: string;
+  /** Voice/provider used for this exact playback position. */
+  dub?: string;
+  player?: string;
   completed?: boolean;
   completions?: number;
   completionHistory?: number[];
@@ -128,6 +147,8 @@ export type EpisodeState = {
     updatedAt: number;
     originAnimeId?: number;
     originEpisode?: string;
+    dub?: string;
+    player?: string;
     completed?: boolean;
     completions?: number;
     completionHistory?: number[];
@@ -191,11 +212,20 @@ export type PlayerPrefs = {
   homePreviewMode: "screenshots" | "poster";
   playerEpisodeCarousel: boolean;
   episodeHoverPreview: boolean;
+  toolbarIconOnly: boolean;
+  /** Keep the legacy toolbar around the custom AnimeSoul player. */
+  customPlayerToolbarVisible: boolean;
   watchedEpisodeColor: string;
   interfaceFontScale: number;
   headingFontScale: number;
   posterScale: number;
   previewScale: number;
+  /** Ordered global voice favourites used as the fallback preference list. */
+  favoriteDubbings: string[];
+  /** Explicit default voice selected for individual anime titles. */
+  titleDubbings: Record<string, string>;
+  /** Player/provider selected for individual anime titles. */
+  titlePlayers: Record<string, string>;
   watchPartyEnabled: boolean;
   watchPartyServer: string;
   watchPartyName: string;

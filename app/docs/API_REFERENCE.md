@@ -1,6 +1,6 @@
 # API AnimeSoul и используемые внешние поля
 
-Справочник описывает фактические контракты версии 0.2.1. Все внутренние URL
+Справочник описывает фактические контракты версии 0.2.2. Все внутренние URL
 относительные: в production их обслуживает тот же FastAPI origin, в разработке
 Vite проксирует их на `http://127.0.0.1:8000`.
 
@@ -28,6 +28,8 @@ Vite проксирует их на `http://127.0.0.1:8000`.
 | `GET` | `/api/storage` | чтение полного сохранения | `api/storage.py` | `useProfileStorage` |
 | `PUT` | `/api/storage` | атомарная запись и optional autosync | `api/storage.py` | `saveStorageDocument` |
 | `GET` | `/api/yummy` | proxy catalog/details/videos/trailers/schedule/ping | `api/yummy.py` | catalog/tracking/player/header |
+| `GET` | `/api/kodik` | проверка доступности Kodik | `api/kodik.py` | settings/diagnostics |
+| `POST` | `/api/kodik/stream` | прямые качества, субтитры и skip-сегменты | `api/kodik.py` | `AnimeSoulPlayer` |
 | `GET` | `/api/community-ratings` | пакет/публичная страница агрегатов | `api/community_ratings.py` | ratings feature |
 | `GET` | `/api/community-ratings/{anime_id}` | один агрегат | `api/community_ratings.py` | внешний клиент/диагностика |
 | `PUT` | `/api/community-ratings/{anime_id}` | заменить анонимное дерево оценки | `api/community_ratings.py` | ratings feature |
@@ -56,7 +58,7 @@ Vite проксирует их на `http://127.0.0.1:8000`.
 {
   "ok": true,
   "stack": "FastAPI + React",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "runtimeInstanceId": "optional-instance-id"
 }
 ```
@@ -213,6 +215,57 @@ Upstream headers формируются только на backend:
 Gateway извлекает поле upstream `response` и рекурсивно превращает строки,
 начинающиеся с `//`, в `https://...`.
 
+## Kodik direct playback
+
+### `POST /api/kodik/stream`
+
+Body описывает уже выбранную серию и озвучку. `iframeUrl` используется backend
+как исходная ссылка для подписи, а stable ID и названия позволяют найти точный
+`/seria/` URL через каталог Kodik:
+
+```json
+{
+  "videoId": 123,
+  "season": 1,
+  "episode": "7",
+  "originEpisode": "7",
+  "dubbing": "AniLibria",
+  "translationId": 610,
+  "iframeUrl": "https://kodik.example/season/...",
+  "sourceId": "77",
+  "sourceIdType": "shikimori",
+  "sourceTitle": "Название",
+  "sourceOriginalTitle": "Original title"
+}
+```
+
+Ответ не содержит публичного/приватного ключа, подписи или IP:
+
+```json
+{
+  "sources": [
+    {"quality": 720, "src": "https://cdn.example/video.m3u8", "type": "hls"}
+  ],
+  "subtitles": [
+    {"src": "https://cdn.example/ru.vtt", "label": "Русские", "language": "ru"}
+  ],
+  "skips": {
+    "opening": {"time": 12, "length": 85},
+    "ending": {"time": 1320, "length": 80}
+  }
+}
+```
+
+`sources` всегда непустой при успехе и отсортирован от большего качества к
+меньшему. `subtitles` и `skips` могут быть пустыми. Закрытый ключ читается из
+защищённого локального файла Kodik settings; если пара ключей отсутствует или
+upstream отклоняет подпись, маршрут возвращает `422` с безопасным `detail`.
+
+### `GET /api/kodik?mode=ping`
+
+Проверяет публичный каталог Kodik и возвращает `ok` и `upstreamMs`. Другие
+значения `mode` дают `400`.
+
 ## Реально используемые поля YummyAnime
 
 Это не полная схема поставщика, а поля, которые читает текущий frontend.
@@ -278,6 +331,7 @@ Gateway извлекает поле upstream `response` и рекурсивно 
 | `data.player` | string | название/тип источника |
 | `data.player_id` | number или string? | устойчивое определение провайдера/перевода |
 | `data.translation_id` | number или string? | устойчивое определение озвучки |
+| `data.translation_type` | string? | voice/subtitles и другие типы перевода Kodik |
 | `skips.opening.time` | number | начало опенинга |
 | `skips.opening.length` | number | длина опенинга |
 | `skips.ending.time` | number | начало эндинга |

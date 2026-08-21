@@ -325,6 +325,9 @@ Preset themes: Аметист, Сакура, Океан, Манго, Светл�
 | `headingFontScale` | number / `1` | заголовки |
 | `posterScale` | number / `1` | постеры |
 | `previewScale` | number / `1` | preview продолжения |
+| `favoriteDubbings` | string[] / `[]` | упорядоченное общее избранное озвучек |
+| `titleDubbings` | Record<string,string> / `{}` | любимая озвучка конкретного тайтла |
+| `titlePlayers` | Record<string,string> / `{}` | выбранный плеер конкретного тайтла |
 | `watchPartyEnabled` | boolean / `false` | UI/логика комнат |
 | `watchPartyServer` | string / current origin | адрес сервера комнаты |
 | `watchPartyName` | string / `Участник` | имя участника |

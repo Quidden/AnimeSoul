@@ -559,6 +559,338 @@
   line-height: 1.45;
 }
 
+/*
+ * The toolbar has two independent areas: quick controls and the viewing
+ * preferences.  Keeping them as separate layout items prevents a long
+ * dubbing label or an opened download menu from moving the preferences out of
+ * sight.  The side variants reserve the preferences for the bottom edge.
+ */
+.player-toolbar {
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 12px !important;
+  min-width: 0;
+  padding: 14px 16px !important;
+}
+
+.player-toolbar-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.35fr) minmax(120px, .7fr) minmax(150px, 1fr);
+  flex: 1 1 620px;
+  min-width: 0;
+  gap: 10px 12px;
+}
+
+.player-toolbar-controls > label:not(.toggle-row) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 6px;
+  color: #9c95a2;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.player-toolbar-controls select {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #3b3344;
+  border-radius: 9px;
+  background: #211c27;
+  color: #f5f1f7;
+  font-size: 14px;
+}
+
+.player-toolbar-controls > button {
+  min-width: 0;
+  min-height: 38px;
+  align-self: end;
+  padding: 8px 11px;
+  border: 1px solid #4b3d5c;
+  border-radius: 9px;
+  background: #211a2a;
+  color: #f5f1f7;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.player-toolbar-controls > button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.player-toolbar > .player-options {
+  flex: 0 0 auto;
+  width: min(220px, 100%);
+  max-width: 100%;
+  margin: 0;
+}
+
+.player-toolbar > .player-options > summary {
+  min-height: 38px;
+  box-sizing: border-box;
+  font-size: 13px;
+}
+
+.video-layout.toolbar-right,
+.video-layout.toolbar-left {
+  --player-toolbar-side-width: clamp(280px, 22vw, 372px);
+}
+
+.video-layout.toolbar-right {
+  padding-right: var(--player-toolbar-side-width);
+}
+
+.video-layout.toolbar-left {
+  padding-left: var(--player-toolbar-side-width);
+}
+
+.toolbar-right .player-toolbar,
+.toolbar-left .player-toolbar {
+  width: var(--player-toolbar-side-width);
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 12px !important;
+  padding: 16px !important;
+}
+
+.toolbar-right .player-toolbar-controls,
+.toolbar-left .player-toolbar-controls {
+  grid-template-columns: minmax(0, 1fr);
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.toolbar-right .player-toolbar-controls > button,
+.toolbar-left .player-toolbar-controls > button {
+  width: 100%;
+}
+
+.toolbar-right .player-toolbar > .player-options,
+.toolbar-left .player-toolbar > .player-options {
+  width: 100%;
+  margin-top: auto;
+}
+
+.toolbar-top .player-toolbar .offline-download-menu-content,
+.toolbar-bottom .player-toolbar .offline-download-menu-content {
+  position: absolute;
+  z-index: 35;
+  right: 0;
+  width: min(260px, calc(100vw - 48px));
+}
+
+.toolbar-top .player-toolbar .offline-download-menu-content {
+  top: calc(100% + 8px);
+}
+
+.toolbar-bottom .player-toolbar .offline-download-menu-content {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.toolbar-right .player-toolbar .offline-download-controls,
+.toolbar-left .player-toolbar .offline-download-controls,
+.toolbar-right .player-toolbar .offline-download-menu,
+.toolbar-left .player-toolbar .offline-download-menu {
+  width: 100%;
+  min-width: 0;
+}
+
+.toolbar-right .player-toolbar .offline-download-menu-content,
+.toolbar-left .player-toolbar .offline-download-menu-content {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.toolbar-right .player-toolbar .offline-download-menu-content button,
+.toolbar-left .player-toolbar .offline-download-menu-content button {
+  min-width: 0;
+  white-space: normal;
+}
+
+.toolbar-right .player-toolbar .offline-download-menu-content button:last-child,
+.toolbar-left .player-toolbar .offline-download-menu-content button:last-child {
+  grid-column: 1 / -1;
+}
+
+.toolbar-right .player-toolbar > .player-options,
+.toolbar-left .player-toolbar > .player-options {
+  z-index: 31;
+}
+
+@media (max-width: 900px) {
+  .player-toolbar {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .player-toolbar-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .player-toolbar > .player-options {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 720px) {
+  .player-toolbar {
+    padding: 12px !important;
+  }
+
+  .player-toolbar-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .player-toolbar > .player-options {
+    width: 100%;
+    align-self: stretch;
+  }
+}
+
+/* Keep secondary actions together at the outer lower corner of side panels. */
+@media (min-width: 721px) {
+  .toolbar-right .player-toolbar-controls .toolbar-select-source,
+  .toolbar-left .player-toolbar-controls .toolbar-select-source {
+    grid-column: 1 / -1;
+  }
+
+  .toolbar-right .player-toolbar > .player-options {
+    width: 40px;
+    min-width: 40px;
+    margin-top: auto;
+    margin-right: 0;
+    margin-left: auto;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-controls {
+    position: absolute;
+    right: 64px;
+    bottom: 12px;
+    z-index: 2;
+    width: 40px;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu-content {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+
+  .toolbar-left .player-toolbar > .player-options {
+    width: 40px;
+    min-width: 40px;
+    margin-top: auto;
+    margin-right: auto;
+    margin-left: 0;
+  }
+
+  .toolbar-left .player-toolbar .offline-download-controls {
+    position: absolute;
+    bottom: 12px;
+    left: 64px;
+    z-index: 2;
+    width: 40px;
+  }
+
+  .toolbar-left .player-toolbar .offline-download-menu-content {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+}
+
+/* On a phone the selected side panel is shown beneath the video. */
+@media (max-width: 720px) {
+  .video-layout.toolbar-right,
+  .video-layout.toolbar-left {
+    display: grid;
+    padding: 0;
+  }
+
+  .toolbar-right .player-frame,
+  .toolbar-left .player-frame {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .toolbar-right .player-toolbar,
+  .toolbar-left .player-toolbar {
+    position: static;
+    grid-column: 1;
+    grid-row: 2;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    flex-direction: row;
+    align-items: flex-end !important;
+  }
+
+  .toolbar-right .player-toolbar-controls,
+  .toolbar-left .player-toolbar-controls {
+    grid-template-columns: minmax(180px, 1.35fr) minmax(120px, .7fr) minmax(150px, 1fr);
+    flex: 1 1 620px;
+    width: auto;
+  }
+
+  .toolbar-right .player-toolbar > .player-options,
+  .toolbar-left .player-toolbar > .player-options {
+    width: min(220px, 100%);
+    margin-top: 0;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-controls,
+  .toolbar-left .player-toolbar .offline-download-controls,
+  .toolbar-right .player-toolbar .offline-download-menu,
+  .toolbar-left .player-toolbar .offline-download-menu {
+    width: fit-content;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu-content,
+  .toolbar-left .player-toolbar .offline-download-menu-content {
+    position: static;
+    min-width: 252px;
+  }
+}
+
+@media (max-width: 900px) {
+  .toolbar-right .player-toolbar,
+  .toolbar-left .player-toolbar {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .toolbar-right .player-toolbar-controls,
+  .toolbar-left .player-toolbar-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .toolbar-right .player-toolbar > .player-options,
+  .toolbar-left .player-toolbar > .player-options {
+    width: 100%;
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .toolbar-right .player-toolbar-controls,
+  .toolbar-left .player-toolbar-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .hero-options {
   width: max-content;
   max-width: 100%;
@@ -1410,5 +1742,644 @@ html[data-color-scheme="light"] .watch-party-panel {
     right: 7px;
     bottom: 7px;
     width: calc(100% - 14px);
+  }
+}
+
+/* Stable toolbar geometry.  This block deliberately comes last: legacy
+ * dashboard styles used several competing grids for the same controls. */
+.player-toolbar {
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 12px !important;
+  min-width: 0;
+  min-height: 66px;
+  padding: 12px 16px !important;
+}
+
+.player-toolbar-controls {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  min-width: 0;
+  gap: 10px;
+}
+
+.player-toolbar-controls .toolbar-select {
+  display: flex;
+  flex: 1 1 150px;
+  flex-direction: column;
+  min-width: 0;
+  gap: 6px;
+  color: #9c95a2;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.player-toolbar-controls .toolbar-select-dubbing { flex-basis: 230px; }
+.player-toolbar-controls .toolbar-select-episode { flex-basis: 130px; }
+.player-toolbar-controls .toolbar-select-source { flex-basis: 165px; }
+
+.player-toolbar-controls .toolbar-select select {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #3b3344;
+  border-radius: 9px;
+  background: #211c27;
+  color: #f5f1f7;
+  font-size: 14px;
+}
+
+.player-toolbar-controls .toolbar-skip {
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid #4b3d5c;
+  border-radius: 9px;
+  background: #211a2a;
+  color: #f5f1f7;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.player-toolbar .offline-download-controls {
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.player-toolbar .offline-download-menu {
+  width: fit-content;
+}
+
+.player-toolbar .offline-download-menu summary {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.player-toolbar > .player-options {
+  flex: 0 0 auto;
+  width: min(220px, 100%);
+  min-width: 0;
+  margin: 0 0 0 auto;
+}
+
+.player-toolbar > .player-options > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  box-sizing: border-box;
+  font-size: 13px;
+}
+
+.offline-download-notice {
+  position: fixed;
+  z-index: 1100;
+  left: 50%;
+  bottom: 22px;
+  max-width: min(420px, calc(100vw - 32px));
+  margin: 0;
+  padding: 9px 13px;
+  border: 1px solid #4b3d5c;
+  border-radius: 10px;
+  background: #17131bf2;
+  box-shadow: 0 12px 34px #0008;
+  color: #eee7f4;
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+.video-layout.toolbar-right,
+.video-layout.toolbar-left {
+  --player-toolbar-side-width: clamp(230px, 17vw, 268px);
+}
+
+.video-layout.toolbar-right { padding-right: var(--player-toolbar-side-width); }
+.video-layout.toolbar-left { padding-left: var(--player-toolbar-side-width); }
+
+.toolbar-right .player-toolbar,
+.toolbar-left .player-toolbar {
+  width: var(--player-toolbar-side-width);
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 12px !important;
+  padding: 12px !important;
+}
+
+.toolbar-right .player-toolbar-controls,
+.toolbar-left .player-toolbar-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  flex: 0 0 auto;
+  width: 100%;
+  gap: 10px;
+}
+
+.toolbar-right .player-toolbar-controls .toolbar-select,
+.toolbar-left .player-toolbar-controls .toolbar-select {
+  grid-column: 1 / -1;
+}
+
+.toolbar-right .player-toolbar-controls .toolbar-select-source,
+.toolbar-left .player-toolbar-controls .toolbar-select-source {
+  grid-column: 1;
+}
+
+.toolbar-right .player-toolbar .offline-download-controls,
+.toolbar-left .player-toolbar .offline-download-controls {
+  grid-column: 2;
+  grid-row: 3;
+  align-self: end;
+  width: 42px;
+}
+
+.toolbar-right .player-toolbar .offline-download-menu,
+.toolbar-left .player-toolbar .offline-download-menu,
+.toolbar-right .player-toolbar .offline-download-menu summary,
+.toolbar-left .player-toolbar .offline-download-menu summary {
+  width: 42px;
+}
+
+.toolbar-right .player-toolbar .offline-download-menu summary,
+.toolbar-left .player-toolbar .offline-download-menu summary {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 0;
+}
+
+.toolbar-right .player-toolbar .offline-download-menu summary::before,
+.toolbar-left .player-toolbar .offline-download-menu summary::before {
+  content: "⇩";
+  font-size: 21px;
+  line-height: 1;
+}
+
+.toolbar-right .player-toolbar .offline-download-menu-content,
+.toolbar-left .player-toolbar .offline-download-menu-content {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 8px);
+  right: 0;
+  left: auto;
+  width: calc(var(--player-toolbar-side-width) - 24px);
+  max-width: calc(100vw - 48px);
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.toolbar-right .player-toolbar .offline-download-menu-content button,
+.toolbar-left .player-toolbar .offline-download-menu-content button {
+  min-width: 0;
+  white-space: normal;
+}
+
+.toolbar-right .player-toolbar .offline-download-menu-content button:last-child,
+.toolbar-left .player-toolbar .offline-download-menu-content button:last-child {
+  grid-column: auto;
+}
+
+.toolbar-right .player-toolbar > .player-options,
+.toolbar-left .player-toolbar > .player-options {
+  width: 100%;
+  margin-top: auto;
+}
+
+/* Compact mode remains fully interactive: selects open normally and titles
+ * provide the context that is intentionally hidden from the toolbar. */
+.player-toolbar.is-icon-only .player-toolbar-controls {
+  flex: 0 0 auto;
+}
+
+.player-toolbar.is-icon-only .toolbar-select {
+  position: relative;
+  display: block;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 38px;
+  font-size: 0;
+}
+
+.player-toolbar.is-icon-only .toolbar-select > span {
+  display: none;
+}
+
+.player-toolbar.is-icon-only .toolbar-select::before,
+.player-toolbar.is-icon-only .toolbar-select::after {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.player-toolbar.is-icon-only .toolbar-select::before {
+  content: attr(data-icon);
+  top: 50%;
+  left: 11px;
+  color: #ddd5e5;
+  font-size: 17px;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.player-toolbar.is-icon-only .toolbar-select::after {
+  content: "⌄";
+  top: 9px;
+  right: 6px;
+  color: #d9d2df;
+  font-size: 12px;
+}
+
+.player-toolbar.is-icon-only .toolbar-select select {
+  position: absolute;
+  inset: 0;
+  width: 40px;
+  height: 38px;
+  padding: 0;
+  border-radius: 9px;
+  appearance: none;
+  background: #211c27;
+  color: transparent;
+  cursor: pointer;
+}
+
+.player-toolbar.is-icon-only .toolbar-select select option {
+  color: #f5f1f7;
+  font-size: 14px;
+}
+
+.player-toolbar.is-icon-only .toolbar-skip {
+  position: relative;
+  flex: 0 0 40px;
+  width: 40px;
+  padding: 0;
+  font-size: 0;
+}
+
+.player-toolbar.is-icon-only .toolbar-skip::before {
+  font-size: 18px;
+}
+
+.player-toolbar.is-icon-only .toolbar-skip-opening::before { content: "↷"; }
+.player-toolbar.is-icon-only .toolbar-skip-ending::before { content: "↶"; }
+.player-toolbar.is-icon-only .toolbar-skip > span { display: none; }
+
+.player-toolbar.is-icon-only .offline-download-menu,
+.player-toolbar.is-icon-only .offline-download-menu summary {
+  width: 40px;
+}
+
+.player-toolbar.is-icon-only .offline-download-menu summary {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 0;
+}
+
+.player-toolbar.is-icon-only .offline-download-menu summary::before {
+  content: "⇩";
+  font-size: 20px;
+  line-height: 1;
+}
+
+.player-toolbar.is-icon-only > .player-options {
+  flex: 0 0 40px;
+  width: 40px;
+}
+
+.player-toolbar.is-icon-only > .player-options > summary {
+  width: 40px;
+  padding: 0;
+  font-size: 0;
+}
+
+.player-toolbar.is-icon-only > .player-options > summary span { display: none; }
+.player-toolbar.is-icon-only > .player-options > summary::before { content: "⚙"; font-size: 18px; }
+
+.video-layout.toolbar-right:has(.player-toolbar.is-icon-only),
+.video-layout.toolbar-left:has(.player-toolbar.is-icon-only) {
+  --player-toolbar-side-width: 206px;
+}
+
+.toolbar-right .player-toolbar.is-icon-only .player-toolbar-controls,
+.toolbar-left .player-toolbar.is-icon-only .player-toolbar-controls {
+  grid-template-columns: repeat(4, 40px);
+  justify-content: space-between;
+  width: 100%;
+}
+
+.toolbar-right .player-toolbar.is-icon-only .toolbar-select,
+.toolbar-left .player-toolbar.is-icon-only .toolbar-select,
+.toolbar-right .player-toolbar.is-icon-only .offline-download-controls,
+.toolbar-left .player-toolbar.is-icon-only .offline-download-controls,
+.toolbar-right .player-toolbar.is-icon-only .toolbar-skip,
+.toolbar-left .player-toolbar.is-icon-only .toolbar-skip {
+  grid-column: auto;
+  grid-row: auto;
+  width: 40px;
+}
+
+.toolbar-right .player-toolbar.is-icon-only .offline-download-controls,
+.toolbar-left .player-toolbar.is-icon-only .offline-download-controls {
+  align-self: auto;
+}
+
+.toolbar-right .player-toolbar.is-icon-only > .player-options,
+.toolbar-left .player-toolbar.is-icon-only > .player-options {
+  width: 40px;
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .video-layout.toolbar-right,
+  .video-layout.toolbar-left {
+    display: grid !important;
+    padding: 0;
+  }
+
+  .toolbar-right .player-frame,
+  .toolbar-left .player-frame {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .toolbar-right .player-toolbar,
+  .toolbar-left .player-toolbar {
+    position: static;
+    grid-column: 1;
+    grid-row: 2;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    flex-direction: row;
+    align-items: flex-end !important;
+  }
+
+  .toolbar-right .player-toolbar-controls,
+  .toolbar-left .player-toolbar-controls {
+    display: flex;
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .toolbar-right .player-toolbar-controls .toolbar-select,
+  .toolbar-left .player-toolbar-controls .toolbar-select,
+  .toolbar-right .player-toolbar .offline-download-controls,
+  .toolbar-left .player-toolbar .offline-download-controls {
+    grid-column: auto;
+    grid-row: auto;
+    width: auto;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu,
+  .toolbar-left .player-toolbar .offline-download-menu,
+  .toolbar-right .player-toolbar .offline-download-menu summary {
+    width: fit-content;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu summary,
+  .toolbar-left .player-toolbar .offline-download-menu summary {
+    display: flex;
+    padding: 8px 11px;
+    font-size: inherit;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu summary::before,
+  .toolbar-left .player-toolbar .offline-download-menu summary::before {
+    content: none;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu-content,
+  .toolbar-left .player-toolbar .offline-download-menu-content {
+    position: static;
+    width: auto;
+    min-width: 252px;
+  }
+
+  .toolbar-right .player-toolbar > .player-options,
+  .toolbar-left .player-toolbar > .player-options {
+    width: min(220px, 100%);
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 780px) {
+  .player-toolbar,
+  .toolbar-right .player-toolbar,
+  .toolbar-left .player-toolbar {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .player-toolbar-controls,
+  .toolbar-right .player-toolbar-controls,
+  .toolbar-left .player-toolbar-controls {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .player-toolbar > .player-options,
+  .toolbar-right .player-toolbar > .player-options,
+  .toolbar-left .player-toolbar > .player-options {
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .player-toolbar.is-icon-only > .player-options,
+  .toolbar-right .player-toolbar.is-icon-only > .player-options,
+  .toolbar-left .player-toolbar.is-icon-only > .player-options {
+    width: 40px;
+    margin-left: auto;
+  }
+}
+
+/* Action buttons stay compact in every density.  Inline SVG masks keep the
+ * icons aligned with the rest of the interface instead of relying on emoji. */
+.player-toolbar .offline-download-menu,
+.player-toolbar .offline-download-menu summary {
+  width: 40px;
+}
+
+.player-toolbar .offline-download-menu summary {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 0;
+}
+
+.player-toolbar .offline-download-menu summary span { display: none; }
+
+.player-toolbar .offline-download-menu summary::before,
+.player-toolbar > .player-options > summary::before,
+.player-toolbar.is-icon-only .toolbar-select::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+}
+
+.player-toolbar .offline-download-menu summary::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v12m0 0 5-5m-5 5-5-5M5 21h14' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.player-toolbar > .player-options {
+  flex-basis: 40px;
+  width: 40px;
+  min-width: 40px;
+}
+
+.player-toolbar > .player-options > summary {
+  width: 40px;
+  padding: 0;
+  font-size: 0;
+}
+
+.player-toolbar > .player-options > summary span { display: none; }
+
+.player-toolbar > .player-options > summary::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.37-.31-.6-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98L14.5 2.42C14.47 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.5.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.08-.48 0-.6.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.08.65-.08.98s.03.66.08.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.37.31.6.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.08.48 0 .6-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z'/%3E%3C/svg%3E");
+}
+
+.player-toolbar.is-icon-only .toolbar-select::before {
+  top: 50%;
+  left: 11px;
+  color: inherit;
+  font-size: 0;
+  transform: translateY(-50%);
+}
+
+.player-toolbar.is-icon-only .toolbar-select-dubbing::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.player-toolbar.is-icon-only .toolbar-select-episode::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 6h12M7 12h12M7 18h12M4 6h.01M4 12h.01M4 18h.01' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.player-toolbar.is-icon-only .toolbar-select-source::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='5' width='18' height='14' rx='2' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath d='m10 9 5 3-5 3z' fill='black'/%3E%3C/svg%3E");
+}
+
+.player-toolbar.is-icon-only .toolbar-select::after {
+  content: "";
+  top: 13px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid #d9d2df;
+  border-bottom: 1.5px solid #d9d2df;
+  font-size: 0;
+  transform: rotate(45deg);
+}
+
+.toolbar-right .player-toolbar.is-icon-only .player-toolbar-controls,
+.toolbar-left .player-toolbar.is-icon-only .player-toolbar-controls {
+  grid-template-columns: 40px;
+  grid-auto-rows: 40px;
+  justify-content: center;
+  width: 100%;
+}
+
+.toolbar-right .player-toolbar.is-icon-only .toolbar-select,
+.toolbar-left .player-toolbar.is-icon-only .toolbar-select,
+.toolbar-right .player-toolbar.is-icon-only .offline-download-controls,
+.toolbar-left .player-toolbar.is-icon-only .offline-download-controls,
+.toolbar-right .player-toolbar.is-icon-only .toolbar-skip,
+.toolbar-left .player-toolbar.is-icon-only .toolbar-skip {
+  grid-column: 1;
+  grid-row: auto;
+}
+
+.toolbar-right .player-toolbar.is-icon-only > .player-options,
+.toolbar-left .player-toolbar.is-icon-only > .player-options {
+  width: 40px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.video-layout.toolbar-right:has(.player-toolbar.is-icon-only),
+.video-layout.toolbar-left:has(.player-toolbar.is-icon-only) {
+  --player-toolbar-side-width: 88px;
+}
+
+/* Retain compact action buttons when a phone moves the side panel below video. */
+@media (max-width: 720px) {
+  .toolbar-right .player-toolbar .offline-download-menu,
+  .toolbar-left .player-toolbar .offline-download-menu,
+  .toolbar-right .player-toolbar .offline-download-menu summary,
+  .toolbar-left .player-toolbar .offline-download-menu summary {
+    width: 40px;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu summary,
+  .toolbar-left .player-toolbar .offline-download-menu summary {
+    display: grid;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu summary::before,
+  .toolbar-left .player-toolbar .offline-download-menu summary::before {
+    content: "";
+  }
+}
+
+/* Final side-panel action placement. */
+@media (min-width: 721px) {
+  .toolbar-right .player-toolbar-controls .toolbar-select-source,
+  .toolbar-left .player-toolbar-controls .toolbar-select-source {
+    grid-column: 1 / -1;
+  }
+
+  .toolbar-right .player-toolbar > .player-options {
+    width: 40px;
+    min-width: 40px;
+    margin-top: auto;
+    margin-right: 0;
+    margin-left: auto;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-controls {
+    position: absolute;
+    right: 64px;
+    bottom: 12px;
+    z-index: 2;
+    width: 40px;
+  }
+
+  .toolbar-right .player-toolbar .offline-download-menu-content {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+
+  .toolbar-left .player-toolbar > .player-options {
+    width: 40px;
+    min-width: 40px;
+    margin-top: auto;
+    margin-right: auto;
+    margin-left: 0;
+  }
+
+  .toolbar-left .player-toolbar .offline-download-controls {
+    position: absolute;
+    bottom: 12px;
+    left: 64px;
+    z-index: 2;
+    width: 40px;
+  }
+
+  .toolbar-left .player-toolbar .offline-download-menu-content {
+    top: auto;
+    bottom: calc(100% + 8px);
   }
 }
