@@ -1,6 +1,6 @@
 {
   "name": "animesoul-frontend",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
     "test": "node --experimental-strip-types --test tests/critical-logic.test.ts"
   },
   "dependencies": {
+    "hls.js": "^1.7.1",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,15 +12,17 @@ from typing import Any
 
 from backend.app.services.offline_library import (
     DownloadCancelled,
-    KodikSourceResolver,
+    OfflineLibraryError,
     OfflineLibraryService,
     _anime_folder_name,
-    _decode_kodik_source,
+    _episode_link_from_results,
     _is_kodik_url,
-    _json_from_script,
-    _kodik_media_id,
-    _normalise_dubbing,
-    _source_reference,
+    _kodik_signature,
+    _normalise_kodik_skips,
+    _normalise_kodik_sources,
+    _normalise_kodik_subtitles,
+    _private_player_link,
+    _select_kodik_source,
 )
 
 
@@ -46,73 +50,108 @@ def request_for(anime_id: int = 101, title: str = "Тестовое аниме")
 
 
 class OfflineLibraryTests(unittest.TestCase):
-    def test_kodik_host_guard_and_direct_link_decoder(self) -> None:
+    def test_kodik_private_api_helpers(self) -> None:
         self.assertTrue(_is_kodik_url("//kodik.info/serial/1/hash/720p"))
         self.assertTrue(_is_kodik_url("https://player.kodik.info/serial/1/hash/720p"))
         self.assertFalse(_is_kodik_url("https://kodik.evil.example/serial/1"))
         self.assertFalse(_is_kodik_url("https://example.test/kodik.info"))
-        self.assertEqual(_kodik_media_id("https://kodik.info/serial/73959/hash/720p"), "serial-73959")
-        self.assertEqual(_kodik_media_id("https://kodik.info/video/12/hash/720p"), "movie-12")
         self.assertEqual(
-            _source_reference(
-                "https://kodikplayer.com/season/117533/hash/720p?episode=1",
-                62927,
-                "shikimori",
+            _private_player_link("https://kodikplayer.com/season/117533/hash/720p?episode=1"),
+            "//kodikplayer.com/season/117533/hash/720p?episode=1",
+        )
+        self.assertEqual(
+            _private_player_link("//kodikplayer.com/seria/117534/hash/720p"),
+            "//kodikplayer.com/seria/117534/hash/720p",
+        )
+        self.assertEqual(
+            _kodik_signature("//kodikplayer.com/video/1/hash/720p", "1.1.1.1", "2026082100", "private-test"),
+            hmac.new(
+                b"private-test",
+                b"//kodikplayer.com/video/1/hash/720p:1.1.1.1:2026082100",
+                hashlib.sha256,
+            ).hexdigest(),
+        )
+        self.assertEqual(
+            _select_kodik_source(
+                {
+                    "1080": [{"src": "https://cdn.example/1080.m3u8"}],
+                    # Private API replies use title-case field names.
+                    "720": {"Src": "//cdn.example/720.m3u8", "Type": "hls"},
+                },
+                900,
             ),
-            ("62927", "shikimori"),
-        )
-        self.assertEqual(_normalise_dubbing("Озвучка AniStar & DEEP"), "anistar deep")
-        class Parser:
-            def api_request(self, _endpoint: str, _filters: dict[str, str]) -> dict[str, Any]:
-                return {"results": [
-                    {"translation": {"id": 910, "title": "AniStar"}},
-                    {"translation": {"id": 911, "title": "AniStar & DEEP"}},
-                ]}
-        self.assertEqual(
-            KodikSourceResolver._matching_translation_id(Parser(), "62927", "shikimori", "Озвучка AniStar & DEEP"),
-            "911",
+            ("https://cdn.example/720.m3u8", 720),
         )
         self.assertEqual(
-            _decode_kodik_source("//cdn.example/video/720.mp4:hls:manifest.m3u8"),
-            "https://cdn.example/video/720.mp4:hls:manifest.m3u8",
+            _episode_link_from_results(
+                [
+                    {
+                        "translation": {"id": 2, "title": "Другая озвучка"},
+                        "seasons": {"1": {"episodes": {"7": {"link": "//kodikplayer.com/seria/other/hash/720p"}}}},
+                    },
+                    {
+                        "translation": {"id": 7, "title": "AniStar & DEEP"},
+                        "seasons": {"3": {"episodes": {"7": {"link": "//kodikplayer.com/seria/right/hash/720p"}}}},
+                    },
+                ],
+                # UI group 5 contains season 3 because two specials are
+                # inserted before it. The resolver must trust Kodik's season.
+                5,
+                "7",
+                7,
+                "Озвучка AniStar & DEEP",
+            ),
+            "//kodikplayer.com/seria/right/hash/720p",
         )
-        self.assertEqual(KodikSourceResolver._script_value('const hash = "signed";', "hash"), "signed")
         self.assertEqual(
-            KodikSourceResolver._endpoint_from_script('$.ajax({url: "/ajax/get-video-info"})'),
-            "/ajax/get-video-info",
+            _normalise_kodik_sources({"1080": {"Src": "//cdn.example/1080.m3u8", "Type": "hls"}}),
+            [{"quality": 1080, "src": "https://cdn.example/1080.m3u8", "type": "hls"}],
         )
         self.assertEqual(
-            KodikSourceResolver._endpoint_from_script('$.ajax({type:"POST",url:atob("L2Z0b3I=")})'),
-            "/ftor",
+            _normalise_kodik_subtitles({"ru": "//cdn.example/ru.vtt", "en": {"Src": "https://cdn.example/en.vtt"}}),
+            [
+                {"src": "https://cdn.example/ru.vtt", "label": "ru", "language": "ru"},
+                {"src": "https://cdn.example/en.vtt", "label": "en", "language": "en", "default": False},
+            ],
         )
         self.assertEqual(
-            _json_from_script('window.urlParams = {"d":"signed", "nested":{"token":"ok"}}\n', "urlParams"),
-            {"d": "signed", "nested": {"token": "ok"}},
+            _normalise_kodik_skips({"skip_segments": {"opening": [12, 97], "ending": {"time": 1310, "length": 90}}}),
+            {
+                "opening": {"time": 12.0, "length": 85.0},
+                "ending": {"time": 1310.0, "length": 90.0},
+            },
         )
         self.assertEqual(
-            _json_from_script("var urlParams = '{\"d\":\"signed\", \"pd\":\"kodikplayer.com\"}';", "urlParams"),
-            {"d": "signed", "pd": "kodikplayer.com"},
+            _normalise_kodik_skips({"segments": {"ad": [], "skip": [[18, 103], [1320, 1400]]}}),
+            {
+                "opening": {"time": 18.0, "length": 85.0},
+                "ending": {"time": 1320.0, "length": 80.0},
+            },
         )
 
     def test_queue_persists_media_and_deletion_removes_all_library_files(self) -> None:
         async def scenario(root: Path) -> None:
             service = OfflineLibraryService(root / "data")
 
-            settings = await service.update_settings("downloads", kodik_api_token="local-test-token")
-            self.assertTrue(settings["kodikApiTokenConfigured"])
-            self.assertNotIn("local-test-token", settings.values())
+            settings = await service.update_settings(
+                "downloads",
+                kodik_public_key="public-test-key",
+                kodik_private_key="private-test-key",
+            )
+            self.assertTrue(settings["kodikPublicKeyConfigured"])
+            self.assertTrue(settings["kodikPrivateKeyConfigured"])
+            self.assertNotIn("private-test-key", settings.values())
+            self.assertEqual(await service._kodik_private_credentials(), ("public-test-key", "private-test-key"))
 
             async def resolve(
                 _url: str,
                 _quality: int,
-                _episode: object,
-                _translation: object,
-                token: str,
-                _catalog_id: object = None,
-                _catalog_id_type: object = None,
-                _dubbing: object = None,
+                public_key: str,
+                private_key: str,
+                **_details: object,
             ) -> tuple[str, int]:
-                self.assertEqual(token, "local-test-token")
+                self.assertEqual(public_key, "public-test-key")
+                self.assertEqual(private_key, "private-test-key")
                 return "https://cdn.example/video.mp4", 720
 
             async def artwork(directory: Path, request: dict[str, Any], _kind: str) -> None:
@@ -132,7 +171,7 @@ class OfflineLibraryTests(unittest.TestCase):
                 await asyncio.to_thread(target.write_bytes, b"video")
                 job["progress"] = (done_before + 1) / total
 
-            service.resolver.resolve_via_api = resolve  # type: ignore[method-assign]
+            service.resolver.resolve_private_api = resolve  # type: ignore[method-assign]
             service._download_artwork = artwork  # type: ignore[method-assign]
             service._stream_to_file = stream  # type: ignore[method-assign]
 
@@ -155,21 +194,66 @@ class OfflineLibraryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             asyncio.run(scenario(Path(directory)))
 
+    def test_enqueue_requires_official_kodik_keys(self) -> None:
+        async def scenario(root: Path) -> None:
+            service = OfflineLibraryService(root / "data")
+            await service.update_settings("downloads")
+            with self.assertRaisesRegex(OfflineLibraryError, "публичный и приватный ключи"):
+                await service.enqueue(request_for())
+            self.assertEqual(service.jobs(), [])
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory)))
+
+    def test_playback_source_returns_all_direct_player_metadata(self) -> None:
+        async def scenario(root: Path) -> None:
+            service = OfflineLibraryService(root / "data")
+            await service.update_settings(
+                "downloads",
+                kodik_public_key="public-test-key",
+                kodik_private_key="private-test-key",
+            )
+
+            async def resolve(
+                _url: str,
+                public_key: str,
+                private_key: str,
+                **details: object,
+            ) -> dict[str, object]:
+                self.assertEqual((public_key, private_key), ("public-test-key", "private-test-key"))
+                self.assertEqual(details["dubbing"], "AniLibria")
+                return {
+                    "sources": [{"quality": 720, "src": "https://cdn.example/video.m3u8", "type": "hls"}],
+                    "subtitles": [{"src": "https://cdn.example/ru.vtt", "label": "Русские", "language": "ru"}],
+                    "skips": {"opening": {"time": 12, "length": 85}},
+                }
+
+            service.resolver.resolve_playback_api = resolve  # type: ignore[method-assign]
+            episode = request_for()["episodes"][0]
+            result = await service.playback_source(episode)
+            self.assertEqual(result["sources"][0]["quality"], 720)
+            self.assertEqual(result["subtitles"][0]["language"], "ru")
+            self.assertEqual(result["skips"]["opening"]["time"], 12)
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory)))
+
     def test_cancelling_active_transfer_cleans_partial_file(self) -> None:
         async def scenario(root: Path) -> None:
             service = OfflineLibraryService(root / "data")
             started = asyncio.Event()
-            await service.update_settings("downloads", kodik_api_token="local-test-token")
+            await service.update_settings(
+                "downloads",
+                kodik_public_key="public-test-key",
+                kodik_private_key="private-test-key",
+            )
 
             async def resolve(
                 _url: str,
                 _quality: int,
-                _episode: object,
-                _translation: object,
-                _token: str,
-                _catalog_id: object = None,
-                _catalog_id_type: object = None,
-                _dubbing: object = None,
+                _public_key: str,
+                _private_key: str,
+                **_details: object,
             ) -> tuple[str, int]:
                 return "https://cdn.example/video.mp4", 720
 
@@ -191,7 +275,7 @@ class OfflineLibraryTests(unittest.TestCase):
                     await asyncio.sleep(.01)
                 raise DownloadCancelled
 
-            service.resolver.resolve_via_api = resolve  # type: ignore[method-assign]
+            service.resolver.resolve_private_api = resolve  # type: ignore[method-assign]
             service._download_artwork = artwork  # type: ignore[method-assign]
             service._stream_to_file = stream  # type: ignore[method-assign]
 

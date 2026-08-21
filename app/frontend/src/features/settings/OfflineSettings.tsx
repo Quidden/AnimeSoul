@@ -1,22 +1,36 @@
 import { useEffect, useState } from "react";
 
-import { fetchOfflineLibrary, fetchOfflineSettings, updateOfflineSettings } from "../../lib/downloads";
+import {
+  fetchOfflineLibrary,
+  fetchOfflineSettings,
+  hasKodikSecretAccess,
+  KODIK_ACCESS_CHANGED_EVENT,
+  updateOfflineSettings,
+} from "../../lib/downloads";
 
 export function OfflineSettings() {
   const [directory, setDirectory] = useState("");
   const [savedDirectory, setSavedDirectory] = useState("");
-  const [kodikApiToken, setKodikApiToken] = useState("");
-  const [kodikApiTokenConfigured, setKodikApiTokenConfigured] = useState(false);
+  const [kodikPublicKey, setKodikPublicKey] = useState("");
+  const [kodikPrivateKey, setKodikPrivateKey] = useState("");
+  const [kodikPublicKeyConfigured, setKodikPublicKeyConfigured] = useState(false);
+  const [kodikPrivateKeyConfigured, setKodikPrivateKeyConfigured] = useState(false);
   const [episodes, setEpisodes] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "saving" | "error">("loading");
   const [message, setMessage] = useState("");
+
+  const applyKodikStatus = (settings: { kodikPublicKeyConfigured: boolean; kodikPrivateKeyConfigured: boolean }) => {
+    setKodikPublicKeyConfigured(settings.kodikPublicKeyConfigured);
+    setKodikPrivateKeyConfigured(settings.kodikPrivateKeyConfigured);
+    window.dispatchEvent(new Event(KODIK_ACCESS_CHANGED_EVENT));
+  };
 
   const refresh = async () => {
     try {
       const [settings, library] = await Promise.all([fetchOfflineSettings(), fetchOfflineLibrary()]);
       setDirectory(settings.directory);
       setSavedDirectory(settings.directory);
-      setKodikApiTokenConfigured(settings.kodikApiTokenConfigured);
+      applyKodikStatus(settings);
       setEpisodes(library.anime.reduce((total, anime) => total + anime.episodes.length, 0));
       setStatus("ready");
     } catch (error) {
@@ -42,36 +56,48 @@ export function OfflineSettings() {
     }
   };
 
-  const saveKodikToken = async () => {
-    if (!kodikApiToken.trim()) return;
+  const saveKodikKeys = async () => {
+    if (!kodikPublicKey.trim() && !kodikPrivateKey.trim()) return;
     setStatus("saving");
     setMessage("");
     try {
-      const result = await updateOfflineSettings({ directory, kodikApiToken: kodikApiToken.trim() });
-      setKodikApiToken("");
-      setKodikApiTokenConfigured(result.kodikApiTokenConfigured);
+      const result = await updateOfflineSettings({
+        directory,
+        ...(kodikPublicKey.trim() ? { kodikPublicKey: kodikPublicKey.trim() } : {}),
+        ...(kodikPrivateKey.trim() ? { kodikPrivateKey: kodikPrivateKey.trim() } : {}),
+      });
+      setKodikPublicKey("");
+      setKodikPrivateKey("");
+      applyKodikStatus(result);
       setStatus("ready");
-      setMessage("Токен Kodik сохранён локально. Его значение больше не показывается в интерфейсе.");
+      setMessage("Ключи Kodik сохранены на этом компьютере. Приватный ключ больше не отображается в интерфейсе.");
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Не удалось сохранить API-токен Kodik.");
+      setMessage(error instanceof Error ? error.message : "Не удалось сохранить ключи Kodik.");
     }
   };
 
-  const clearKodikToken = async () => {
+  const clearKodikKeys = async () => {
     setStatus("saving");
     setMessage("");
     try {
-      const result = await updateOfflineSettings({ directory, clearKodikApiToken: true });
-      setKodikApiToken("");
-      setKodikApiTokenConfigured(result.kodikApiTokenConfigured);
+      const result = await updateOfflineSettings({
+        directory,
+        clearKodikPublicKey: true,
+        clearKodikPrivateKey: true,
+      });
+      setKodikPublicKey("");
+      setKodikPrivateKey("");
+      applyKodikStatus(result);
       setStatus("ready");
-      setMessage("Токен Kodik удалён с этого компьютера.");
+      setMessage("Ключи Kodik удалены с этого компьютера.");
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Не удалось удалить API-токен Kodik.");
+      setMessage(error instanceof Error ? error.message : "Не удалось удалить ключи Kodik.");
     }
   };
+
+  const keysReady = hasKodikSecretAccess({ kodikPublicKeyConfigured, kodikPrivateKeyConfigured });
 
   return (
     <section className="settings-group offline-settings" data-settings-tab="offline">
@@ -101,29 +127,39 @@ export function OfflineSettings() {
       </article>
       <article className="settings-item offline-kodik-setting">
         <div>
-          <b>Токен Kodik — необязательно</b>
-          <p>Загрузчик использует автоматический публичный механизм Kodik. Свой токен можно указать только для замены автоматически найденного.</p>
-          <small>{kodikApiTokenConfigured ? "Личный токен сохранён на этом компьютере и будет использован первым." : "Личный токен не задан — AnimeSoul получит временный токен автоматически."}</small>
+          <b>Официальный API Kodik</b>
+          <p>Собственный плеер и скачивание используют прямые ссылки приватного API Kodik. Запрос и подпись выполняются только локально на этом компьютере.</p>
+          <small>{keysReady ? "Оба ключа настроены — собственный плеер и скачивание доступны." : "Добавьте оба ключа из профиля Kodik, чтобы включить собственный плеер и скачивание."}</small>
         </div>
         <div className="offline-kodik-setting-controls">
           <input
             className="settings-text-input"
-            type="password"
-            value={kodikApiToken}
+            value={kodikPublicKey}
             disabled={status === "loading" || status === "saving"}
-            onChange={(event) => setKodikApiToken(event.target.value)}
-            placeholder={kodikApiTokenConfigured ? "Заменить токен Kodik" : "Необязательно: вставьте личный токен"}
+            onChange={(event) => setKodikPublicKey(event.target.value)}
+            placeholder={kodikPublicKeyConfigured ? "Заменить публичный ключ Kodik" : "Публичный ключ Kodik"}
             autoComplete="off"
             spellCheck={false}
-            aria-label="API-токен Kodik"
+            aria-label="Публичный ключ Kodik"
+          />
+          <input
+            className="settings-text-input"
+            type="password"
+            value={kodikPrivateKey}
+            disabled={status === "loading" || status === "saving"}
+            onChange={(event) => setKodikPrivateKey(event.target.value)}
+            placeholder={kodikPrivateKeyConfigured ? "Заменить приватный ключ Kodik" : "Приватный ключ Kodik"}
+            autoComplete="new-password"
+            spellCheck={false}
+            aria-label="Приватный ключ Kodik"
           />
           <div className="offline-kodik-actions">
-            <button className="primary" disabled={!kodikApiToken.trim() || status === "saving"} onClick={() => void saveKodikToken()}>
-              {status === "saving" ? "Сохраняем…" : "Сохранить токен"}
+            <button className="primary" disabled={(!kodikPublicKey.trim() && !kodikPrivateKey.trim()) || status === "saving"} onClick={() => void saveKodikKeys()}>
+              {status === "saving" ? "Сохраняем…" : "Сохранить ключи"}
             </button>
-            {kodikApiTokenConfigured && (
-              <button className="ghost" disabled={status === "saving"} onClick={() => void clearKodikToken()}>
-                Удалить
+            {(kodikPublicKeyConfigured || kodikPrivateKeyConfigured) && (
+              <button className="ghost" disabled={status === "saving"} onClick={() => void clearKodikKeys()}>
+                Удалить ключи
               </button>
             )}
           </div>

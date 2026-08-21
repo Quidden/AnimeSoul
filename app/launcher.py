@@ -28,6 +28,7 @@ from runtime_instance import (
     find_available_port,
     read_runtime_state,
     remove_runtime_state,
+    runtime_api_is_compatible,
     runtime_state_file,
     write_runtime_state,
 )
@@ -104,7 +105,7 @@ def validate_public_token(token: str) -> tuple[bool, str]:
             "X-Application": token,
             "Lang": "ru",
             "Accept": "application/json",
-            "User-Agent": "AnimeSoul-Launcher/0.2.1",
+            "User-Agent": "AnimeSoul-Launcher/0.2.2",
         },
     )
     try:
@@ -145,6 +146,7 @@ def existing_animesoul_payload(port: int) -> dict[str, Any] | None:
                 and isinstance(payload, dict)
                 and payload.get("ok") is True
                 and payload.get("stack") == "FastAPI + React"
+                and runtime_api_is_compatible(payload)
             ):
                 return payload
     except (OSError, ValueError, urllib.error.URLError):

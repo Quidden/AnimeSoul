@@ -11,7 +11,13 @@ export type PlayerSelectOption = {
 type PlayerToolbarProps = {
   dubbings: string[];
   dubbing: string;
+  favoriteDubbings?: string[];
+  titleDubbing?: string;
   onDubbingChange: (value: string) => void;
+  dubbingFavorite: boolean;
+  onDubbingFavoriteToggle: () => void;
+  dubbingPreferredForTitle: boolean;
+  onDubbingPreferredForTitleToggle: () => void;
   episodes: PlayerSelectOption[];
   episode: string;
   onEpisodeChange: (value: string) => void;
@@ -51,7 +57,13 @@ type PlayerToolbarProps = {
 export function PlayerToolbar({
   dubbings,
   dubbing,
+  favoriteDubbings = [],
+  titleDubbing = "",
   onDubbingChange,
+  dubbingFavorite,
+  onDubbingFavoriteToggle,
+  dubbingPreferredForTitle,
+  onDubbingPreferredForTitleToggle,
   episodes,
   episode,
   onEpisodeChange,
@@ -97,9 +109,29 @@ export function PlayerToolbar({
         <label className="toolbar-select toolbar-select-dubbing" data-icon="♫" title="Озвучка">
           <span>Озвучка</span>
           <select aria-label="Озвучка" value={dubbing} onChange={event => onDubbingChange(event.target.value)}>
-            {dubbings.map(value => <option key={value} value={value}>{value}</option>)}
+            {dubbings.map(value => (
+              <option key={value} value={value}>
+                {favoriteDubbings.includes(value) ? "★ " : ""}{titleDubbing === value ? "♥ " : ""}{value}
+              </option>
+            ))}
           </select>
         </label>
+        <button
+          type="button"
+          className={`toolbar-dubbing-action${dubbingFavorite ? " active" : ""}`}
+          title={dubbingFavorite ? "Убрать озвучку из общего избранного" : "Добавить озвучку в общее избранное"}
+          aria-label={dubbingFavorite ? "Убрать озвучку из избранного" : "Добавить озвучку в избранное"}
+          aria-pressed={dubbingFavorite}
+          onClick={onDubbingFavoriteToggle}
+        >★</button>
+        <button
+          type="button"
+          className={`toolbar-dubbing-action title-default${dubbingPreferredForTitle ? " active" : ""}`}
+          title={dubbingPreferredForTitle ? "Снять озвучку по умолчанию для этого аниме" : "Сделать озвучкой по умолчанию для этого аниме"}
+          aria-label={dubbingPreferredForTitle ? "Снять любимую озвучку тайтла" : "Назначить любимой озвучкой тайтла"}
+          aria-pressed={dubbingPreferredForTitle}
+          onClick={onDubbingPreferredForTitleToggle}
+        >♥</button>
 
         <label className="toolbar-select toolbar-select-episode" data-icon="≣" title="Серия">
           <span>Серия</span>

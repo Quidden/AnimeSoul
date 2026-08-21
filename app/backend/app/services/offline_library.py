@@ -9,21 +9,31 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import ctypes
+from ctypes import wintypes
+from datetime import UTC, datetime, timedelta
 import hashlib
+import hmac
+import ipaddress
 import json
+import os
 import re
 import time
 import uuid
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import httpx
 
 
 INDEX_FILE = ".animesoul-library.json"
 SETTINGS_FILE = "animesoul-offline-settings.json"
+PRIVATE_KEY_FILE = "animesoul-kodik-private.dpapi"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeSoul/0.2"
+KODIK_VIDEO_LINKS_ENDPOINT = "https://kodikres.com/api/video-links"
+KODIK_SEARCH_ENDPOINT = "https://kodik-api.com/search"
+PUBLIC_IP_ENDPOINT = "https://api.ipify.org"
 
 
 class OfflineLibraryError(RuntimeError):
@@ -65,392 +75,728 @@ def _is_kodik_url(value: str) -> bool:
     return any(host == suffix or host.endswith(f".{suffix}") for suffix in allowed_suffixes)
 
 
-def _json_from_script(value: str, variable: str) -> dict[str, Any]:
-    assignment = re.search(rf"\b{re.escape(variable)}\b\s*=", value)
-    if not assignment:
-        raise OfflineLibraryError("Плеер Kodik не передал параметры ссылки.")
-    start = value.find("{", assignment.end())
-    if start < 0:
-        raise OfflineLibraryError("Плеер Kodik не передал параметры ссылки.")
-    depth = 0
-    quote: str | None = None
-    escaped = False
-    end = -1
-    for index, character in enumerate(value[start:], start):
-        if quote:
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == quote:
-                quote = None
-            continue
-        if character in {"'", '"'}:
-            quote = character
-        elif character == "{":
-            depth += 1
-        elif character == "}":
-            depth -= 1
-            if depth == 0:
-                end = index + 1
-                break
-    if end < 0:
-        raise OfflineLibraryError("Плеер Kodik передал неполные параметры ссылки.")
-    try:
-        parsed = json.loads(value[start:end])
-    except json.JSONDecodeError as error:
-        raise OfflineLibraryError("Не удалось прочитать параметры плеера Kodik.") from error
-    if not isinstance(parsed, dict):
-        raise OfflineLibraryError("Параметры плеера Kodik имеют неверный формат.")
-    return parsed
+def _private_player_link(value: str) -> str:
+    """Return the exact protocol-relative player URL signed for Kodik.
 
-
-def _base64_text(value: str) -> str | None:
-    padded = value + "=" * ((4 - len(value) % 4) % 4)
-    try:
-        return base64.b64decode(padded).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
-        return None
-
-
-def _rotate_letters(value: str, shift: int) -> str:
-    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    result: list[str] = []
-    for character in value:
-        upper = character.upper()
-        if upper not in alphabet:
-            result.append(character)
-            continue
-        replacement = alphabet[(alphabet.index(upper) + shift) % len(alphabet)]
-        result.append(replacement.lower() if character.islower() else replacement)
-    return "".join(result)
-
-
-def _decode_kodik_source(value: str) -> str:
-    if "mp4:hls:manifest" in value or value.startswith(("https://", "http://", "//")):
-        return _normalise_url(value)
-    for shift in range(26):
-        decoded = _base64_text(_rotate_letters(value, shift))
-        if decoded and "mp4:hls:manifest" in decoded:
-            return decoded
-    raise OfflineLibraryError("Kodik вернул неподдерживаемый формат ссылки.")
-
-
-def _kodik_media_id(embed_url: str) -> str:
-    """Convert a Kodik player URL into the documented ``serial-123`` ID."""
-
-    if not _is_kodik_url(embed_url):
-        raise OfflineLibraryError("Для загрузки поддерживаются только источники Kodik.")
-    parts = [part for part in urlparse(_normalise_url(embed_url)).path.split("/") if part]
-    for index, part in enumerate(parts[:-1]):
-        if part not in {"serial", "video", "movie"}:
-            continue
-        media_id = parts[index + 1]
-        if media_id.isdigit():
-            return f"{'serial' if part == 'serial' else 'movie'}-{media_id}"
-    raise OfflineLibraryError("Не удалось определить идентификатор видео Kodik для API.")
-
-
-def _source_reference(
-    embed_url: str,
-    catalog_id: object = None,
-    catalog_id_type: object = None,
-) -> tuple[str, str]:
-    """Choose a documented Kodik lookup reference for an embed.
-
-    Modern ``/season/<id>`` embeds carry a player-session id, not Kodik's
-    public ``serial-<id>`` identifier.  YummyAnime supplies a stable external
-    id (normally Shikimori), which is the correct lookup key for those embeds.
-    Older ``/serial`` and movie embeds remain usable without that extra id.
+    The private API accepts the player link, rather than a catalogue lookup.
+    Its query string is deliberately retained: Kodik embeds use it to select a
+    concrete episode inside a season.
     """
 
-    if isinstance(catalog_id, (str, int)) and str(catalog_id).strip():
-        kind = str(catalog_id_type or "shikimori").strip().lower()
-        if kind in {
-            "shikimori",
-            "kinopoisk",
-            "imdb",
-            "mdl",
-            "kodik",
-            "worldart_animation",
-            "worldart_cinema",
-        }:
-            return str(catalog_id).strip(), kind
-    return _kodik_media_id(embed_url), "kodik"
+    if not _is_kodik_url(value):
+        raise OfflineLibraryError("Для загрузки поддерживаются только источники Kodik.")
+    parsed = urlparse(_normalise_url(value))
+    if not parsed.hostname or not parsed.path:
+        raise OfflineLibraryError("Не удалось прочитать ссылку плеера Kodik.")
+    host = parsed.hostname.casefold()
+    path = parsed.path
+    if not re.fullmatch(r"/(?:serial|season|seria|video|movie)/[^/]+/[^/]+/[^/]+/?", path):
+        raise OfflineLibraryError("Ссылка Kodik не указывает конкретное видео или сезон.")
+    return f"//{host}{path}" + (f"?{parsed.query}" if parsed.query else "")
+
+
+def _kodik_signature(link: str, ip: str, deadline: str, private_key: str) -> str:
+    message = f"{link}:{ip}:{deadline}".encode("utf-8")
+    return hmac.new(private_key.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def _select_kodik_source(links: object, requested_quality: int) -> tuple[str, int]:
+    """Select one direct source from the documented private API response."""
+
+    if not isinstance(links, dict):
+        raise OfflineLibraryError("Kodik не предоставил доступные качества видео.")
+    available = sorted(
+        (int(quality) for quality in links if str(quality).isdigit()),
+        reverse=True,
+    )
+    selected = next((quality for quality in available if quality <= requested_quality), None)
+    if selected is None and available:
+        selected = available[-1]
+    if selected is None:
+        raise OfflineLibraryError("Kodik не предоставил качества для этой серии.")
+    variants = links.get(str(selected), links.get(selected))
+    if isinstance(variants, str):
+        source = variants
+    elif isinstance(variants, list):
+        source = next(
+            (
+                _source_value(item)
+                for item in variants
+                if isinstance(item, dict)
+                and isinstance(_source_value(item), str)
+            ),
+            None,
+        )
+    elif isinstance(variants, dict):
+        source = _source_value(variants)
+    else:
+        source = None
+    if not isinstance(source, str) or not source.strip():
+        raise OfflineLibraryError("Kodik не передал прямую ссылку на выбранное качество.")
+    return _normalise_url(source.strip()), selected
+
+
+def _source_value(value: dict[object, object]) -> object:
+    """Read a direct source regardless of the API field's casing.
+
+    Kodik's private API currently uses ``Src``/``Type`` while some older
+    examples use lowercase names.  JSON keys are case-sensitive, so normalise
+    them at this boundary rather than making the download flow depend on one
+    spelling.
+    """
+
+    for key, item in value.items():
+        if isinstance(key, str) and key.casefold() in {"src", "url", "link"}:
+            return item
+    return None
+
+
+def _normalise_kodik_sources(links: object) -> list[dict[str, Any]]:
+    """Expose every direct quality returned by Kodik in one stable shape."""
+
+    if not isinstance(links, dict):
+        return []
+    result: list[dict[str, Any]] = []
+    seen: set[tuple[int, str]] = set()
+    for raw_quality, raw_variants in links.items():
+        try:
+            quality = int(raw_quality)
+        except (TypeError, ValueError):
+            continue
+        variants = raw_variants if isinstance(raw_variants, list) else [raw_variants]
+        for variant in variants:
+            if isinstance(variant, str):
+                source = variant
+                source_type = "hls" if ".m3u8" in variant.split("?", 1)[0] else "video"
+            elif isinstance(variant, dict):
+                source = _source_value(variant)
+                source_type = next(
+                    (
+                        str(item).casefold()
+                        for key, item in variant.items()
+                        if isinstance(key, str) and key.casefold() in {"type", "format", "mime"}
+                    ),
+                    "",
+                )
+            else:
+                continue
+            if not isinstance(source, str) or not source.strip():
+                continue
+            source = _normalise_url(source.strip())
+            identity = (quality, source)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            result.append(
+                {
+                    "quality": quality,
+                    "src": source,
+                    "type": source_type or ("hls" if ".m3u8" in source.split("?", 1)[0] else "video"),
+                }
+            )
+    return sorted(result, key=lambda item: int(item["quality"]), reverse=True)
+
+
+def _normalise_kodik_subtitles(value: object) -> list[dict[str, Any]]:
+    """Accept current and legacy subtitle shapes used by the private API."""
+
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def visit(candidate: object, fallback_label: str = "") -> None:
+        if isinstance(candidate, str):
+            source = candidate.strip()
+            if not source.startswith(("//", "https://", "http://")):
+                return
+            source = _normalise_url(source)
+            if source in seen:
+                return
+            seen.add(source)
+            label = fallback_label.strip() or f"Субтитры {len(result) + 1}"
+            result.append({"src": source, "label": label, "language": fallback_label.strip() or "und"})
+            return
+        if isinstance(candidate, list):
+            for item in candidate:
+                visit(item, fallback_label)
+            return
+        if not isinstance(candidate, dict):
+            return
+        source = _source_value(candidate)
+        if isinstance(source, str):
+            label = next(
+                (
+                    str(item).strip()
+                    for key, item in candidate.items()
+                    if isinstance(key, str)
+                    and key.casefold() in {"label", "title", "name", "language", "lang", "srclang"}
+                    and str(item).strip()
+                ),
+                fallback_label.strip() or f"Субтитры {len(result) + 1}",
+            )
+            language = next(
+                (
+                    str(item).strip()
+                    for key, item in candidate.items()
+                    if isinstance(key, str)
+                    and key.casefold() in {"language", "lang", "srclang", "locale"}
+                    and str(item).strip()
+                ),
+                fallback_label.strip() or "und",
+            )
+            normalized = _normalise_url(source.strip())
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                result.append(
+                    {
+                        "src": normalized,
+                        "label": label,
+                        "language": language,
+                        "default": bool(candidate.get("default", candidate.get("Default", False))),
+                    }
+                )
+            return
+        for key, item in candidate.items():
+            visit(item, str(key))
+
+    visit(value)
+    return result
+
+
+def _normalise_kodik_skips(payload: dict[str, Any]) -> dict[str, dict[str, float]]:
+    """Read opening/ending markers without depending on one API field casing."""
+
+    raw = next(
+        (
+            value
+            for key, value in payload.items()
+            if isinstance(key, str) and key.casefold().replace("_", "") in {"skips", "skipsegments", "segments"}
+        ),
+        None,
+    )
+    result: dict[str, dict[str, float]] = {}
+
+    def segment(kind: object, value: object) -> None:
+        normalized_kind = str(kind or "").casefold().replace("_", "").replace("-", "")
+        target = "opening" if normalized_kind in {"opening", "op", "intro"} else "ending" if normalized_kind in {"ending", "ed", "outro", "credits"} else ""
+        if not target:
+            return
+        start: object = None
+        end: object = None
+        length: object = None
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            start, end = value[0], value[1]
+        elif isinstance(value, dict):
+            lowered = {str(key).casefold().replace("_", ""): item for key, item in value.items()}
+            start = lowered.get("start", lowered.get("time", lowered.get("from")))
+            end = lowered.get("end", lowered.get("to"))
+            length = lowered.get("length", lowered.get("duration"))
+        try:
+            start_number = float(start)
+            length_number = float(length) if length is not None else float(end) - start_number
+        except (TypeError, ValueError):
+            return
+        if start_number < 0 or length_number <= 0:
+            return
+        result[target] = {"time": start_number, "length": length_number}
+
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            segment(key, value)
+        generic = next(
+            (value for key, value in raw.items() if str(key).casefold() in {"skip", "markers"}),
+            None,
+        )
+        if isinstance(generic, list):
+            ranges = [item for item in generic if isinstance(item, (list, tuple, dict))]
+            if ranges:
+                first = ranges[0]
+                if isinstance(first, dict):
+                    lowered = {str(key).casefold(): item for key, item in first.items()}
+                    explicit = lowered.get("type", lowered.get("kind", lowered.get("name")))
+                    segment(explicit or "opening", first)
+                else:
+                    segment("opening", first)
+            if len(ranges) > 1:
+                last = ranges[-1]
+                if isinstance(last, dict):
+                    lowered = {str(key).casefold(): item for key, item in last.items()}
+                    explicit = lowered.get("type", lowered.get("kind", lowered.get("name")))
+                    segment(explicit or "ending", last)
+                else:
+                    segment("ending", last)
+    elif isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            lowered = {str(key).casefold(): item_value for key, item_value in item.items()}
+            segment(lowered.get("type", lowered.get("kind", lowered.get("name"))), item)
+    return result
 
 
 def _normalise_dubbing(value: object) -> str:
+    """Make catalogue and application dubbing labels comparable."""
+
+    text = str(value or "").casefold().replace("озвучка", "")
+    return re.sub(r"[^\w]+", "", text)
+
+
+def _normalise_title(value: object) -> str:
     text = str(value or "").casefold().replace("ё", "е")
-    text = re.sub(r"\b(?:озвучка|дубляж|voice|dub)\b", " ", text)
-    return re.sub(r"[^\w]+", " ", text, flags=re.UNICODE).strip()
+    return re.sub(r"[^\w]+", "", text).strip()
 
 
-def _episode_number(value: object) -> int:
+def _episode_link_from_results(
+    results: object,
+    season: object,
+    episode: object,
+    translation_id: object = None,
+    dubbing: object = None,
+    title: object = None,
+    original_title: object = None,
+) -> str | None:
+    """Pick the exact episode link returned by Kodik's public catalogue.
+
+    ``with_episodes_data=true`` adds an episode object with a concrete
+    ``/seria/...`` link.  That link, unlike a season or serial embed, is what
+    the private API expects when it signs a direct download URL.
+    """
+
+    if not isinstance(results, list):
+        return None
+    wanted_season = str(season or "").strip()
+    wanted_episode = str(episode or "").strip()
+    if not wanted_season or not wanted_episode:
+        return None
+    wanted_translation = str(translation_id).strip() if translation_id is not None else ""
+    wanted_dubbing = _normalise_dubbing(dubbing)
+    wanted_titles = {_normalise_title(item) for item in (title, original_title)} - {""}
+    matches: list[tuple[int, int, str]] = []
+
+    for index, result in enumerate(results):
+        if not isinstance(result, dict):
+            continue
+        seasons = result.get("seasons")
+        if not isinstance(seasons, dict):
+            continue
+
+        translation = result.get("translation")
+        if not isinstance(translation, dict):
+            translation = {}
+        result_translation = str(
+            translation.get("id", result.get("translation_id", result.get("translationId", "")))
+        ).strip()
+        result_dubbing = _normalise_dubbing(
+            translation.get("title", result.get("translation_title", result.get("dubbing", "")))
+        )
+        material = result.get("material_data")
+        if not isinstance(material, dict):
+            material = {}
+        result_titles = {
+            _normalise_title(item)
+            for item in (
+                result.get("title"),
+                result.get("title_orig"),
+                material.get("title"),
+                material.get("title_en"),
+            )
+        } - {""}
+        for result_season, season_data in seasons.items():
+            if not isinstance(season_data, dict):
+                continue
+            episodes = season_data.get("episodes")
+            if not isinstance(episodes, dict):
+                continue
+            episode_data = next((value for key, value in episodes.items() if str(key) == wanted_episode), None)
+            if isinstance(episode_data, str):
+                link = episode_data
+            elif isinstance(episode_data, dict):
+                link = episode_data.get("link")
+            else:
+                link = None
+            if not isinstance(link, str) or not link.strip():
+                continue
+
+            score = 25 if str(result_season) == wanted_season else 0
+            if wanted_titles and result_titles:
+                if wanted_titles & result_titles:
+                    score += 200
+                elif any(
+                    wanted in result_title or result_title in wanted
+                    for wanted in wanted_titles
+                    for result_title in result_titles
+                ):
+                    score += 60
+            if wanted_translation and result_translation == wanted_translation:
+                score += 100
+            if wanted_dubbing and result_dubbing:
+                if wanted_dubbing == result_dubbing:
+                    score += 80
+                elif wanted_dubbing in result_dubbing or result_dubbing in wanted_dubbing:
+                    score += 40
+            matches.append((score, -index, link.strip()))
+
+    return max(matches)[2] if matches else None
+
+
+def _search_identifier_name(source_id_type: object) -> str | None:
+    """Map the app's stable catalogue id to Kodik's documented search key."""
+
+    kind = str(source_id_type or "").casefold().strip()
+    return {
+        "shikimori": "shikimori_id",
+        "kinopoisk": "kinopoisk_id",
+        "imdb": "imdb_id",
+        "kodik": "id",
+    }.get(kind)
+
+
+class _DataBlob(ctypes.Structure):
+    _fields_ = [
+        ("cbData", wintypes.DWORD),
+        ("pbData", ctypes.POINTER(ctypes.c_byte)),
+    ]
+
+
+def _dpapi_protect(value: str) -> str:
+    """Encrypt a local secret with the current Windows account's DPAPI key."""
+
+    if os.name != "nt":
+        raise OfflineLibraryError("Защищённое хранение приватного ключа Kodik доступно только в Windows.")
+    raw = value.encode("utf-8")
+    source_buffer = ctypes.create_string_buffer(raw)
+    source = _DataBlob(len(raw), ctypes.cast(source_buffer, ctypes.POINTER(ctypes.c_byte)))
+    destination = _DataBlob()
+    crypt32 = ctypes.windll.crypt32
+    kernel32 = ctypes.windll.kernel32
+    if not crypt32.CryptProtectData(
+        ctypes.byref(source),
+        "AnimeSoul Kodik private API",
+        None,
+        None,
+        None,
+        0,
+        ctypes.byref(destination),
+    ):
+        raise OfflineLibraryError("Windows не смог защитить приватный ключ Kodik.")
     try:
-        number = int(str(value).strip())
-    except (TypeError, ValueError) as error:
-        raise OfflineLibraryError("Kodik API поддерживает загрузку только серий с числовым номером.") from error
-    if number < 0:
-        raise OfflineLibraryError("Номер серии для Kodik API не может быть отрицательным.")
-    return number
+        return base64.b64encode(ctypes.string_at(destination.pbData, destination.cbData)).decode("ascii")
+    finally:
+        kernel32.LocalFree(destination.pbData)
+
+
+def _dpapi_unprotect(value: str) -> str:
+    if os.name != "nt":
+        raise OfflineLibraryError("Защищённое хранение приватного ключа Kodik доступно только в Windows.")
+    try:
+        raw = base64.b64decode(value.encode("ascii"), validate=True)
+    except (UnicodeEncodeError, ValueError) as error:
+        raise OfflineLibraryError("Не удалось прочитать защищённый приватный ключ Kodik.") from error
+    source_buffer = ctypes.create_string_buffer(raw)
+    source = _DataBlob(len(raw), ctypes.cast(source_buffer, ctypes.POINTER(ctypes.c_byte)))
+    destination = _DataBlob()
+    crypt32 = ctypes.windll.crypt32
+    kernel32 = ctypes.windll.kernel32
+    if not crypt32.CryptUnprotectData(
+        ctypes.byref(source),
+        None,
+        None,
+        None,
+        None,
+        0,
+        ctypes.byref(destination),
+    ):
+        raise OfflineLibraryError("Windows не смог расшифровать приватный ключ Kodik для текущего пользователя.")
+    try:
+        return ctypes.string_at(destination.pbData, destination.cbData).decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise OfflineLibraryError("Защищённый приватный ключ Kodik имеет неверный формат.") from error
+    finally:
+        kernel32.LocalFree(destination.pbData)
 
 
 class KodikSourceResolver:
-    """Resolve a selected Kodik embed through the API-compatible route.
+    """Resolve a Kodik player link through the account's private API."""
 
-    The player endpoint itself may refuse requests made outside the embed, so
-    downloads use the API-compatible resolver and then remux its HLS playlist
-    into a local MP4 file.
-    """
+    def __init__(self) -> None:
+        self._public_ip: str | None = None
+        self._public_ip_expires_at = 0.0
 
-    async def resolve_via_api(
+    async def resolve_private_api(
         self,
         embed_url: str,
         quality: int,
+        public_key: str,
+        private_key: str,
+        *,
+        source_id: object = None,
+        source_id_type: object = None,
+        season: object = None,
+        episode: object = None,
+        translation_id: object = None,
+        dubbing: object = None,
+        source_title: object = None,
+        source_original_title: object = None,
+    ) -> tuple[str, int]:
+        payload = await self._request_private_payload(
+            embed_url,
+            public_key,
+            private_key,
+            source_id=source_id,
+            source_id_type=source_id_type,
+            season=season,
+            episode=episode,
+            translation_id=translation_id,
+            dubbing=dubbing,
+            source_title=source_title,
+            source_original_title=source_original_title,
+        )
+        requested_quality = max(144, min(int(quality or 720), 2160))
+        return _select_kodik_source(payload.get("links"), requested_quality)
+
+    async def resolve_playback_api(
+        self,
+        embed_url: str,
+        public_key: str,
+        private_key: str,
+        *,
+        source_id: object = None,
+        source_id_type: object = None,
+        season: object = None,
+        episode: object = None,
+        translation_id: object = None,
+        dubbing: object = None,
+        source_title: object = None,
+        source_original_title: object = None,
+    ) -> dict[str, Any]:
+        payload = await self._request_private_payload(
+            embed_url,
+            public_key,
+            private_key,
+            source_id=source_id,
+            source_id_type=source_id_type,
+            season=season,
+            episode=episode,
+            translation_id=translation_id,
+            dubbing=dubbing,
+            source_title=source_title,
+            source_original_title=source_original_title,
+        )
+        subtitle_values = [
+            value
+            for key, value in payload.items()
+            if isinstance(key, str) and key.casefold() in {"subtitles", "subtitle", "tracks"}
+        ]
+        links = payload.get("links")
+        if isinstance(links, dict):
+            for variants in links.values():
+                for variant in (variants if isinstance(variants, list) else [variants]):
+                    if not isinstance(variant, dict):
+                        continue
+                    subtitle_values.extend(
+                        value
+                        for key, value in variant.items()
+                        if isinstance(key, str) and key.casefold() in {"subtitles", "subtitle", "tracks"}
+                    )
+        return {
+            "sources": _normalise_kodik_sources(payload.get("links")),
+            "subtitles": _normalise_kodik_subtitles(subtitle_values),
+            "skips": _normalise_kodik_skips(payload),
+        }
+
+    async def _request_private_payload(
+        self,
+        embed_url: str,
+        public_key: str,
+        private_key: str,
+        *,
+        source_id: object = None,
+        source_id_type: object = None,
+        season: object = None,
+        episode: object = None,
+        translation_id: object = None,
+        dubbing: object = None,
+        source_title: object = None,
+        source_original_title: object = None,
+    ) -> dict[str, Any]:
+        """Request a signed direct URL from Kodik's documented private API.
+
+        Only the local backend receives the private key.  The browser gets
+        neither the key nor the signature.
+        """
+
+        try:
+            raw_link = _private_player_link(embed_url)
+        except OfflineLibraryError:
+            raw_link = None
+        ip = await self._current_public_ipv4()
+        deadline = (datetime.now(UTC) + timedelta(hours=6)).strftime("%Y%m%d%H")
+        response: httpx.Response | None = None
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(25.0, read=45.0),
+                follow_redirects=True,
+                headers={"User-Agent": USER_AGENT},
+            ) as client:
+                # A serial/season embed is meant for an iframe and may be
+                # rejected by /api/video-links.  Kodik's documented catalogue
+                # endpoint can return the exact /seria link for this selection.
+                official_link = await self._official_episode_link(
+                    client,
+                    public_key,
+                    source_id,
+                    source_id_type,
+                    season,
+                    episode,
+                    translation_id,
+                    dubbing,
+                    source_title,
+                    source_original_title,
+                )
+                candidate_links = [item for item in (official_link, raw_link) if item]
+                if raw_link:
+                    bare_link = raw_link.split("?", 1)[0]
+                    if bare_link != raw_link:
+                        candidate_links.append(bare_link)
+                candidate_links = list(dict.fromkeys(candidate_links))
+                if not candidate_links:
+                    raise OfflineLibraryError("Не удалось определить ссылку Kodik для выбранной серии.")
+                for candidate in candidate_links:
+                    params = {
+                        "link": candidate,
+                        "p": public_key,
+                        "ip": ip,
+                        "d": deadline,
+                        "s": _kodik_signature(candidate, ip, deadline, private_key),
+                        "auto_proxy": "true",
+                        "skip_segments": "true",
+                    }
+                    response = await client.get(KODIK_VIDEO_LINKS_ENDPOINT, params=params)
+                    if response.is_success:
+                        break
+                    # A malformed player link can be corrected by dropping a
+                    # player-only query string. Auth and permission responses
+                    # cannot, so avoid sending an unnecessary second request.
+                    if response.status_code not in {400, 422}:
+                        break
+        except httpx.HTTPError as error:
+            raise OfflineLibraryError("Не удалось подключиться к приватному API Kodik.") from error
+        if response is None:
+            raise OfflineLibraryError("Не удалось получить ответ от приватного API Kodik.")
+        if not response.is_success:
+            raise OfflineLibraryError(self._rejection_message(response))
+        try:
+            payload = response.json()
+        except json.JSONDecodeError as error:
+            raise OfflineLibraryError("Приватное API Kodik вернуло некорректный ответ.") from error
+        if not isinstance(payload, dict):
+            raise OfflineLibraryError("Приватное API Kodik вернуло ответ неверного формата.")
+        if payload.get("error"):
+            raise OfflineLibraryError("Kodik не выдал прямую ссылку на выбранную серию.")
+        return payload
+
+    @staticmethod
+    async def _official_episode_link(
+        client: httpx.AsyncClient,
+        public_key: str,
+        source_id: object,
+        source_id_type: object,
+        season: object,
         episode: object,
         translation_id: object,
-        token: str = "",
-        catalog_id: object = None,
-        catalog_id_type: object = None,
-        dubbing: object = None,
-    ) -> tuple[str, int]:
-        """Use the public Kodik API path to request a quality-specific file.
-
-        ``anime-parsers-ru`` wraps Kodik's public ``get-player`` route and
-        returns the CDN directory described by that API.  When the user has
-        not supplied a local override token, it uses the same automatic public
-        token discovery as the referenced Kodik downloader.  It is run in a
-        worker thread because the package uses synchronous HTTP requests.
-        """
-
-        media_id, media_id_type = _source_reference(embed_url, catalog_id, catalog_id_type)
-        episode_number = _episode_number(episode)
-        selected_translation = str(translation_id or "0")
-        selected_quality = max(144, min(int(quality or 720), 2160))
-        try:
-            base_url, max_quality = await asyncio.to_thread(
-                self._api_link,
-                token,
-                media_id,
-                media_id_type,
-                episode_number,
-                selected_translation,
-                dubbing,
-            )
-        except OfflineLibraryError:
-            raise
-        except Exception as error:
-            raise OfflineLibraryError(
-                "Kodik API не смог предоставить прямую ссылку. Проверьте API-токен, "
-                "выбранную озвучку и доступность серии."
-            ) from error
-        actual_quality = min(selected_quality, int(max_quality))
-        if actual_quality < 144:
-            raise OfflineLibraryError("Kodik API не сообщил доступное качество для этой серии.")
-        # Kodik exposes the selected rendition as an HLS manifest.  Saving
-        # that text response as `.mp4` was the previous broken behaviour;
-        # `_stream_to_file` now lets ffmpeg remux the segments into MP4.
-        return (
-            f"{_normalise_url(str(base_url).rstrip('/') + '/')}{actual_quality}.mp4:hls:manifest.m3u8",
-            actual_quality,
-        )
-
-    @staticmethod
-    def _api_link(
-        token: str,
-        media_id: str,
-        media_id_type: str,
-        episode_number: int,
-        translation_id: str,
-        dubbing: object = None,
-    ) -> tuple[str, int]:
-        try:
-            from anime_parsers_ru import KodikParser
-        except ImportError as error:
-            raise OfflineLibraryError("Не установлена поддержка Kodik API. Перезапустите AnimeSoul.") from error
-        parser = KodikParser(token=token or None, validate_token=bool(token))
-        if translation_id == "0":
-            translation_id = KodikSourceResolver._matching_translation_id(
-                parser,
-                media_id,
-                media_id_type,
-                dubbing,
-            )
-        base_url, max_quality, _skips = parser.get_link(
-            id=media_id,
-            id_type=media_id_type,
-            seria_num=episode_number,
-            translation_id=translation_id,
-        )
-        return str(base_url), int(max_quality)
-
-    @staticmethod
-    def _matching_translation_id(
-        parser: Any,
-        media_id: str,
-        media_id_type: str,
         dubbing: object,
-    ) -> str:
-        """Find the Kodik translation matching YummyAnime's displayed dub.
+        source_title: object,
+        source_original_title: object,
+    ) -> str | None:
+        """Look up a concrete episode link via Kodik's public catalogue API.
 
-        Yummy's ``player_id`` identifies the provider, not the translation.
-        If it has no real ``translation_id``, the public search response gives
-        us translation names and ids for the stable external catalog id.
+        Failure here deliberately falls back to the original embed URL.  This
+        keeps the previous YummyAnime/Kodik embed behaviour as a reserve while
+        preferring the supported per-episode API route whenever the app has a
+        Shikimori or Kinopoisk id.
         """
 
-        target = _normalise_dubbing(dubbing)
-        field_by_type = {
-            "shikimori": "shikimori_id",
-            "kinopoisk": "kinopoisk_id",
-            "imdb": "imdb_id",
-            "mdl": "mdl_id",
-            "worldart_animation": "worldart_animation_id",
-            "worldart_cinema": "worldart_cinema_id",
-        }
-        field = field_by_type.get(media_id_type)
-        if not target or not field:
-            return "0"
-        try:
-            response = parser.api_request("search", {field: media_id})
-        except Exception:
-            return "0"
-        rows = response.get("results", []) if isinstance(response, dict) else []
-        exact: str | None = None
-        partial: str | None = None
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            translation = row.get("translation")
-            if not isinstance(translation, dict):
-                continue
-            candidate_id = translation.get("id")
-            candidate = _normalise_dubbing(translation.get("title"))
-            if not isinstance(candidate_id, (str, int)) or not candidate:
-                continue
-            if candidate == target:
-                exact = str(candidate_id)
-                break
-            if candidate in target or target in candidate:
-                partial = partial or str(candidate_id)
-        return exact or partial or "0"
-
-    async def resolve(self, embed_url: str, quality: int) -> tuple[str, int]:
-        if not _is_kodik_url(embed_url):
-            raise OfflineLibraryError("Для загрузки поддерживаются только источники Kodik.")
-        embed_url = _normalise_url(embed_url)
-        headers = {"User-Agent": USER_AGENT, "Referer": embed_url}
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(35.0, read=70.0),
-            follow_redirects=True,
-            headers=headers,
-        ) as client:
-            page_response = await client.get(embed_url)
-            page_response.raise_for_status()
-            page = page_response.text
-            params = _json_from_script(page, "urlParams")
-            video_type = self._script_value(page, "type")
-            video_hash = self._script_value(page, "hash")
-            video_id = self._script_value(page, "id")
-            endpoint = await self._player_endpoint(client, embed_url, page)
-            payload = {
-                "hash": video_hash,
-                "id": video_id,
-                "type": video_type,
-                "d": str(params.get("d", "")),
-                "d_sign": str(params.get("d_sign", "")),
-                "pd": str(params.get("pd", "")),
-                "pd_sign": str(params.get("pd_sign", "")),
-                "ref": "",
-                "ref_sign": str(params.get("ref_sign", "")),
-                "bad_user": "true",
-                "cdn_is_working": "true",
+        identifier_name = _search_identifier_name(source_id_type)
+        identifier = str(source_id or "").strip()
+        title = str(source_title or "").strip()
+        original_title = str(source_original_title or "").strip()
+        if season is None or episode is None:
+            return None
+        lookups: list[tuple[str, str]] = []
+        if identifier_name and identifier:
+            lookups.append((identifier_name, identifier))
+        # YummyAnime does not provide remote ids for every franchise entry.
+        # Kodik documents title search as a supported alternative, so use it
+        # as a reliable fallback instead of signing a broad serial iframe.
+        if title:
+            lookups.append(("title", title))
+        if not lookups:
+            return None
+        for parameter, value in dict.fromkeys(lookups):
+            params = {
+                "token": public_key,
+                parameter: value,
+                "with_episodes_data": "true",
             }
-            if not all(payload[key] for key in ("hash", "id", "type", "d", "d_sign", "pd", "pd_sign", "ref_sign")):
-                raise OfflineLibraryError("В плеере Kodik отсутствуют подписанные параметры видео.")
-            response = await client.post(urljoin(embed_url, endpoint), data=payload)
             try:
+                response = await client.post(KODIK_SEARCH_ENDPOINT, params=params)
                 response.raise_for_status()
-            except httpx.HTTPStatusError as error:
-                if endpoint == "/ftor" and response.status_code >= 400:
-                    raise OfflineLibraryError(
-                        "Kodik не разрешил получить видеопоток для офлайн-сохранения. "
-                        "Это ограничение источника, а не ошибка выбранного качества. "
-                        "Серию можно смотреть в плеере; для скачивания нужен источник, "
-                        "который предоставляет разрешённую прямую ссылку на файл."
-                    ) from error
-                raise
+                payload = response.json()
+            except (httpx.HTTPError, json.JSONDecodeError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            candidate = _episode_link_from_results(
+                payload.get("results"),
+                season,
+                episode,
+                translation_id,
+                dubbing,
+                title,
+                original_title,
+            )
+            if not candidate:
+                continue
             try:
-                data = response.json()
-            except json.JSONDecodeError as error:
-                raise OfflineLibraryError("Kodik вернул некорректный ответ на запрос видео.") from error
-        links = data.get("links") if isinstance(data, dict) else None
-        if not isinstance(links, dict):
-            raise OfflineLibraryError("Kodik не предоставил доступные качества видео.")
-        available = sorted((int(item) for item in links if str(item).isdigit()), reverse=True)
-        selected = next((item for item in available if item <= quality), available[-1] if available else None)
-        if selected is None:
-            raise OfflineLibraryError("Kodik не предоставил качества для этой серии.")
-        sources = links.get(str(selected))
-        source = sources[0].get("src") if isinstance(sources, list) and sources and isinstance(sources[0], dict) else None
-        if not isinstance(source, str):
-            raise OfflineLibraryError("Kodik не передал ссылку на выбранное качество.")
-        resolved = _decode_kodik_source(source)
-        return resolved.replace(":hls:manifest.m3u8", ""), selected
-
-    @staticmethod
-    def _script_value(page: str, name: str) -> str:
-        match = re.search(
-            rf"(?:\.|\b(?:var|let|const)\s+){re.escape(name)}\s*=\s*['\"]([^'\"]+)['\"]",
-            page,
-        )
-        if not match:
-            raise OfflineLibraryError(f"В плеере Kodik не найден параметр {name}.")
-        return match.group(1)
-
-    async def _player_endpoint(
-        self,
-        client: httpx.AsyncClient,
-        embed_url: str,
-        page: str,
-    ) -> str:
-        sources = re.findall(r"<script[^>]+src=[\"']([^\"']+)[\"']", page, re.I)
-        for source in sources:
-            script_url = urljoin(embed_url, source)
-            if not _is_kodik_url(script_url):
+                return _private_player_link(candidate)
+            except OfflineLibraryError:
                 continue
-            script_response = await client.get(script_url)
-            if script_response.status_code >= 400:
-                continue
-            endpoint = self._endpoint_from_script(script_response.text)
-            if endpoint:
-                return endpoint
-        raise OfflineLibraryError("Не удалось найти служебный запрос плеера Kodik.")
-
-    @staticmethod
-    def _endpoint_from_script(script: str) -> str | None:
-        direct = re.search(r"\burl\s*:\s*['\"](/[^'\"]*(?:video|player)[^'\"]*)['\"]", script, re.I)
-        if direct:
-            return direct.group(1)
-        # Current Kodik builds keep the video endpoint in an `atob()` call.
-        # In August 2026 that value is `/ftor`, so the old search for a URL
-        # containing "video" or "player" never found it.
-        for encoded in re.findall(r"\burl\s*:\s*atob\(\s*['\"]([A-Za-z0-9+/=_-]+)['\"]\s*\)", script, re.I):
-            decoded = _base64_text(encoded)
-            if decoded and re.fullmatch(r"/[A-Za-z0-9_./-]+", decoded):
-                return decoded
-        ajax_at = script.find("$.ajax")
-        cache_at = script.find("cache:!1", ajax_at)
-        if ajax_at >= 0 and cache_at > ajax_at:
-            legacy = script[ajax_at + 30 : cache_at - 3].strip(" '\"")
-            decoded = _base64_text(legacy)
-            if decoded and decoded.startswith("/"):
-                return decoded
-        for candidate in re.findall(r"[\"']([A-Za-z0-9+/=_-]{20,})[\"']", script):
-            decoded = _base64_text(candidate)
-            if decoded and decoded.startswith("/") and "video" in decoded:
-                return decoded
         return None
 
+    @staticmethod
+    def _rejection_message(response: httpx.Response) -> str:
+        """Translate safe Kodik rejection hints without exposing a request URL."""
+
+        details = response.text.casefold()
+        if "ip" in details or "ipv4" in details:
+            return (
+                "Kodik отклонил IP в подписи. Отключите VPN/прокси либо подключитесь через IPv4 "
+                "и повторите загрузку."
+            )
+        if "sign" in details or "signature" in details:
+            return "Kodik отклонил подпись. Проверьте, что публичный и приватный ключи — одна пара из профиля Kodik."
+        if "link" in details or "url" in details:
+            return "Kodik не принял ссылку плеера для этой серии. Выберите серию заново и повторите загрузку."
+        if response.status_code in {401, 403}:
+            return "Kodik не подтвердил доступ к приватному API. Проверьте ключи и права аккаунта Kodik."
+        return f"Kodik отклонил запрос прямой ссылки (HTTP {response.status_code})."
+
+    async def _current_public_ipv4(self) -> str:
+        if self._public_ip and time.monotonic() < self._public_ip_expires_at:
+            return self._public_ip
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": USER_AGENT}) as client:
+                response = await client.get(PUBLIC_IP_ENDPOINT)
+                response.raise_for_status()
+            address = str(ipaddress.ip_address(response.text.strip()))
+        except (httpx.HTTPError, ValueError) as error:
+            raise OfflineLibraryError(
+                "Не удалось определить публичный IPv4 для подписи Kodik. Проверьте подключение и повторите попытку."
+            ) from error
+        if ":" in address:
+            raise OfflineLibraryError("Kodik требует публичный IPv4 для выдачи прямой ссылки.")
+        self._public_ip = address
+        self._public_ip_expires_at = time.monotonic() + 300
+        return address
 
 class OfflineLibraryService:
     """Persistent offline catalogue plus a single safe background queue."""
@@ -458,6 +804,7 @@ class OfflineLibraryService:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = data_dir
         self.settings_file = data_dir / SETTINGS_FILE
+        self.private_key_file = data_dir / PRIVATE_KEY_FILE
         self._settings_lock = asyncio.Lock()
         self._index_lock = asyncio.Lock()
         self._jobs: dict[str, dict[str, Any]] = {}
@@ -472,8 +819,30 @@ class OfflineLibraryService:
         payload = await self._settings_payload()
         return {
             "directory": str(directory),
-            "kodikApiTokenConfigured": bool(str(payload.get("kodikApiToken") or "").strip()),
+            "kodikPublicKeyConfigured": bool(str(payload.get("kodikPublicKey") or "").strip()),
+            "kodikPrivateKeyConfigured": self.private_key_file.is_file() and self.private_key_file.stat().st_size > 0,
         }
+
+    async def playback_source(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Resolve a direct online stream while keeping account secrets local."""
+
+        public_key, private_key = await self._kodik_private_credentials()
+        result = await self.resolver.resolve_playback_api(
+            str(request.get("iframeUrl") or ""),
+            public_key,
+            private_key,
+            source_id=request.get("sourceId"),
+            source_id_type=request.get("sourceIdType"),
+            season=request.get("season"),
+            episode=request.get("originEpisode") or request.get("episode"),
+            translation_id=request.get("translationId"),
+            dubbing=request.get("dubbing"),
+            source_title=request.get("sourceTitle"),
+            source_original_title=request.get("sourceOriginalTitle"),
+        )
+        if not result.get("sources"):
+            raise OfflineLibraryError("Kodik не предоставил прямую ссылку для выбранной серии.")
+        return result
 
     async def set_directory(self, value: str) -> dict[str, str | bool]:
         return await self.update_settings(value)
@@ -481,8 +850,10 @@ class OfflineLibraryService:
     async def update_settings(
         self,
         value: str,
-        kodik_api_token: str | None = None,
-        clear_kodik_api_token: bool = False,
+        kodik_public_key: str | None = None,
+        kodik_private_key: str | None = None,
+        clear_kodik_public_key: bool = False,
+        clear_kodik_private_key: bool = False,
     ) -> dict[str, str | bool]:
         if any(job["status"] in {"queued", "downloading"} for job in self._jobs.values()):
             raise OfflineLibraryError("Дождитесь окончания или отмените текущую загрузку перед сменой папки.")
@@ -496,10 +867,18 @@ class OfflineLibraryService:
             await asyncio.to_thread(self.data_dir.mkdir, parents=True, exist_ok=True)
             payload = await self._settings_payload_unlocked()
             payload["directory"] = str(directory)
-            if kodik_api_token is not None and kodik_api_token.strip():
-                payload["kodikApiToken"] = kodik_api_token.strip()
-            elif clear_kodik_api_token:
-                payload.pop("kodikApiToken", None)
+            if kodik_public_key is not None and kodik_public_key.strip():
+                payload["kodikPublicKey"] = kodik_public_key.strip()
+            elif clear_kodik_public_key:
+                payload.pop("kodikPublicKey", None)
+            if kodik_private_key is not None and kodik_private_key.strip():
+                protected = await asyncio.to_thread(_dpapi_protect, kodik_private_key.strip())
+                await self._write_private_key_unlocked(protected)
+            elif clear_kodik_private_key:
+                await asyncio.to_thread(self._remove_private_key_file)
+            # The obsolete public-token integration must never become an
+            # implicit fallback after a user has moved to the official API.
+            payload.pop("kodikApiToken", None)
             await self._write_json(self.settings_file, payload)
         await self._ensure_index(directory)
         return await self.settings()
@@ -537,6 +916,9 @@ class OfflineLibraryService:
 
     async def enqueue(self, request: dict[str, Any]) -> dict[str, Any]:
         directory = await self._directory()
+        # Fail before creating a visible queue item when the official Kodik
+        # credentials are missing or cannot be read on this Windows account.
+        await self._kodik_private_credentials()
         episodes = request.get("episodes")
         if not isinstance(episodes, list) or not episodes:
             raise OfflineLibraryError("Не выбраны серии для загрузки.")
@@ -684,16 +1066,20 @@ class OfflineLibraryService:
         job_id: str,
     ) -> None:
         quality = int(request.get("quality") or 720)
-        token = await self._kodik_api_token()
-        source, actual_quality = await self.resolver.resolve_via_api(
+        public_key, private_key = await self._kodik_private_credentials()
+        source, actual_quality = await self.resolver.resolve_private_api(
             str(episode.get("iframeUrl") or ""),
             quality,
-            episode.get("originEpisode") or episode.get("episode"),
-            episode.get("translationId"),
-            token,
-            episode.get("sourceId"),
-            episode.get("sourceIdType"),
-            episode.get("dubbing"),
+            public_key,
+            private_key,
+            source_id=episode.get("sourceId"),
+            source_id_type=episode.get("sourceIdType"),
+            season=episode.get("season"),
+            episode=episode.get("originEpisode") or episode.get("episode"),
+            translation_id=episode.get("translationId"),
+            dubbing=episode.get("dubbing"),
+            source_title=episode.get("sourceTitle") or request.get("title"),
+            source_original_title=episode.get("sourceOriginalTitle"),
         )
         anime_id = int(request["animeId"])
         season = int(episode.get("season") or 1)
@@ -758,7 +1144,7 @@ class OfflineLibraryService:
         job_id: str,
         duration: float = 0,
     ) -> None:
-        if source.endswith(":hls:manifest.m3u8"):
+        if source.endswith(":hls:manifest.m3u8") or ".m3u8" in source.split("?", 1)[0]:
             await self._stream_hls_to_file(source, target, job, done_before, total, job_id, duration)
             return
         headers = {"User-Agent": USER_AGENT, "Referer": "https://kodik.info/"}
@@ -934,10 +1320,30 @@ class OfflineLibraryService:
             return {}
         return dict(payload) if isinstance(payload, dict) else {}
 
-    async def _kodik_api_token(self) -> str:
+    async def _kodik_private_credentials(self) -> tuple[str, str]:
         payload = await self._settings_payload()
-        token = payload.get("kodikApiToken")
-        return token.strip() if isinstance(token, str) else ""
+        public_key = str(payload.get("kodikPublicKey") or "").strip()
+        if not public_key or not self.private_key_file.is_file():
+            raise OfflineLibraryError(
+                "Добавьте публичный и приватный ключи Kodik в настройках офлайн-библиотеки."
+            )
+        try:
+            protected = await asyncio.to_thread(self.private_key_file.read_text, encoding="utf-8")
+            private_key = await asyncio.to_thread(_dpapi_unprotect, protected.strip())
+        except OSError as error:
+            raise OfflineLibraryError("Не удалось прочитать защищённый приватный ключ Kodik.") from error
+        if not private_key.strip():
+            raise OfflineLibraryError("Приватный ключ Kodik не задан.")
+        return public_key, private_key.strip()
+
+    async def _write_private_key_unlocked(self, protected: str) -> None:
+        temporary = self.private_key_file.with_suffix(self.private_key_file.suffix + ".tmp")
+        await asyncio.to_thread(temporary.write_text, protected + "\n", encoding="utf-8")
+        await asyncio.to_thread(temporary.replace, self.private_key_file)
+
+    def _remove_private_key_file(self) -> None:
+        if self.private_key_file.exists():
+            self.private_key_file.unlink()
 
     async def _ensure_index(self, directory: Path) -> None:
         index_file = directory / INDEX_FILE

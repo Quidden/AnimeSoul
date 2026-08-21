@@ -31,6 +31,7 @@ export type Anime = {
     imdb_id?: number | string;
     worldart_id?: number | string;
     worldart_type?: string;
+    kodik_id?: number | string;
   };
   franchiseCount?: number;
   franchiseEntries?: Anime[];
@@ -98,6 +99,7 @@ export type Video = {
     /** Provider identifiers report translation reliably across locales. */
     player_id?: number | string;
     translation_id?: number | string;
+    translation_type?: string;
   };
   skips?: {
     opening?: { time: number; length: number } | null;
@@ -129,6 +131,9 @@ export type EpisodeState = {
   /** Origin anime ID for franchise cross-referencing. */
   originAnimeId?: number;
   originEpisode?: string;
+  /** Voice/provider used for this exact playback position. */
+  dub?: string;
+  player?: string;
   completed?: boolean;
   completions?: number;
   completionHistory?: number[];
@@ -142,6 +147,8 @@ export type EpisodeState = {
     updatedAt: number;
     originAnimeId?: number;
     originEpisode?: string;
+    dub?: string;
+    player?: string;
     completed?: boolean;
     completions?: number;
     completionHistory?: number[];
@@ -206,11 +213,19 @@ export type PlayerPrefs = {
   playerEpisodeCarousel: boolean;
   episodeHoverPreview: boolean;
   toolbarIconOnly: boolean;
+  /** Keep the legacy toolbar around the custom AnimeSoul player. */
+  customPlayerToolbarVisible: boolean;
   watchedEpisodeColor: string;
   interfaceFontScale: number;
   headingFontScale: number;
   posterScale: number;
   previewScale: number;
+  /** Ordered global voice favourites used as the fallback preference list. */
+  favoriteDubbings: string[];
+  /** Explicit default voice selected for individual anime titles. */
+  titleDubbings: Record<string, string>;
+  /** Player/provider selected for individual anime titles. */
+  titlePlayers: Record<string, string>;
   watchPartyEnabled: boolean;
   watchPartyServer: string;
   watchPartyName: string;

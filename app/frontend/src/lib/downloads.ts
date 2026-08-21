@@ -44,14 +44,26 @@ export type OfflineLibrary = {
 
 export type OfflineSettings = {
   directory: string;
-  kodikApiTokenConfigured: boolean;
+  kodikPublicKeyConfigured: boolean;
+  kodikPrivateKeyConfigured: boolean;
 };
 
 export type OfflineSettingsUpdate = {
   directory: string;
-  kodikApiToken?: string;
-  clearKodikApiToken?: boolean;
+  kodikPublicKey?: string;
+  kodikPrivateKey?: string;
+  clearKodikPublicKey?: boolean;
+  clearKodikPrivateKey?: boolean;
 };
+
+export const KODIK_ACCESS_CHANGED_EVENT = "animesoul:kodik-access-changed";
+
+/** Direct playback and downloads require the complete private Kodik API pair. */
+export function hasKodikSecretAccess(
+  settings: Pick<OfflineSettings, "kodikPublicKeyConfigured" | "kodikPrivateKeyConfigured">,
+) {
+  return settings.kodikPublicKeyConfigured && settings.kodikPrivateKeyConfigured;
+}
 
 export type DownloadEpisodeRequest = {
   videoId: number | string;
@@ -64,6 +76,8 @@ export type DownloadEpisodeRequest = {
   iframeUrl: string;
   sourceId?: string;
   sourceIdType?: string;
+  sourceTitle?: string;
+  sourceOriginalTitle?: string;
   duration?: number;
   previewUrl?: string;
 };

@@ -1,5 +1,4 @@
 fastapi==0.116.1
-anime-parsers-ru==1.17.0
 httpx==0.28.1
 imageio-ffmpeg==0.6.0
 uvicorn[standard]==0.35.0

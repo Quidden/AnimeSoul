@@ -1,7 +1,9 @@
 .downloads-page {
+  width: min(100%, 1580px);
   min-height: calc(100vh - 248px);
-  padding-top: 32px;
-  padding-bottom: 72px;
+  margin: 0 auto;
+  padding: 32px clamp(18px, 3vw, 48px) 72px;
+  box-sizing: border-box;
 }
 
 .downloads-hero,
@@ -222,8 +224,7 @@
   border-top: 1px solid var(--line);
 }
 
-.download-job-topline,
-.downloaded-anime-title-row {
+.download-job-topline {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -402,12 +403,12 @@
 }
 
 .downloads-library {
-  padding: 20px;
+  padding: clamp(19px, 2.2vw, 30px);
   border-radius: 20px;
 }
 
 .downloads-library-heading {
-  margin-bottom: 15px;
+  margin-bottom: 22px;
 }
 
 .downloads-library-heading > span {
@@ -421,26 +422,47 @@
 
 .downloaded-anime-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(430px, 620px));
-  gap: 13px;
-  justify-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 232px));
+  gap: 20px;
+  justify-content: center;
 }
 
 .downloaded-anime-card {
-  display: grid;
-  grid-template-columns: 102px minmax(0, 1fr);
+  position: relative;
   overflow: hidden;
-  border-radius: 15px;
-  background: rgba(255, 255, 255, .025);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, .035);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .16);
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
-.downloaded-anime-cover {
-  min-height: 156px;
+.downloaded-anime-card:hover {
+  border-color: rgba(155, 121, 244, .48);
+  box-shadow: 0 19px 42px rgba(0, 0, 0, .25);
+  transform: translateY(-3px);
+}
+
+.downloaded-anime-open {
+  display: block;
+  width: 100%;
   padding: 0;
   border: 0;
   color: var(--text);
-  background: rgba(255, 255, 255, .05);
+  background: transparent;
   cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.downloaded-anime-cover {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background:
+    radial-gradient(circle at 35% 20%, rgba(159, 126, 255, .2), transparent 34%),
+    linear-gradient(145deg, #25212e, #17141d);
 }
 
 .downloaded-anime-cover img {
@@ -448,41 +470,94 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform .24s ease;
+  transition: filter .24s ease, transform .3s ease;
 }
 
-.downloaded-anime-cover:hover img { transform: scale(1.04); }
+.downloaded-anime-card:hover .downloaded-anime-cover img {
+  filter: brightness(.82);
+  transform: scale(1.045);
+}
 
-.downloaded-anime-cover span {
+.downloaded-anime-placeholder {
   display: grid;
   width: 100%;
   height: 100%;
   place-items: center;
-  font-size: 42px;
+  color: #d8c9ff;
+  font-size: 64px;
   font-weight: 800;
 }
 
+.downloaded-anime-count {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(11, 9, 15, .8);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.downloaded-anime-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(15, 11, 21, .7);
+  opacity: 0;
+  transform: translate(-50%, -42%) scale(.9);
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.downloaded-anime-card:hover .downloaded-anime-play,
+.downloaded-anime-open:focus-visible .downloaded-anime-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
 .downloaded-anime-body {
+  display: grid;
   min-width: 0;
-  padding: 17px;
+  gap: 6px;
+  padding: 15px 16px 17px;
 }
 
 .downloaded-anime-title {
+  display: -webkit-box;
   overflow: hidden;
-  padding: 0;
-  border: 0;
-  color: var(--text);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 18px;
-  font-weight: 750;
-  text-align: left;
+  min-height: 42px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.downloaded-anime-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.downloaded-anime-summary {
+  overflow: hidden;
+  color: #c8b9db;
+  font-size: 11px;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.icon-delete-button,
 .text-button {
   padding: 0;
   border: 0;
@@ -492,17 +567,27 @@
   font: inherit;
 }
 
-.icon-delete-button {
+.downloaded-anime-delete {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
   display: inline-grid;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 10px;
+  color: #eee7f4;
+  background: rgba(11, 9, 15, .74);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, .24);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
 }
 
-.icon-delete-button svg,
-.episode-delete-button svg,
+.downloaded-anime-delete svg,
 .offline-delete-dialog-icon svg {
   width: 15px;
   height: 15px;
@@ -513,57 +598,20 @@
   stroke-width: 1.8;
 }
 
-.icon-delete-button:hover,
 .text-button:hover {
   color: var(--accent);
 }
 
-.icon-delete-button:hover {
-  border-color: rgba(255, 131, 151, .32);
-  color: #ff9baa;
-  background: rgba(203, 65, 89, .1);
+.downloaded-anime-delete:hover {
+  border-color: rgba(255, 131, 151, .5);
+  color: #ffd1d9;
+  background: rgba(160, 48, 72, .78);
 }
 
 .text-button {
   font-size: 13px;
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-.downloaded-episodes {
-  display: grid;
-  gap: 7px;
-}
-
-.downloaded-episode {
-  display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 5px 8px 5px 5px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, .035);
-}
-
-.episode-delete-button {
-  display: inline-grid;
-  width: 27px;
-  height: 27px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--muted);
-  background: rgba(255, 255, 255, .025);
-  cursor: pointer;
-  transition: border-color .18s ease, color .18s ease, background .18s ease;
-}
-
-.episode-delete-button:hover {
-  border-color: rgba(255, 131, 151, .34);
-  color: #ff9baa;
-  background: rgba(203, 65, 89, .1);
 }
 
 .offline-delete-dialog-backdrop {
@@ -636,46 +684,55 @@
 .offline-delete-never-button:hover { color: var(--text); background: rgba(255, 255, 255, .08); }
 .offline-delete-confirm-button:hover { background: linear-gradient(135deg, #ca5c74, #de758a); }
 
-.downloaded-episode img {
-  width: 54px;
-  height: 40px;
-  border-radius: 7px;
-  object-fit: cover;
-}
-
-.downloaded-episode strong,
-.downloaded-episode span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.downloaded-episode strong { font-size: 13px; }
-.downloaded-episode span { margin-top: 2px; color: var(--muted); font-size: 12px; }
-
-.offline-directory-setting,
-.offline-kodik-setting {
-  display: flex;
-  gap: 9px;
+.settings-item.offline-directory-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(440px, 610px);
   align-items: center;
+  gap: 20px;
 }
 
-.offline-directory-setting .settings-text-input,
-.offline-kodik-setting .settings-text-input {
+.settings-item.offline-kodik-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(570px, 1.15fr);
+  align-items: center;
+  gap: 20px;
+}
+
+.settings-item.offline-directory-setting > div:last-child {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
   min-width: 0;
-  flex: 1;
+  gap: 9px;
 }
 
-.offline-kodik-setting-controls,
+.settings-item.offline-kodik-setting > .offline-kodik-setting-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) auto;
+  width: 100%;
+  min-width: 0;
+  gap: 9px;
+}
+
+.settings-item.offline-directory-setting .settings-text-input,
+.settings-item.offline-kodik-setting .settings-text-input {
+  width: 100%;
+  min-width: 0;
+}
+
 .offline-kodik-actions {
   display: flex;
+  flex: none;
   gap: 8px;
   align-items: center;
 }
 
-.offline-kodik-setting-controls { flex: 1; min-width: 0; }
-.offline-kodik-actions { flex: none; }
+@media (max-width: 1080px) {
+  .settings-item.offline-directory-setting,
+  .settings-item.offline-kodik-setting {
+    grid-template-columns: 1fr;
+  }
+}
 
 .offline-settings-message { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
 .offline-settings-note { margin: 13px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
@@ -790,15 +847,18 @@
   .downloads-back-button { width: 100%; }
   .download-jobs-refresh { display: none; }
 
-  .downloaded-anime-list { grid-template-columns: 1fr; }
-  .downloaded-anime-card { grid-template-columns: 92px minmax(0, 1fr); }
-  .downloaded-anime-cover { min-height: 154px; }
-  .downloaded-anime-body { padding: 13px; }
-  .downloaded-episode { grid-template-columns: minmax(0, 1fr) auto; }
-  .downloaded-episode img { display: none; }
-  .offline-directory-setting,
-  .offline-kodik-setting,
-  .offline-kodik-setting-controls { align-items: stretch; flex-direction: column; }
+  .downloads-page { padding-inline: 14px; }
+  .downloads-library { padding: 16px; }
+  .downloaded-anime-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .downloaded-anime-body { padding: 12px; }
+  .downloaded-anime-title { min-height: 38px; font-size: 13px; }
+  .downloaded-anime-summary { display: none; }
+  .downloaded-anime-delete { top: 7px; right: 7px; width: 30px; height: 30px; }
+  .settings-item.offline-directory-setting > div:last-child,
+  .settings-item.offline-kodik-setting > .offline-kodik-setting-controls {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
 
   .offline-kodik-actions { width: 100%; }
   .offline-kodik-actions > button { flex: 1; }

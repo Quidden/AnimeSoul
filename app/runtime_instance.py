@@ -16,6 +16,20 @@ from typing import Any, Callable
 
 
 RUNTIME_STATE_FILENAME = "animesoul.runtime.json"
+RUNTIME_API_CAPABILITIES = frozenset({"kodik-direct-stream-v1"})
+
+
+def runtime_api_is_compatible(payload: object) -> bool:
+    """Return whether a running server supports this client's required API."""
+
+    if not isinstance(payload, dict):
+        return False
+    capabilities = payload.get("capabilities")
+    if not isinstance(capabilities, list):
+        return False
+    return RUNTIME_API_CAPABILITIES.issubset(
+        capability for capability in capabilities if isinstance(capability, str)
+    )
 
 
 def find_available_port(

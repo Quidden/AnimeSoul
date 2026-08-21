@@ -4,7 +4,6 @@ import { readLocal, writeLocal } from "../../lib/storage";
 import {
   cancelDownload,
   deleteOfflineAnime,
-  deleteOfflineEpisode,
   fetchOfflineLibrary,
   type OfflineLibrary,
 } from "../../lib/downloads";
@@ -15,8 +14,7 @@ type DownloadsPageProps = {
 };
 
 type PendingDeletion = {
-  kind: "anime" | "episode";
-  id: number | string;
+  id: number;
   title: string;
   detail: string;
 };
@@ -31,8 +29,24 @@ function TrashIcon() {
   );
 }
 
-function episodeLabel(season: number, episode: string) {
-  return `Сезон ${season} · серия ${episode}`;
+function episodeCountLabel(count: number) {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 14) return `${count} серий`;
+  if (mod10 === 1) return `${count} серия`;
+  if (mod10 >= 2 && mod10 <= 4) return `${count} серии`;
+  return `${count} серий`;
+}
+
+function downloadedSeasonsLabel(episodes: { season: number; episode: string }[]) {
+  const grouped = new Map<number, number>();
+  for (const episode of episodes) {
+    grouped.set(episode.season, (grouped.get(episode.season) ?? 0) + 1);
+  }
+  return [...grouped.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([season, count]) => `Сезон ${season} · ${episodeCountLabel(count)}`)
+    .join(" · ");
 }
 
 function progressLabel(progress: number) {
@@ -81,19 +95,9 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
     }
   };
 
-  const removeEpisode = async (episodeId: string) => {
-    try {
-      await deleteOfflineEpisode(episodeId);
-      setLibrary(await fetchOfflineLibrary());
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось удалить серию.");
-    }
-  };
-
   const requestDeletion = (deletion: PendingDeletion) => {
     if (skipDeletionConfirmation) {
-      if (deletion.kind === "anime") void removeAnime(Number(deletion.id));
-      else void removeEpisode(String(deletion.id));
+      void removeAnime(deletion.id);
       return;
     }
     setPendingDeletion(deletion);
@@ -107,8 +111,7 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
       setSkipDeletionConfirmation(true);
     }
     setPendingDeletion(null);
-    if (deletion.kind === "anime") await removeAnime(Number(deletion.id));
-    else await removeEpisode(String(deletion.id));
+    await removeAnime(deletion.id);
   };
 
   const cancel = async (jobId: string) => {
@@ -210,58 +213,42 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
           </div>
           <div className="downloaded-anime-list">
         {downloadedAnime.map((item) => {
+          const episodeCount = item.episodes.length;
+          const seasonsLabel = downloadedSeasonsLabel(item.episodes);
+          const artwork = item.posterUrl ?? item.episodes.find(episode => episode.previewUrl)?.previewUrl;
           const anime: Anime = {
             anime_id: item.animeId,
             title: item.title,
             year: item.year,
-            poster: item.posterUrl ? { big: item.posterUrl, fullsize: item.posterUrl } : undefined,
+            poster: artwork ? { big: artwork, fullsize: artwork } : undefined,
           };
           return (
             <article className="downloaded-anime-card" key={item.animeId}>
-              <button className="downloaded-anime-cover" type="button" onClick={() => onOpen(anime)} aria-label={`Открыть ${item.title}`}>
-                {item.posterUrl ? <img src={item.posterUrl} alt="" /> : <span>{item.title.slice(0, 1)}</span>}
+              <button className="downloaded-anime-open" type="button" onClick={() => onOpen(anime)} aria-label={`Открыть ${item.title}`}>
+                <span className="downloaded-anime-cover">
+                  {artwork ? <img src={artwork} alt="" /> : <span className="downloaded-anime-placeholder">{item.title.slice(0, 1)}</span>}
+                  <span className="downloaded-anime-count">{episodeCountLabel(episodeCount)}</span>
+                  <span className="downloaded-anime-play" aria-hidden="true">▶</span>
+                </span>
+                <span className="downloaded-anime-body">
+                  <strong className="downloaded-anime-title">{item.title}</strong>
+                  <span className="downloaded-anime-meta">
+                    {item.year ? `${item.year} · ` : ""}На устройстве
+                  </span>
+                  <span className="downloaded-anime-summary" title={seasonsLabel}>{seasonsLabel}</span>
+                </span>
               </button>
-              <div className="downloaded-anime-body">
-                <div className="downloaded-anime-title-row">
-                  <button className="downloaded-anime-title" type="button" onClick={() => onOpen(anime)}>{item.title}</button>
-                  <button
-                    className="icon-delete-button"
-                    type="button"
-                    title="Удалить скачанные серии"
-                    aria-label={`Удалить ${item.title}`}
-                    onClick={() => requestDeletion({
-                      kind: "anime",
-                      id: item.animeId,
-                      title: item.title,
-                      detail: `Будут удалены все ${item.episodes.length} скачанные серии.`,
-                    })}
-                  ><TrashIcon /></button>
-                </div>
-                <p>{item.episodes.length} {item.episodes.length === 1 ? "серия" : "серий"} скачано</p>
-                <div className="downloaded-episodes">
-                  {item.episodes.map((episode) => (
-                    <div className="downloaded-episode" key={episode.id}>
-                      {episode.previewUrl && <img src={episode.previewUrl} alt="" />}
-                      <div>
-                        <strong>{episodeLabel(episode.season, episode.episode)}</strong>
-                        <span>{episode.dubbing} · {episode.quality}p</span>
-                      </div>
-                      <button
-                        className="episode-delete-button"
-                        type="button"
-                        title="Удалить серию"
-                        aria-label={`Удалить ${episodeLabel(episode.season, episode.episode)}`}
-                        onClick={() => requestDeletion({
-                          kind: "episode",
-                          id: episode.id,
-                          title: episodeLabel(episode.season, episode.episode),
-                          detail: `${episode.dubbing} · ${episode.quality}p будет удалена с устройства.`,
-                        })}
-                      ><TrashIcon /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <button
+                className="downloaded-anime-delete"
+                type="button"
+                title="Удалить скачанные серии"
+                aria-label={`Удалить ${item.title}`}
+                onClick={() => requestDeletion({
+                  id: item.animeId,
+                  title: item.title,
+                  detail: `Будут удалены все скачанные серии (${episodeCountLabel(episodeCount)}).`,
+                })}
+              ><TrashIcon /></button>
             </article>
           );
         })}

@@ -68,7 +68,7 @@ export function useResumePreview({
         }
 
         let cancelled = false;
-        fetchAnimeDetails([lastState?.originAnimeId ?? lastAnime.anime_id])
+        fetchAnimeDetails([lastPoint?.state.originAnimeId ?? lastState?.originAnimeId ?? lastAnime.anime_id])
             .then(anime => {
                 if (!cancelled) setPreviewAnime(anime[0] ?? lastAnime);
             })
@@ -81,6 +81,7 @@ export function useResumePreview({
         };
     }, [
         lastAnime?.anime_id,
+        lastPoint?.state.originAnimeId,
         lastState?.originAnimeId,
         playerPrefs.homeEpisodePreview,
     ]);
@@ -92,7 +93,7 @@ export function useResumePreview({
         }
 
         let cancelled = false;
-        const seasonAnimeId = lastState?.originAnimeId ?? lastAnimeId;
+        const seasonAnimeId = lastPoint?.state.originAnimeId ?? lastState?.originAnimeId ?? lastAnimeId;
         setTrailer(null);
 
         const loadTrailer = async () => {
@@ -121,6 +122,7 @@ export function useResumePreview({
         };
     }, [
         lastAnimeId,
+        lastPoint?.state.originAnimeId,
         lastState?.originAnimeId,
         playerPrefs.homeEpisodePreview,
     ]);
@@ -134,15 +136,15 @@ export function useResumePreview({
         }
 
         let cancelled = false;
-        fetchAnimeVideos(lastState.originAnimeId ?? lastAnime.anime_id)
+        fetchAnimeVideos(lastPoint.state.originAnimeId ?? lastState.originAnimeId ?? lastAnime.anime_id)
             .then(videos => {
                 if (cancelled) return;
 
-                const episodeNumber = lastState.originEpisode ?? lastPoint.episode;
+                const episodeNumber = lastPoint.state.originEpisode ?? lastState.originEpisode ?? lastPoint.episode;
                 const episodeVideos = videos.filter(
                     video => video.number === episodeNumber,
                 );
-                setPreviewVideo(selectPreviewVideo(episodeVideos, lastState.dub));
+                setPreviewVideo(selectPreviewVideo(episodeVideos, lastPoint.state.dub ?? lastState.dub));
             })
             .catch(() => {
                 if (!cancelled) setPreviewVideo(null);
@@ -154,6 +156,9 @@ export function useResumePreview({
     }, [
         lastAnime?.anime_id,
         lastPoint?.episode,
+        lastPoint?.state.dub,
+        lastPoint?.state.originAnimeId,
+        lastPoint?.state.originEpisode,
         lastState?.dub,
         lastState?.originAnimeId,
         lastState?.originEpisode,

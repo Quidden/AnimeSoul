@@ -12,6 +12,7 @@ from runtime_instance import (
     find_available_port,
     read_runtime_state,
     remove_runtime_state,
+    runtime_api_is_compatible,
     runtime_state_file,
     write_runtime_state,
 )
@@ -81,6 +82,17 @@ class RuntimeInstanceTests(unittest.TestCase):
 
         self.assertIsNone(
             find_available_port(65534, lambda _port: False, max_attempts=5)
+        )
+
+    def test_runtime_api_requires_direct_kodik_stream(self) -> None:
+        """A pre-player backend must not be reused by a newer launcher."""
+
+        self.assertFalse(runtime_api_is_compatible({"capabilities": []}))
+        self.assertFalse(runtime_api_is_compatible({"ok": True}))
+        self.assertTrue(
+            runtime_api_is_compatible(
+                {"capabilities": ["kodik-direct-stream-v1", "future-feature"]}
+            )
         )
 
 

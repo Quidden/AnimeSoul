@@ -12,18 +12,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from runtime_instance import RUNTIME_API_CAPABILITIES
 
 from .api.gdrive import router as gdrive_router
 from .api.community_ratings import router as community_ratings_router
+from .api.downloads import router as downloads_router
 from .api.storage import router as storage_router
 from .api.watch_party import router as party_router
+from .api.kodik import router as kodik_router
 from .api.yummy import router as yummy_router
-from .api.downloads import router as downloads_router
 from .config import settings
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.2.1",
+    version="0.2.2",
     description="FastAPI backend for the AnimeSoul desktop and web client.",
 )
 
@@ -34,10 +36,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-AnimeSoul-Yummy-Status", "X-AnimeSoul-Kodik-Status"],
 )
 
 # Register API routers
 app.include_router(yummy_router)
+app.include_router(kodik_router)
 app.include_router(downloads_router)
 app.include_router(storage_router)
 app.include_router(party_router)
@@ -52,6 +56,7 @@ async def health() -> dict[str, object]:
         "ok": True,
         "stack": "FastAPI + React",
         "version": app.version,
+        "capabilities": sorted(RUNTIME_API_CAPABILITIES),
     }
     runtime_instance_id = os.getenv("ANIMESOUL_INSTANCE_ID", "").strip()
     if runtime_instance_id:

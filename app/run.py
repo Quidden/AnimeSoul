@@ -25,6 +25,7 @@ import uvicorn
 from runtime_instance import (
     find_available_port,
     remove_runtime_state,
+    runtime_api_is_compatible,
     write_runtime_state,
 )
 
@@ -190,6 +191,7 @@ def animesoul_is_running(port: int) -> bool:
             and isinstance(payload, dict)
             and payload.get("ok") is True
             and payload.get("stack") == "FastAPI + React"
+            and runtime_api_is_compatible(payload)
         )
     except (httpx.HTTPError, ValueError):
         return False
