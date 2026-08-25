@@ -18,11 +18,12 @@ import ipaddress
 import json
 import os
 import re
+import shutil
 import time
 import uuid
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import httpx
 
@@ -34,6 +35,17 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeSoul/0.2"
 KODIK_VIDEO_LINKS_ENDPOINT = "https://kodikres.com/api/video-links"
 KODIK_SEARCH_ENDPOINT = "https://kodik-api.com/search"
 PUBLIC_IP_ENDPOINT = "https://api.ipify.org"
+
+
+def _is_android_runtime() -> bool:
+    """Return whether the service is running inside the bundled Android app."""
+
+    return os.getenv("ANIMESOUL_MOBILE", "").casefold() == "android"
+
+
+def _is_hls_source(value: str) -> bool:
+    path = urlparse(value).path.casefold()
+    return value.endswith(":hls:manifest.m3u8") or path.endswith(".m3u8")
 
 
 class OfflineLibraryError(RuntimeError):
@@ -93,6 +105,32 @@ def _private_player_link(value: str) -> str:
     if not re.fullmatch(r"/(?:serial|season|seria|video|movie)/[^/]+/[^/]+/[^/]+/?", path):
         raise OfflineLibraryError("Ссылка Kodik не указывает конкретное видео или сезон.")
     return f"//{host}{path}" + (f"?{parsed.query}" if parsed.query else "")
+
+
+def _kodik_player_candidates(raw_link: str | None, official_link: str | None) -> list[str]:
+    """Order private-API links without replacing an exact episode selection.
+
+    ``/seria`` (and the single-video variants) already identifies the row the
+    user selected.  A catalogue lookup is useful for broad ``/serial`` and
+    ``/season`` embeds, but it can resolve another franchise entry while the
+    frontend is still loading that entry's remote ids.  Keep exact links
+    authoritative and use the lookup only as a fallback for them.
+    """
+
+    raw_url = urlparse(_normalise_url(raw_link or ""))
+    raw_path = raw_url.path.casefold()
+    query_keys = {key.casefold() for key in parse_qs(raw_url.query)}
+    raw_is_exact = (
+        any(raw_path.startswith(prefix) for prefix in ("/seria/", "/video/", "/movie/"))
+        or "episode" in query_keys
+    )
+    ordered = (raw_link, official_link) if raw_is_exact else (official_link, raw_link)
+    candidates = [item for item in ordered if item]
+    if raw_link:
+        bare_link = raw_link.split("?", 1)[0]
+        if bare_link != raw_link:
+            candidates.append(bare_link)
+    return list(dict.fromkeys(candidates))
 
 
 def _kodik_signature(link: str, ip: str, deadline: str, private_key: str) -> str:
@@ -460,6 +498,11 @@ class _DataBlob(ctypes.Structure):
 def _dpapi_protect(value: str) -> str:
     """Encrypt a local secret with the current Windows account's DPAPI key."""
 
+    if _is_android_runtime():
+        # Android's per-application data directory is protected by the OS
+        # sandbox and is removed on uninstall. The marker prevents this
+        # representation from ever being mistaken for a Windows DPAPI blob.
+        return "android-sandbox:" + base64.b64encode(value.encode("utf-8")).decode("ascii")
     if os.name != "nt":
         raise OfflineLibraryError("Защищённое хранение приватного ключа Kodik доступно только в Windows.")
     raw = value.encode("utf-8")
@@ -485,6 +528,14 @@ def _dpapi_protect(value: str) -> str:
 
 
 def _dpapi_unprotect(value: str) -> str:
+    if _is_android_runtime():
+        marker = "android-sandbox:"
+        if not value.startswith(marker):
+            raise OfflineLibraryError("Приватный ключ Kodik сохранён в несовместимом формате.")
+        try:
+            return base64.b64decode(value[len(marker):].encode("ascii"), validate=True).decode("utf-8")
+        except (UnicodeDecodeError, UnicodeEncodeError, ValueError) as error:
+            raise OfflineLibraryError("Не удалось прочитать приватный ключ Kodik.") from error
     if os.name != "nt":
         raise OfflineLibraryError("Защищённое хранение приватного ключа Kodik доступно только в Windows.")
     try:
@@ -536,7 +587,7 @@ class KodikSourceResolver:
         dubbing: object = None,
         source_title: object = None,
         source_original_title: object = None,
-    ) -> tuple[str, int]:
+    ) -> tuple[str, int, dict[str, dict[str, float]]]:
         payload = await self._request_private_payload(
             embed_url,
             public_key,
@@ -551,7 +602,8 @@ class KodikSourceResolver:
             source_original_title=source_original_title,
         )
         requested_quality = max(144, min(int(quality or 720), 2160))
-        return _select_kodik_source(payload.get("links"), requested_quality)
+        source, actual_quality = _select_kodik_source(payload.get("links"), requested_quality)
+        return source, actual_quality, _normalise_kodik_skips(payload)
 
     async def resolve_playback_api(
         self,
@@ -652,12 +704,7 @@ class KodikSourceResolver:
                     source_title,
                     source_original_title,
                 )
-                candidate_links = [item for item in (official_link, raw_link) if item]
-                if raw_link:
-                    bare_link = raw_link.split("?", 1)[0]
-                    if bare_link != raw_link:
-                        candidate_links.append(bare_link)
-                candidate_links = list(dict.fromkeys(candidate_links))
+                candidate_links = _kodik_player_candidates(raw_link, official_link)
                 if not candidate_links:
                     raise OfflineLibraryError("Не удалось определить ссылку Kodik для выбранной серии.")
                 for candidate in candidate_links:
@@ -676,7 +723,7 @@ class KodikSourceResolver:
                     # A malformed player link can be corrected by dropping a
                     # player-only query string. Auth and permission responses
                     # cannot, so avoid sending an unnecessary second request.
-                    if response.status_code not in {400, 422}:
+                    if response.status_code not in {400, 404, 422}:
                         break
         except httpx.HTTPError as error:
             raise OfflineLibraryError("Не удалось подключиться к приватному API Kodik.") from error
@@ -809,9 +856,21 @@ class OfflineLibraryService:
         self._index_lock = asyncio.Lock()
         self._jobs: dict[str, dict[str, Any]] = {}
         self._cancelled: set[str] = set()
+        self._active_downloads: dict[str, asyncio.Task[None]] = {}
+        self._active_processes: dict[str, asyncio.subprocess.Process] = {}
         self._worker: asyncio.Task[None] | None = None
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._queue_lock = asyncio.Lock()
+        self._network_type = "unknown"
+        self._network_changed = asyncio.Event()
+        self._network_changed.set()
+        # Android HLS playback requests a new local segment every few seconds.
+        # Resolving every segment used to reread both settings and the complete
+        # library index from flash. Keep only already-validated paths in memory;
+        # index commits and directory changes invalidate them atomically.
+        self._directory_cache: Path | None = None
+        self._media_path_cache: dict[tuple[str, str], Path] = {}
+        self._asset_directory_cache: dict[str, Path] = {}
         self.resolver = KodikSourceResolver()
 
     async def settings(self) -> dict[str, str | bool]:
@@ -819,6 +878,7 @@ class OfflineLibraryService:
         payload = await self._settings_payload()
         return {
             "directory": str(directory),
+            "allowMobileDownloads": bool(payload.get("allowMobileDownloads", False)),
             "kodikPublicKeyConfigured": bool(str(payload.get("kodikPublicKey") or "").strip()),
             "kodikPrivateKeyConfigured": self.private_key_file.is_file() and self.private_key_file.stat().st_size > 0,
         }
@@ -854,19 +914,25 @@ class OfflineLibraryService:
         kodik_private_key: str | None = None,
         clear_kodik_public_key: bool = False,
         clear_kodik_private_key: bool = False,
+        allow_mobile_downloads: bool | None = None,
     ) -> dict[str, str | bool]:
-        if any(job["status"] in {"queued", "downloading"} for job in self._jobs.values()):
-            raise OfflineLibraryError("Дождитесь окончания или отмените текущую загрузку перед сменой папки.")
         raw = Path(value.strip()).expanduser()
         if not value.strip():
             raise OfflineLibraryError("Укажите папку для офлайн-библиотеки.")
         directory = raw if raw.is_absolute() else (self.data_dir / raw)
         directory = directory.resolve()
+        current_directory = await self._directory()
+        if directory != current_directory and any(
+            job["status"] in {"queued", "downloading", "paused"} for job in self._jobs.values()
+        ):
+            raise OfflineLibraryError("Дождитесь окончания или отмените текущую загрузку перед сменой папки.")
         await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=True)
         async with self._settings_lock:
             await asyncio.to_thread(self.data_dir.mkdir, parents=True, exist_ok=True)
             payload = await self._settings_payload_unlocked()
             payload["directory"] = str(directory)
+            if allow_mobile_downloads is not None:
+                payload["allowMobileDownloads"] = bool(allow_mobile_downloads)
             if kodik_public_key is not None and kodik_public_key.strip():
                 payload["kodikPublicKey"] = kodik_public_key.strip()
             elif clear_kodik_public_key:
@@ -881,13 +947,35 @@ class OfflineLibraryService:
             payload.pop("kodikApiToken", None)
             await self._write_json(self.settings_file, payload)
         await self._ensure_index(directory)
+        self._directory_cache = directory
+        self._invalidate_playback_path_cache()
+        self._network_changed.set()
         return await self.settings()
+
+    async def set_network_type(self, value: str) -> dict[str, str]:
+        """Update Android connectivity without trusting WebView timers."""
+
+        network_type = value.casefold().strip()
+        if network_type not in {"wifi", "mobile", "ethernet", "vpn", "none", "unknown"}:
+            network_type = "unknown"
+        self._network_type = network_type
+        self._network_changed.set()
+        return {"type": network_type}
 
     async def library(self) -> dict[str, Any]:
         directory = await self._directory()
         index = await self._read_index(directory)
         episodes = [item for item in index.get("episodes", []) if self._existing_episode(directory, item)]
         if len(episodes) != len(index.get("episodes", [])):
+            index["episodes"] = episodes
+            await self._save_index(directory, index)
+        sizes_changed = False
+        for entry in episodes:
+            measured = await asyncio.to_thread(self._entry_storage_size, directory, entry)
+            if int(entry.get("sizeBytes") or -1) != measured:
+                entry["sizeBytes"] = measured
+                sizes_changed = True
+        if sizes_changed:
             index["episodes"] = episodes
             await self._save_index(directory, index)
         anime: dict[int, dict[str, Any]] = {}
@@ -905,8 +993,17 @@ class OfflineLibraryService:
             item["episodes"].sort(key=lambda entry: (entry["season"], self._episode_sort_key(entry["episode"]), entry["dubbing"], entry["quality"]))
             if item.get("poster"):
                 item["posterUrl"] = f"/api/downloads/posters/{item['animeId']}"
+            item["sizeBytes"] = sum(int(entry.get("sizeBytes") or 0) for entry in item["episodes"])
+        storage_path = self._storage_volume_path(directory, episodes)
+        storage = await asyncio.to_thread(shutil.disk_usage, storage_path)
         return {
             "directory": str(directory),
+            "storage": {
+                "totalBytes": storage.total,
+                "usedBytes": storage.used,
+                "freeBytes": storage.free,
+                "libraryBytes": sum(int(entry.get("sizeBytes") or 0) for entry in episodes),
+            },
             "anime": sorted(anime.values(), key=lambda item: item["title"].casefold()),
             "jobs": self.jobs(),
         }
@@ -916,6 +1013,10 @@ class OfflineLibraryService:
 
     async def enqueue(self, request: dict[str, Any]) -> dict[str, Any]:
         directory = await self._directory()
+        if await self._mobile_downloads_blocked():
+            raise OfflineLibraryError(
+                "Скачивание через мобильную сеть отключено. Включите его в Настройки → Офлайн-библиотека."
+            )
         # Fail before creating a visible queue item when the official Kodik
         # credentials are missing or cannot be read on this Windows account.
         await self._kodik_private_credentials()
@@ -936,6 +1037,7 @@ class OfflineLibraryService:
             "progress": 0,
             "current": "",
             "error": "",
+            "pauseReason": "",
             "createdAt": int(time.time() * 1000),
         }
         self._jobs[job_id] = job
@@ -952,6 +1054,14 @@ class OfflineLibraryService:
         job = self._jobs[job_id]
         if job["status"] == "queued":
             job["status"] = "cancelled"
+        active = self._active_downloads.get(job_id)
+        process = self._active_processes.get(job_id)
+        if process is not None and process.returncode is None:
+            process.terminate()
+            waiter = asyncio.create_task(process.wait())
+            waiter.add_done_callback(lambda _task: self._active_processes.pop(job_id, None))
+        if active is not None and not active.done():
+            active.cancel()
 
     async def delete_episode(self, episode_id: str) -> None:
         directory = await self._directory()
@@ -978,17 +1088,55 @@ class OfflineLibraryService:
         return len(selected)
 
     async def media_path(self, episode_id: str, kind: str = "media") -> Path:
+        cache_key = (episode_id, kind)
+        cached = self._media_path_cache.get(cache_key)
+        if cached is not None and cached.is_file():
+            return cached
+        self._media_path_cache.pop(cache_key, None)
         directory = await self._directory()
         index = await self._read_index(directory)
         entry = next((item for item in index["episodes"] if item.get("id") == episode_id), None)
         if entry is None:
             raise KeyError(episode_id)
+        if kind == "media" and isinstance(entry.get("externalPath"), str):
+            path = self._validated_android_external_path(str(entry["externalPath"]))
+            if not path.is_file():
+                raise KeyError(episode_id)
+            self._media_path_cache[cache_key] = path
+            return path
         relative = entry.get("file") if kind == "media" else entry.get("preview")
         if not isinstance(relative, str):
             raise KeyError(episode_id)
         path = self._path_within(directory, relative)
         if not path.is_file():
             raise KeyError(episode_id)
+        self._media_path_cache[cache_key] = path
+        return path
+
+    async def asset_path(self, episode_id: str, asset_name: str) -> Path:
+        """Resolve one file belonging to an Android offline HLS package."""
+
+        if not re.fullmatch(r"asset-\d{5}\.[A-Za-z0-9]{1,8}", asset_name):
+            raise KeyError(episode_id)
+        cached_directory = self._asset_directory_cache.get(episode_id)
+        if cached_directory is not None:
+            cached_path = cached_directory / asset_name
+            if cached_path.is_file():
+                return cached_path
+            self._asset_directory_cache.pop(episode_id, None)
+        directory = await self._directory()
+        index = await self._read_index(directory)
+        entry = next((item for item in index["episodes"] if item.get("id") == episode_id), None)
+        if entry is None:
+            raise KeyError(episode_id)
+        asset_directory = self._path_within(
+            directory,
+            str(Path(str(entry["file"])).parent / f".{episode_id}.assets"),
+        )
+        path = asset_directory / asset_name
+        if not path.is_file():
+            raise KeyError(episode_id)
+        self._asset_directory_cache[episode_id] = asset_directory
         return path
 
     async def poster_path(self, anime_id: int) -> Path:
@@ -1018,18 +1166,21 @@ class OfflineLibraryService:
                 continue
             job["status"] = "downloading"
             try:
-                await self._download_job(item)
+                active = asyncio.create_task(self._download_job(item))
+                self._active_downloads[job_id] = active
+                await active
                 if job_id in self._cancelled:
                     job["status"] = "cancelled"
                 else:
                     job["status"] = "completed"
                     job["progress"] = 1
-            except DownloadCancelled:
+            except (DownloadCancelled, asyncio.CancelledError):
                 job["status"] = "cancelled"
             except Exception as error:  # Keep the queue usable after one broken episode.
                 job["status"] = "error"
                 job["error"] = str(error) or "Не удалось скачать выбранные серии."
             finally:
+                self._active_downloads.pop(job_id, None)
                 self._queue.task_done()
                 self._trim_jobs()
             async with self._queue_lock:
@@ -1042,10 +1193,12 @@ class OfflineLibraryService:
         job = self._jobs[job_id]
         directory: Path = item["directory"]
         request: dict[str, Any] = item["request"]
+        await self._wait_for_network(job, job_id)
         await self._ensure_index(directory)
         await self._download_artwork(directory, request, "poster")
         episodes = request["episodes"]
         for position, episode in enumerate(episodes, start=1):
+            await self._wait_for_network(job, job_id)
             if job_id in self._cancelled:
                 raise DownloadCancelled
             if not isinstance(episode, dict):
@@ -1067,7 +1220,7 @@ class OfflineLibraryService:
     ) -> None:
         quality = int(request.get("quality") or 720)
         public_key, private_key = await self._kodik_private_credentials()
-        source, actual_quality = await self.resolver.resolve_private_api(
+        resolved = await self.resolver.resolve_private_api(
             str(episode.get("iframeUrl") or ""),
             quality,
             public_key,
@@ -1081,6 +1234,10 @@ class OfflineLibraryService:
             source_title=episode.get("sourceTitle") or request.get("title"),
             source_original_title=episode.get("sourceOriginalTitle"),
         )
+        # Tests and third-party resolvers written for older AnimeSoul builds
+        # may still return the original two-item tuple.
+        source, actual_quality = resolved[:2]
+        skips = resolved[2] if len(resolved) > 2 and isinstance(resolved[2], dict) else {}
         anime_id = int(request["animeId"])
         season = int(episode.get("season") or 1)
         number = str(episode.get("episode") or "0")
@@ -1092,10 +1249,18 @@ class OfflineLibraryService:
         anime_folder = _anime_folder_name(request)
         season_folder = f"Сезон {season:02d}"
         base_name = _safe_name(f"{anime_folder} — {number} — {dubbing} — {actual_quality}p", episode_id)
-        relative = str(Path(anime_folder) / season_folder / f"{base_name}.mp4")
+        extension = ".mp4"
+        relative = str(Path(anime_folder) / season_folder / f"{base_name}{extension}")
         target = self._path_within(directory, relative)
         await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
-        partial = target.with_suffix(".part.mp4")
+        partial = target.with_suffix(f".part{extension}")
+        asset_directory = target.parent / f".{episode_id}.assets"
+        preview_candidate = target.parent / f"{episode_id}.jpg"
+        preview_existed = preview_candidate.is_file()
+        preview: str | None = None
+        external_uri: str | None = None
+        external_path: str | None = None
+        committed = False
         try:
             await self._stream_to_file(
                 source,
@@ -1105,34 +1270,82 @@ class OfflineLibraryService:
                 int(job["total"]),
                 job_id,
                 float(episode.get("duration") or 0),
+                episode_id,
             )
             await asyncio.to_thread(partial.replace, target)
-        except Exception:
+            preview = await self._download_episode_preview(
+                directory,
+                request,
+                episode,
+                anime_folder,
+                season_folder,
+                episode_id,
+            )
+            poster = await self._poster_relative(directory, request, anime_folder)
+            if _is_android_runtime():
+                published = await asyncio.to_thread(
+                    self._publish_android_video,
+                    target,
+                    anime_folder,
+                    season_folder,
+                    target.name,
+                )
+                external_uri = str(published.get("uri") or "") or None
+                external_path = str(published.get("path") or "") or None
+                if not external_uri or not external_path:
+                    raise OfflineLibraryError("Android не вернул путь к сохранённому MP4.")
+                await asyncio.to_thread(target.unlink)
+            record = {
+                "id": episode_id,
+                "animeId": anime_id,
+                "title": str(request.get("title") or "Аниме"),
+                "year": request.get("year"),
+                "season": season,
+                "episode": number,
+                "originAnimeId": episode.get("originAnimeId"),
+                "originEpisode": str(episode.get("originEpisode") or number),
+                "dubbing": dubbing,
+                "translationId": episode.get("translationId"),
+                "quality": actual_quality,
+                "duration": episode.get("duration"),
+                "file": relative,
+                "poster": poster,
+                "preview": preview,
+                "mediaType": "video/mp4",
+                "skips": skips,
+                "downloadedAt": int(time.time() * 1000),
+            }
+            if external_uri and external_path:
+                record["contentUri"] = external_uri
+                record["externalPath"] = external_path
+            record["sizeBytes"] = await asyncio.to_thread(self._entry_storage_size, directory, record)
+            index["episodes"] = [item for item in index["episodes"] if item.get("id") != episode_id] + [record]
+
+            # Once the media file has its final name, cancellation must not
+            # interrupt the atomic index commit halfway through. Await the
+            # shielded task before propagating cancellation so the file and
+            # catalogue can never disagree.
+            index_commit = asyncio.create_task(self._save_index(directory, index))
+            try:
+                await asyncio.shield(index_commit)
+            except asyncio.CancelledError:
+                await index_commit
+                committed = True
+                raise
+            committed = True
+        except (Exception, asyncio.CancelledError):
             if partial.exists():
                 await asyncio.to_thread(partial.unlink)
+            if not committed:
+                if target.exists():
+                    await asyncio.to_thread(target.unlink)
+                if external_uri:
+                    await asyncio.to_thread(self._delete_android_content, external_uri)
+                if not preview_existed and preview_candidate.exists():
+                    await asyncio.to_thread(preview_candidate.unlink)
+                if asset_directory.exists():
+                    await asyncio.to_thread(shutil.rmtree, asset_directory, True)
             raise
-        preview = await self._download_episode_preview(directory, request, episode, anime_folder, season_folder, episode_id)
-        poster = await self._poster_relative(directory, request, anime_folder)
-        record = {
-            "id": episode_id,
-            "animeId": anime_id,
-            "title": str(request.get("title") or "Аниме"),
-            "year": request.get("year"),
-            "season": season,
-            "episode": number,
-            "originAnimeId": episode.get("originAnimeId"),
-            "originEpisode": str(episode.get("originEpisode") or number),
-            "dubbing": dubbing,
-            "translationId": episode.get("translationId"),
-            "quality": actual_quality,
-            "duration": episode.get("duration"),
-            "file": relative,
-            "poster": poster,
-            "preview": preview,
-            "downloadedAt": int(time.time() * 1000),
-        }
-        index["episodes"] = [item for item in index["episodes"] if item.get("id") != episode_id] + [record]
-        await self._save_index(directory, index)
 
     async def _stream_to_file(
         self,
@@ -1143,9 +1356,19 @@ class OfflineLibraryService:
         total: int,
         job_id: str,
         duration: float = 0,
+        episode_id: str = "",
     ) -> None:
-        if source.endswith(":hls:manifest.m3u8") or ".m3u8" in source.split("?", 1)[0]:
-            await self._stream_hls_to_file(source, target, job, done_before, total, job_id, duration)
+        if _is_hls_source(source):
+            await self._stream_hls_to_file(
+                source,
+                target,
+                job,
+                done_before,
+                total,
+                job_id,
+                duration,
+                episode_id,
+            )
             return
         headers = {"User-Agent": USER_AGENT, "Referer": "https://kodik.info/"}
         async with httpx.AsyncClient(
@@ -1159,6 +1382,7 @@ class OfflineLibraryService:
                 written = 0
                 with target.open("wb") as file:
                     async for chunk in response.aiter_bytes(512 * 1024):
+                        await self._wait_for_network(job, job_id)
                         if job_id in self._cancelled:
                             raise DownloadCancelled
                         file.write(chunk)
@@ -1176,8 +1400,15 @@ class OfflineLibraryService:
         total: int,
         job_id: str,
         duration: float,
+        episode_id: str = "",
     ) -> None:
         """Remux a Kodik HLS playlist into a seekable MP4 using bundled ffmpeg."""
+
+        if _is_android_runtime():
+            await self._remux_android_hls_to_mp4(
+                source, target, job, done_before, total, job_id, duration,
+            )
+            return
 
         try:
             executable = await asyncio.to_thread(self._ffmpeg_executable)
@@ -1203,6 +1434,7 @@ class OfflineLibraryService:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        self._active_processes[job_id] = process
         # ``readline`` returns an empty byte string once ffmpeg closes stdout.
         # Do not spin on that state: wait for the child and collect its exit
         # status so both successful jobs and errors settle deterministically.
@@ -1214,6 +1446,7 @@ class OfflineLibraryService:
                 except TimeoutError:
                     process.kill()
                     await process.wait()
+                self._active_processes.pop(job_id, None)
                 raise DownloadCancelled
             try:
                 line = await asyncio.wait_for(process.stdout.readline(), timeout=.25)
@@ -1234,10 +1467,230 @@ class OfflineLibraryService:
             episode_progress = min(.99, max(0, seconds / duration))
             job["progress"] = max(job["progress"], (done_before + episode_progress) / total)
         return_code = await process.wait()
+        self._active_processes.pop(job_id, None)
         error_text = (await process.stderr.read()).decode("utf-8", "replace").strip()
         if return_code != 0:
             details = error_text.splitlines()[-1] if error_text else "ffmpeg завершился с ошибкой."
             raise OfflineLibraryError(f"Не удалось собрать видеопоток Kodik: {details[:280]}")
+
+    async def _remux_android_hls_to_mp4(
+        self,
+        source: str,
+        target: Path,
+        job: dict[str, Any],
+        done_before: int,
+        total: int,
+        job_id: str,
+        duration: float,
+    ) -> None:
+        """Build one seekable MP4 with the native FFmpegKit runtime.
+
+        A transition to disallowed mobile data cancels the current network
+        session, retains already completed episodes, and restarts this episode
+        only after an allowed network is available again.
+        """
+
+        try:
+            from java import jclass  # type: ignore[import-not-found]
+
+            native = jclass("com.animesoul.mobile.NativeDownloadSupport")
+        except Exception as error:
+            raise OfflineLibraryError("В APK отсутствует модуль сборки MP4.") from error
+
+        while True:
+            await self._wait_for_network(job, job_id)
+            if target.exists():
+                await asyncio.to_thread(target.unlink)
+            started = await asyncio.to_thread(native.startRemux, job_id, source, str(target))
+            if not bool(started):
+                raise OfflineLibraryError("Не удалось запустить сборку локального MP4.")
+            restart_after_pause = False
+            try:
+                while True:
+                    if job_id in self._cancelled:
+                        await asyncio.to_thread(native.cancelRemux, job_id)
+                        raise DownloadCancelled
+                    if await self._mobile_downloads_blocked():
+                        await asyncio.to_thread(native.cancelRemux, job_id)
+                        restart_after_pause = True
+                        await self._wait_for_network(job, job_id)
+                        break
+                    raw_state = await asyncio.to_thread(native.remuxState, job_id)
+                    state = json.loads(str(raw_state or "{}"))
+                    elapsed = max(0.0, float(state.get("timeMs") or 0) / 1000.0)
+                    if duration > 0 and elapsed > 0:
+                        episode_progress = min(.99, elapsed / duration)
+                        job["progress"] = max(job["progress"], (done_before + episode_progress) / total)
+                    if bool(state.get("done")):
+                        if bool(state.get("success")) and target.is_file() and target.stat().st_size > 0:
+                            return
+                        details = str(state.get("error") or "FFmpeg не создал видеофайл.")
+                        raise OfflineLibraryError(f"Не удалось собрать MP4: {details[:280]}")
+                    await asyncio.sleep(.25)
+            except asyncio.CancelledError:
+                await asyncio.to_thread(native.cancelRemux, job_id)
+                raise
+            finally:
+                if restart_after_pause and target.exists():
+                    await asyncio.to_thread(target.unlink)
+
+    async def _mobile_downloads_blocked(self) -> bool:
+        if self._network_type != "mobile":
+            return False
+        payload = await self._settings_payload()
+        return not bool(payload.get("allowMobileDownloads", False))
+
+    async def _wait_for_network(self, job: dict[str, Any], job_id: str) -> None:
+        paused = False
+        while await self._mobile_downloads_blocked():
+            if job_id in self._cancelled:
+                raise DownloadCancelled
+            paused = True
+            job["status"] = "paused"
+            job["pauseReason"] = "mobile-network"
+            job["error"] = ""
+            self._network_changed.clear()
+            if not await self._mobile_downloads_blocked():
+                break
+            try:
+                await asyncio.wait_for(self._network_changed.wait(), timeout=.75)
+            except TimeoutError:
+                pass
+        if paused and job_id not in self._cancelled:
+            job["status"] = "downloading"
+            job["pauseReason"] = ""
+
+    @staticmethod
+    def _publish_android_video(
+        source: Path,
+        anime_folder: str,
+        season_folder: str,
+        display_name: str,
+    ) -> dict[str, str]:
+        try:
+            from java import jclass  # type: ignore[import-not-found]
+
+            native = jclass("com.animesoul.mobile.NativeDownloadSupport")
+            payload = json.loads(str(native.publishVideo(
+                str(source), anime_folder, season_folder, display_name,
+            )))
+        except Exception as error:
+            raise OfflineLibraryError("Не удалось сохранить MP4 в папку Movies/AnimeSoul.") from error
+        if not isinstance(payload, dict):
+            raise OfflineLibraryError("Android вернул некорректный путь сохранённого MP4.")
+        return {str(key): str(value) for key, value in payload.items() if value is not None}
+
+    @staticmethod
+    def _delete_android_content(content_uri: str) -> None:
+        try:
+            from java import jclass  # type: ignore[import-not-found]
+
+            jclass("com.animesoul.mobile.NativeDownloadSupport").deleteVideo(content_uri)
+        except Exception:
+            return
+
+    async def _download_android_hls_package(
+        self,
+        source: str,
+        target: Path,
+        job: dict[str, Any],
+        done_before: int,
+        total: int,
+        job_id: str,
+        episode_id: str,
+    ) -> None:
+        """Mirror an HLS media playlist for hls.js without a desktop ffmpeg binary."""
+
+        headers = {"User-Agent": USER_AGENT, "Referer": "https://kodik.info/"}
+        timeout = httpx.Timeout(35.0, read=120.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=headers) as client:
+            playlist_url = source
+            response = await client.get(playlist_url)
+            response.raise_for_status()
+            playlist = response.text
+
+            # Private API links occasionally point to a small master manifest.
+            # Select its highest advertised variant; the API has already
+            # limited the maximum quality requested by the user.
+            variants: list[tuple[int, str]] = []
+            lines = playlist.splitlines()
+            for index, line in enumerate(lines[:-1]):
+                if not line.startswith("#EXT-X-STREAM-INF:"):
+                    continue
+                bandwidth_match = re.search(r"(?:AVERAGE-)?BANDWIDTH=(\d+)", line)
+                bandwidth = int(bandwidth_match.group(1)) if bandwidth_match else 0
+                next_line = lines[index + 1].strip()
+                if next_line and not next_line.startswith("#"):
+                    variants.append((bandwidth, urljoin(playlist_url, next_line)))
+            if variants:
+                playlist_url = max(variants)[1]
+                response = await client.get(playlist_url)
+                response.raise_for_status()
+                playlist = response.text
+
+            resolved_assets: list[str] = []
+            for line in playlist.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    resolved_assets.append(urljoin(playlist_url, stripped))
+                for match in re.finditer(r'URI="([^"]+)"', line):
+                    resolved_assets.append(urljoin(playlist_url, match.group(1)))
+
+            unique_assets = list(dict.fromkeys(resolved_assets))
+            if not unique_assets:
+                raise OfflineLibraryError("HLS-поток не содержит сегментов для офлайн-загрузки.")
+
+            asset_directory = target.parent / f".{episode_id}.assets"
+            if asset_directory.exists():
+                await asyncio.to_thread(shutil.rmtree, asset_directory, True)
+            await asyncio.to_thread(asset_directory.mkdir, parents=True, exist_ok=True)
+
+            asset_names: dict[str, str] = {}
+            for index, url in enumerate(unique_assets, start=1):
+                suffix = Path(urlparse(url).path).suffix.casefold()
+                if not re.fullmatch(r"\.[a-z0-9]{1,8}", suffix):
+                    suffix = ".bin"
+                asset_names[url] = f"asset-{index:05d}{suffix}"
+
+            completed_assets = 0
+            semaphore = asyncio.Semaphore(4)
+
+            async def download_asset(url: str) -> None:
+                nonlocal completed_assets
+                async with semaphore:
+                    if job_id in self._cancelled:
+                        raise DownloadCancelled
+                    asset_response = await client.get(url)
+                    asset_response.raise_for_status()
+                    destination = asset_directory / asset_names[url]
+                    await asyncio.to_thread(destination.write_bytes, asset_response.content)
+                    completed_assets += 1
+                    episode_progress = completed_assets / len(unique_assets)
+                    job["progress"] = min(.99, (done_before + episode_progress) / total)
+
+            try:
+                await asyncio.gather(*(download_asset(url) for url in unique_assets))
+            except Exception:
+                await asyncio.to_thread(shutil.rmtree, asset_directory, True)
+                raise
+
+            def local_asset_url(url: str) -> str:
+                return f"/api/downloads/assets/{episode_id}/{asset_names[url]}"
+
+            rewritten: list[str] = []
+            for line in playlist.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    rewritten.append(local_asset_url(urljoin(playlist_url, stripped)))
+                    continue
+
+                def replace_uri(match: re.Match[str]) -> str:
+                    absolute = urljoin(playlist_url, match.group(1))
+                    return f'URI="{local_asset_url(absolute)}"'
+
+                rewritten.append(re.sub(r'URI="([^"]+)"', replace_uri, line))
+
+            await asyncio.to_thread(target.write_text, "\n".join(rewritten) + "\n", encoding="utf-8")
 
     @staticmethod
     def _ffmpeg_executable() -> str:
@@ -1295,6 +1748,8 @@ class OfflineLibraryService:
         return str(Path(anime_folder) / "poster.jpg") if candidate.is_file() else None
 
     async def _directory(self) -> Path:
+        if self._directory_cache is not None:
+            return self._directory_cache
         async with self._settings_lock:
             payload = await self._settings_payload_unlocked()
             configured = payload.get("directory")
@@ -1305,6 +1760,7 @@ class OfflineLibraryService:
             directory = directory.resolve()
             await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=True)
         await self._ensure_index(directory)
+        self._directory_cache = directory
         return directory
 
     async def _settings_payload(self) -> dict[str, Any]:
@@ -1364,6 +1820,11 @@ class OfflineLibraryService:
     async def _save_index(self, directory: Path, index: dict[str, Any]) -> None:
         async with self._index_lock:
             await self._write_json(directory / INDEX_FILE, index)
+            self._invalidate_playback_path_cache()
+
+    def _invalidate_playback_path_cache(self) -> None:
+        self._media_path_cache.clear()
+        self._asset_directory_cache.clear()
 
     async def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
         await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
@@ -1380,11 +1841,67 @@ class OfflineLibraryService:
             raise OfflineLibraryError("Недопустимый путь в офлайн-библиотеке.") from error
         return candidate
 
-    def _existing_episode(self, directory: Path, entry: dict[str, Any]) -> bool:
+    @staticmethod
+    def _validated_android_external_path(value: str) -> Path:
+        path = Path(value).resolve()
+        lowered = [part.casefold() for part in path.parts]
+        if not _is_android_runtime() or "movies" not in lowered or "animesoul" not in lowered:
+            raise OfflineLibraryError("Недопустимый путь внешнего видео AnimeSoul.")
+        if lowered.index("animesoul") <= lowered.index("movies"):
+            raise OfflineLibraryError("Недопустимый путь внешнего видео AnimeSoul.")
+        return path
+
+    def _entry_media_file(self, directory: Path, entry: dict[str, Any]) -> Path | None:
+        external = entry.get("externalPath")
+        if isinstance(external, str) and external:
+            try:
+                return self._validated_android_external_path(external)
+            except OfflineLibraryError:
+                return None
         relative = entry.get("file")
-        return isinstance(relative, str) and self._path_within(directory, relative).is_file()
+        return self._path_within(directory, relative) if isinstance(relative, str) else None
+
+    def _entry_storage_size(self, directory: Path, entry: dict[str, Any]) -> int:
+        total = 0
+        media = self._entry_media_file(directory, entry)
+        if media is not None and media.is_file():
+            total += media.stat().st_size
+        preview = entry.get("preview")
+        if isinstance(preview, str):
+            preview_path = self._path_within(directory, preview)
+            if preview_path.is_file():
+                total += preview_path.stat().st_size
+        episode_id = str(entry.get("id") or "")
+        relative_media = entry.get("file")
+        if episode_id and isinstance(relative_media, str):
+            asset_directory = self._path_within(
+                directory,
+                str(Path(relative_media).parent / f".{episode_id}.assets"),
+            )
+            if asset_directory.is_dir():
+                total += sum(path.stat().st_size for path in asset_directory.rglob("*") if path.is_file())
+        return total
+
+    def _storage_volume_path(self, directory: Path, episodes: list[dict[str, Any]]) -> Path:
+        for entry in episodes:
+            external = entry.get("externalPath")
+            if isinstance(external, str):
+                try:
+                    path = self._validated_android_external_path(external)
+                except OfflineLibraryError:
+                    continue
+                if path.parent.exists():
+                    return path.parent
+        return directory
+
+    def _existing_episode(self, directory: Path, entry: dict[str, Any]) -> bool:
+        path = self._entry_media_file(directory, entry)
+        return path is not None and path.is_file()
 
     async def _remove_entry_files(self, directory: Path, entry: dict[str, Any]) -> None:
+        content_uri = entry.get("contentUri")
+        if isinstance(content_uri, str) and content_uri:
+            await asyncio.to_thread(self._delete_android_content, content_uri)
         for key in ("file", "preview"):
             relative = entry.get(key)
             if not isinstance(relative, str):
@@ -1393,6 +1910,16 @@ class OfflineLibraryService:
             if path.is_file():
                 await asyncio.to_thread(path.unlink)
                 await self._remove_empty_parents(directory, path.parent)
+        episode_id = str(entry.get("id") or "")
+        relative_media = entry.get("file")
+        if episode_id and isinstance(relative_media, str):
+            asset_directory = self._path_within(
+                directory,
+                str(Path(relative_media).parent / f".{episode_id}.assets"),
+            )
+            if asset_directory.is_dir():
+                await asyncio.to_thread(shutil.rmtree, asset_directory, True)
+                await self._remove_empty_parents(directory, asset_directory.parent)
 
     async def _remove_orphaned_posters(
         self,
@@ -1421,7 +1948,8 @@ class OfflineLibraryService:
     def _public_episode(entry: dict[str, Any]) -> dict[str, Any]:
         result = {key: entry.get(key) for key in (
             "id", "animeId", "season", "episode", "originAnimeId", "originEpisode",
-            "dubbing", "translationId", "quality", "duration", "downloadedAt",
+            "dubbing", "translationId", "quality", "duration", "mediaType", "downloadedAt",
+            "sizeBytes", "skips",
         )}
         result["mediaUrl"] = f"/api/downloads/media/{entry['id']}"
         if entry.get("preview"):

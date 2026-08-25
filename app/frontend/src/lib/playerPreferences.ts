@@ -1,11 +1,13 @@
-/** Resolve a title voice with the documented A → B → C priority. */
+/** Resolve a voice with manual title override → global preferred → favourites priority. */
 export function preferredDubbing(
   available: string[],
-  titleDubbing: string,
+  manualDubbing: string,
+  globalDubbing: string,
   favouriteDubbings: string[],
   providerDefault = "",
 ): string {
-  if (titleDubbing && available.includes(titleDubbing)) return titleDubbing;
+  if (manualDubbing && available.includes(manualDubbing)) return manualDubbing;
+  if (globalDubbing && available.includes(globalDubbing)) return globalDubbing;
   const favourite = favouriteDubbings.find(name => available.includes(name));
   if (favourite) return favourite;
   if (providerDefault && available.includes(providerDefault)) return providerDefault;
@@ -25,16 +27,40 @@ export function dubbingHasEpisode(
 export function preferredDubbingForEpisode(
   videos: ReadonlyArray<{ number: string; data: { dubbing: string } }>,
   episode: string,
-  rememberedDubbing: string,
-  titleDubbing: string,
+  manualDubbing: string,
+  globalDubbing: string,
   favouriteDubbings: string[],
+  rememberedDubbing = "",
   providerDefault = "",
 ) {
   const available = Array.from(new Set(
     videos.filter(video => video.number === episode).map(video => video.data.dubbing),
   ));
-  if (rememberedDubbing && available.includes(rememberedDubbing)) return rememberedDubbing;
-  return preferredDubbing(available, titleDubbing, favouriteDubbings, providerDefault);
+  for (const candidate of [
+    manualDubbing,
+    globalDubbing,
+    ...favouriteDubbings,
+    rememberedDubbing,
+    providerDefault,
+  ]) {
+    if (candidate && available.includes(candidate)) return candidate;
+  }
+  return available[0] ?? "";
+}
+
+/** Resolve playback metadata from the exact franchise entry before falling
+ * back to the page root. A displayed season can contain episodes from another
+ * anime id, whose Kodik/Shikimori identity must not be borrowed from season 1. */
+export function playbackAnimeForVideo<T extends { anime_id: number }>(
+  rootAnime: T,
+  familyEntries: ReadonlyArray<T>,
+  detailedEntries: Readonly<Record<number, T>>,
+  originAnimeId?: number,
+): T | undefined {
+  const sourceId = originAnimeId ?? rootAnime.anime_id;
+  return detailedEntries[sourceId]
+    ?? familyEntries.find(entry => entry.anime_id === sourceId)
+    ?? (sourceId === rootAnime.anime_id ? rootAnime : undefined);
 }
 
 /** Prefer an exact downloaded quality, then the best downloaded rendition. */

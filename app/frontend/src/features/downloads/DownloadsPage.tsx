@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Anime } from "../../lib/types";
 import { readLocal, writeLocal } from "../../lib/storage";
 import {
@@ -7,9 +7,10 @@ import {
   fetchOfflineLibrary,
   type OfflineLibrary,
 } from "../../lib/downloads";
+import { useModalAccessibility } from "../../lib/modalAccessibility";
 
 type DownloadsPageProps = {
-  onHome: () => void;
+  onCatalog: () => void;
   onOpen: (anime: Anime) => void;
 };
 
@@ -38,30 +39,94 @@ function episodeCountLabel(count: number) {
   return `${count} серий`;
 }
 
-function downloadedSeasonsLabel(episodes: { season: number; episode: string }[]) {
-  const grouped = new Map<number, number>();
+function compactEpisodeNumbers(values: string[]) {
+  const unique = [...new Set(values.map(value => value.trim()).filter(Boolean))];
+  const integerValues = unique.filter(value => /^\d+$/.test(value)).map(Number).sort((left, right) => left - right);
+  const customValues = unique.filter(value => !/^\d+$/.test(value)).sort((left, right) =>
+    left.localeCompare(right, "ru", { numeric: true }),
+  );
+  const ranges: string[] = [];
+
+  for (let index = 0; index < integerValues.length;) {
+    const start = integerValues[index];
+    let end = start;
+    while (index + 1 < integerValues.length && integerValues[index + 1] === end + 1) {
+      index += 1;
+      end = integerValues[index];
+    }
+    ranges.push(start === end ? `${start}` : `${start}–${end}`);
+    index += 1;
+  }
+
+  return [...ranges, ...customValues].join(", ");
+}
+
+function downloadedSeasonDetails(episodes: { season: number; episode: string; sizeBytes: number; dubbing: string; quality: number }[]) {
+  const grouped = new Map<number, typeof episodes>();
   for (const episode of episodes) {
-    grouped.set(episode.season, (grouped.get(episode.season) ?? 0) + 1);
+    grouped.set(episode.season, [...(grouped.get(episode.season) ?? []), episode]);
   }
   return [...grouped.entries()]
     .sort(([left], [right]) => left - right)
-    .map(([season, count]) => `Сезон ${season} · ${episodeCountLabel(count)}`)
-    .join(" · ");
+    .map(([season, seasonEpisodes]) => ({
+      season,
+      count: new Set(seasonEpisodes.map(item => item.episode)).size,
+      episodes: compactEpisodeNumbers(seasonEpisodes.map(item => item.episode)),
+      sizeBytes: seasonEpisodes.reduce((total, item) => total + (item.sizeBytes || 0), 0),
+      items: [...seasonEpisodes].sort((left, right) => left.episode.localeCompare(right.episode, "ru", { numeric: true })),
+    }));
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 Б";
+  const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+  const exponent = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+  const amount = value / 1024 ** exponent;
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: exponent < 2 ? 0 : 1 }).format(amount)} ${units[exponent]}`;
+}
+
+function formatDuration(seconds: number) {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (!hours) return `${minutes} мин`;
+  return remainingMinutes ? `${hours} ч ${remainingMinutes} мин` : `${hours} ч`;
+}
+
+function formatDownloadedAt(timestamp: number) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(timestamp);
+}
+
+function progressPercent(progress: number) {
+  return Math.round(Math.max(0, Math.min(1, progress)) * 100);
 }
 
 function progressLabel(progress: number) {
-  return `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
+  return `${progressPercent(progress)}%`;
 }
 
 function jobStateLabel(status: string) {
-  return status === "queued" ? "В очереди" : "Скачивается";
+  if (status === "queued") return "В очереди";
+  if (status === "paused") return "Пауза";
+  return "Скачивается";
 }
 
-export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
+export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
   const [library, setLibrary] = useState<OfflineLibrary | null>(null);
   const [error, setError] = useState("");
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
   const [skipDeletionConfirmation, setSkipDeletionConfirmation] = useState(() => readLocal(DELETE_CONFIRMATION_KEY, false));
+  const deletionDialogRef = useRef<HTMLElement>(null);
+
+  useModalAccessibility(
+    Boolean(pendingDeletion),
+    () => setPendingDeletion(null),
+    deletionDialogRef,
+  );
 
   useEffect(() => {
     let stopped = false;
@@ -123,7 +188,8 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
     }
   };
 
-  const activeJobs = library?.jobs.filter((job) => job.status === "queued" || job.status === "downloading") ?? [];
+  const activeJobs = library?.jobs.filter((job) => ["queued", "downloading", "paused"].includes(job.status)) ?? [];
+  const failedJobs = library?.jobs.filter((job) => job.status === "error") ?? [];
   const downloadedAnime = library?.anime ?? [];
   const downloadedEpisodes = downloadedAnime.reduce((total, item) => total + item.episodes.length, 0);
   const isLibraryEmpty = Boolean(library && downloadedAnime.length === 0 && activeJobs.length === 0);
@@ -146,8 +212,12 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
               <span>Серий</span>
               <strong>{downloadedEpisodes}</strong>
             </div>
+            <div>
+              <span>Свободно</span>
+              <strong>{library ? formatBytes(library.storage.freeBytes) : "—"}</strong>
+            </div>
           </div>
-          <button className="downloads-back-button" type="button" onClick={onHome}>← В каталог</button>
+          <button className="downloads-back-button" type="button" onClick={onCatalog}>← В каталог</button>
         </div>
       </section>
 
@@ -171,11 +241,53 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
                   <strong>{progressLabel(job.progress)}</strong>
                 </div>
               </div>
-              <p>{job.status === "queued" ? `Ожидает начала · качество ${job.quality}p` : job.current || `Качество ${job.quality}p`}</p>
-              <div className="download-progress" aria-label={progressLabel(job.progress)}>
-                <span style={{ width: `${Math.round(job.progress * 100)}%` }} />
+              <p>{job.status === "queued"
+                ? `Ожидает начала · ${job.quality}p · ${episodeCountLabel(job.total)}`
+                : job.status === "paused"
+                  ? "Приостановлено: мобильная сеть запрещена. Подключите Wi‑Fi или измените настройку."
+                  : job.current || `Качество ${job.quality}p`}</p>
+              <div
+                className="download-progress"
+                role="progressbar"
+                aria-label={`Загрузка «${job.title}»`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPercent(job.progress)}
+              >
+                <span style={{ width: `${progressPercent(job.progress)}%` }} />
               </div>
-              <button className="text-button" type="button" onClick={() => cancel(job.id)}>Отменить</button>
+              <div className="download-job-footer">
+                <span>{job.completed} из {job.total} готово · {job.quality}p</span>
+                <button className="text-button" type="button" onClick={() => cancel(job.id)}>Отменить</button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      {failedJobs.length > 0 && (
+        <section className="download-jobs is-error" aria-label="Ошибки загрузок">
+          <div className="download-jobs-heading">
+            <div>
+              <p>Нужна проверка</p>
+              <h2>Не удалось скачать <span>{failedJobs.length}</span></h2>
+            </div>
+            <span className="download-jobs-refresh">Повторите загрузку из карточки аниме</span>
+          </div>
+          {failedJobs.map((job) => (
+            <article className="download-job is-error" key={job.id} role="alert">
+              <div className="download-job-topline">
+                <span>{job.title}</span>
+                <div>
+                  <em className="download-job-state is-error">Ошибка</em>
+                  <strong>{job.completed}/{job.total}</strong>
+                </div>
+              </div>
+              <p>{job.error || "Загрузка прервалась. Проверьте подключение и повторите попытку."}</p>
+              <div className="download-job-footer">
+                <span>{job.completed} из {job.total} сохранено · {job.quality}p</span>
+                <button className="text-button" type="button" onClick={onCatalog}>Открыть в каталоге</button>
+              </div>
             </article>
           ))}
         </section>
@@ -190,7 +302,7 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
             <p className="downloads-empty-kicker">Библиотека пуста</p>
             <h2>Скачайте серии для офлайн-просмотра</h2>
             <p>Откройте аниме в каталоге, выберите озвучку и качество — серии будут доступны даже без интернета.</p>
-            <button className="downloads-primary-action" type="button" onClick={onHome}>
+            <button className="downloads-primary-action" type="button" onClick={onCatalog}>
               Открыть каталог <span aria-hidden="true">→</span>
             </button>
           </div>
@@ -214,41 +326,106 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
           <div className="downloaded-anime-list">
         {downloadedAnime.map((item) => {
           const episodeCount = item.episodes.length;
-          const seasonsLabel = downloadedSeasonsLabel(item.episodes);
+          const seasonDetails = downloadedSeasonDetails(item.episodes);
+          const dubbings = [...new Set(item.episodes.map(episode => episode.dubbing).filter(Boolean))]
+            .sort((left, right) => left.localeCompare(right, "ru"));
+          const qualities = [...new Set(item.episodes.map(episode => episode.quality).filter(Boolean))]
+            .sort((left, right) => right - left);
+          const totalDuration = item.episodes.reduce((total, episode) => total + (episode.duration ?? 0), 0);
+          const latestDownload = Math.max(...item.episodes.map(episode => episode.downloadedAt || 0));
+          // A preview URL may be present even when the individual frame was
+          // not persisted.  The downloaded poster is guaranteed by the
+          // library entry and makes the left-hand artwork reliably visible.
           const artwork = item.posterUrl ?? item.episodes.find(episode => episode.previewUrl)?.previewUrl;
+          const posterArtwork = item.posterUrl ?? artwork;
           const anime: Anime = {
             anime_id: item.animeId,
             title: item.title,
             year: item.year,
-            poster: artwork ? { big: artwork, fullsize: artwork } : undefined,
+            poster: posterArtwork ? { big: posterArtwork, fullsize: posterArtwork } : undefined,
           };
           return (
             <article className="downloaded-anime-card" key={item.animeId}>
-              <button className="downloaded-anime-open" type="button" onClick={() => onOpen(anime)} aria-label={`Открыть ${item.title}`}>
-                <span className="downloaded-anime-cover">
-                  {artwork ? <img src={artwork} alt="" /> : <span className="downloaded-anime-placeholder">{item.title.slice(0, 1)}</span>}
+              <div className="downloaded-anime-cover" aria-hidden="true">
+                {artwork ? <img src={artwork} alt="" /> : <span className="downloaded-anime-placeholder">{item.title.slice(0, 1)}</span>}
+              </div>
+              <div className="downloaded-anime-body">
+                <div className="downloaded-anime-heading">
+                  <div>
+                    <span className="downloaded-anime-state"><i aria-hidden="true" /> Скачано на устройство</span>
+                    <h3 className="downloaded-anime-title">{item.title}</h3>
+                    <p className="downloaded-anime-meta">
+                      {item.year ? `${item.year} · ` : ""}{episodeCountLabel(episodeCount)} · {formatBytes(item.sizeBytes)}
+                    </p>
+                  </div>
                   <span className="downloaded-anime-count">{episodeCountLabel(episodeCount)}</span>
-                  <span className="downloaded-anime-play" aria-hidden="true">▶</span>
-                </span>
-                <span className="downloaded-anime-body">
-                  <strong className="downloaded-anime-title">{item.title}</strong>
-                  <span className="downloaded-anime-meta">
-                    {item.year ? `${item.year} · ` : ""}На устройстве
-                  </span>
-                  <span className="downloaded-anime-summary" title={seasonsLabel}>{seasonsLabel}</span>
-                </span>
-              </button>
-              <button
-                className="downloaded-anime-delete"
-                type="button"
-                title="Удалить скачанные серии"
-                aria-label={`Удалить ${item.title}`}
-                onClick={() => requestDeletion({
-                  id: item.animeId,
-                  title: item.title,
-                  detail: `Будут удалены все скачанные серии (${episodeCountLabel(episodeCount)}).`,
-                })}
-              ><TrashIcon /></button>
+                </div>
+
+                <dl className="downloaded-anime-details">
+                  <div className="is-wide">
+                    <dt>Серии</dt>
+                    <dd>
+                      {seasonDetails.map(season => (
+                        <span key={season.season}>Сезон {season.season}: {season.episodes} <small>({episodeCountLabel(season.count)} · {formatBytes(season.sizeBytes)})</small></span>
+                      ))}
+                    </dd>
+                  </div>
+                  <div className="is-wide downloaded-episode-sizes">
+                    <dt>Место по сериям</dt>
+                    <dd>
+                      {seasonDetails.map(season => (
+                        <details key={season.season}>
+                          <summary>Сезон {season.season}<span>{formatBytes(season.sizeBytes)}</span></summary>
+                          <div>
+                            {season.items.map(episode => (
+                              <p key={`${episode.episode}:${episode.dubbing}:${episode.quality}`}>
+                                <span>Серия {episode.episode} · {episode.dubbing} · {episode.quality}p</span>
+                                <b>{formatBytes(episode.sizeBytes)}</b>
+                              </p>
+                            ))}
+                          </div>
+                        </details>
+                      ))}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Озвучка</dt>
+                    <dd>{dubbings.join(", ") || "Не указана"}</dd>
+                  </div>
+                  <div>
+                    <dt>Качество</dt>
+                    <dd>{qualities.length ? qualities.map(quality => `${quality}p`).join(", ") : "Не указано"}</dd>
+                  </div>
+                  {totalDuration > 0 && (
+                    <div>
+                      <dt>Хронометраж</dt>
+                      <dd>{formatDuration(totalDuration)}</dd>
+                    </div>
+                  )}
+                </dl>
+
+                <div className="downloaded-anime-footer">
+                  <span>{latestDownload > 0 ? `Обновлено ${formatDownloadedAt(latestDownload)}` : "Доступно без интернета"}</span>
+                  <div className="downloaded-anime-actions">
+                    <button
+                      className="downloaded-anime-delete"
+                      type="button"
+                      title="Удалить скачанные серии"
+                      aria-label={`Удалить ${item.title}`}
+                      onClick={() => requestDeletion({
+                        id: item.animeId,
+                        title: item.title,
+                        detail: `Будут удалены все скачанные серии (${episodeCountLabel(episodeCount)}).`,
+                      })}
+                    >
+                      <TrashIcon /> <span>Удалить</span>
+                    </button>
+                    <button className="downloaded-anime-open" type="button" onClick={() => onOpen(anime)} aria-label={`Смотреть ${item.title}`}>
+                      <span aria-hidden="true">▶</span> Смотреть
+                    </button>
+                  </div>
+                </div>
+              </div>
             </article>
           );
         })}
@@ -259,10 +436,12 @@ export function DownloadsPage({ onHome, onOpen }: DownloadsPageProps) {
       {pendingDeletion && (
         <div className="offline-delete-dialog-backdrop" role="presentation" onMouseDown={() => setPendingDeletion(null)}>
           <section
+            ref={deletionDialogRef}
             className="offline-delete-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="offline-delete-dialog-title"
+            tabIndex={-1}
             onMouseDown={event => event.stopPropagation()}
           >
             <div className="offline-delete-dialog-icon"><TrashIcon /></div>

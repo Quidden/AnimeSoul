@@ -10,6 +10,7 @@ import {
   animeSearchQueryVariants,
   animeSearchScore,
   episodeResumePosition,
+  fetchFamily,
   latestResumePoint,
   matchesAnimeSearch,
   toggleEpisodeWatched,
@@ -37,15 +38,102 @@ import {
   preferredDubbingForEpisode,
   preferredOfflineVideo,
   preferredPlayer,
+  playbackAnimeForVideo,
   subtitleTranslationLabel,
 } from "../src/lib/playerPreferences.ts";
 import {
   fetchKodikStream,
   hlsLevelForQuality,
   isSameEpisodeDubbingSwitch,
+  kodikStreamEpisodeKey,
+  kodikStreamRequestKey,
   lowestQualitySource,
 } from "../src/lib/kodikStream.ts";
 import { hasKodikSecretAccess } from "../src/lib/downloads.ts";
+import {
+  createPlaybackProgressTarget,
+  recordPlaybackObservation,
+} from "../src/lib/playerProgress.ts";
+import {
+  backfillFieldRevisions,
+  changedFieldRevisions,
+  isStorageDocumentShape,
+} from "../src/lib/storageSafety.ts";
+import { searchSettings } from "../src/features/settings/settingsCatalog.ts";
+import { parseDebugStack, sanitizeDebugUrl } from "../src/lib/debugLog.ts";
+
+test("global search finds settings by title, description and keywords", () => {
+  assert.equal(searchSettings("автоскип опенинга")[0]?.id, "player-opening");
+  assert.equal(searchSettings("автосерия")[0]?.id, "player-next");
+  assert.equal(searchSettings("client secret")[0]?.id, "credentials-google");
+  assert.equal(searchSettings("постер карточка").some((item) => item.tab === "appearance"), true);
+  assert.equal(searchSettings("google drive").some((item) => item.tab === "cloud"), true);
+  assert.equal(searchSettings("настройки")[0]?.id, "section-settings");
+  assert.equal(searchSettings("история версий")[0]?.tab, "changelog");
+});
+
+test("debug diagnostics keep function and source file locations", () => {
+  const chrome = parseDebugStack([
+    "Error",
+    "    at recordDebugEvent (http://127.0.0.1:5173/src/lib/debugLog.ts:150:20)",
+    "    at saveProgress (http://127.0.0.1:5173/src/features/storage/useProfileStorage.ts?t=123:625:5)",
+  ].join("\n"));
+  assert.deepEqual(chrome, {
+    functionName: "saveProgress",
+    file: "src/features/storage/useProfileStorage.ts",
+    line: 625,
+    column: 5,
+  });
+
+  const firefox = parseDebugStack("Error\nloadVideos@http://127.0.0.1:5173/src/components/Player.tsx:444:9");
+  assert.equal(firefox.functionName, "loadVideos");
+  assert.equal(firefox.file, "src/components/Player.tsx");
+});
+
+test("debug URLs redact credentials before persistence", () => {
+  const sanitized = new URL(sanitizeDebugUrl("https://example.test/api?token=secret&episode=3"));
+  assert.equal(sanitized.searchParams.get("token"), "[скрыто]");
+  assert.equal(sanitized.searchParams.get("episode"), "3");
+});
+
+test("global settings search can omit desktop-only watch party controls", () => {
+  assert.equal(searchSettings("hamachi", { includeParty: false }).length, 0);
+  assert.equal(searchSettings("hamachi", { includeParty: true })[0]?.tab, "party");
+});
+
+test("global settings search ignores empty and one-character queries", () => {
+  assert.deepEqual(searchSettings(""), []);
+  assert.deepEqual(searchSettings(" а "), []);
+});
+
+test("storage hydration rejects malformed success payloads", () => {
+  assert.equal(isStorageDocumentShape({}), false);
+  assert.equal(isStorageDocumentShape({ profiles: [] }), false);
+  assert.equal(isStorageDocumentShape({ profiles: [{ id: "p1", snapshot: [] }] }), false);
+  assert.equal(isStorageDocumentShape({
+    activeProfile: "p1",
+    profiles: [{ id: "p1", name: "Main", snapshot: {} }],
+  }), true);
+});
+
+test("storage field revisions preserve old fields and advance only real edits", () => {
+  const initial = backfillFieldRevisions(undefined, 100);
+  const previous = {
+    favorites: [1], folders: [], progress: {}, ratings: {}, tracked: [],
+    theme: {}, toolbar: "bottom", playerPrefs: {}, historyClearedAt: 0,
+    historyEnabled: true, libraryExpanded: true, watchingExpanded: true,
+    historyExpanded: true, watchingHidden: [],
+  };
+  const revised = changedFieldRevisions(
+    previous,
+    { ...previous, progress: { 1: { episodes: {} } } },
+    initial,
+    200,
+  );
+  assert.equal(revised.progress, 200);
+  assert.equal(revised.favorites, 100);
+  assert.equal(revised.playerPrefs, 100);
+});
 
 test("custom player and downloads require the complete Kodik secret access pair", () => {
   assert.equal(hasKodikSecretAccess({ kodikPublicKeyConfigured: true, kodikPrivateKeyConfigured: true }), true);
@@ -53,12 +141,13 @@ test("custom player and downloads require the complete Kodik secret access pair"
   assert.equal(hasKodikSecretAccess({ kodikPublicKeyConfigured: false, kodikPrivateKeyConfigured: true }), false);
 });
 
-test("player preferences follow title voice, global favourites, then Kodik default", () => {
+test("player preferences follow manual override, global preferred voice, favourites, then provider", () => {
   const available = ["Kodik default", "AniLibria", "Dream Cast"];
-  assert.equal(preferredDubbing(available, "Dream Cast", ["AniLibria"], "Kodik default"), "Dream Cast");
-  assert.equal(preferredDubbing(available, "Missing", ["AniLibria", "Dream Cast"], "Kodik default"), "AniLibria");
-  assert.equal(preferredDubbing(available, "", ["Missing"], "Kodik default"), "Kodik default");
-  assert.equal(preferredDubbing(available, "", [], ""), "Kodik default");
+  assert.equal(preferredDubbing(available, "Dream Cast", "AniLibria", [], "Kodik default"), "Dream Cast");
+  assert.equal(preferredDubbing(available, "", "Dream Cast", ["AniLibria"], "Kodik default"), "Dream Cast");
+  assert.equal(preferredDubbing(available, "", "Missing", ["AniLibria", "Dream Cast"], "Kodik default"), "AniLibria");
+  assert.equal(preferredDubbing(available, "", "", ["Missing"], "Kodik default"), "Kodik default");
+  assert.equal(preferredDubbing(available, "", "", [], ""), "Kodik default");
 });
 
 test("dubbing switches never substitute another episode", () => {
@@ -70,18 +159,37 @@ test("dubbing switches never substitute another episode", () => {
   assert.equal(dubbingHasEpisode(videos, "Voice B", "5"), false);
 });
 
-test("resume keeps the requested episode before applying a favourite dubbing", () => {
+test("franchise playback resolves metadata from the video's own anime entry", () => {
+  const root = { anime_id: 100, title: "Season 1", remote_ids: { shikimori_id: 39535 } };
+  const seasonThree = { anime_id: 300, title: "Season 3", remote_ids: { shikimori_id: 59193 } };
+
+  assert.equal(
+    playbackAnimeForVideo(root, [root, seasonThree], {}, seasonThree.anime_id),
+    seasonThree,
+  );
+  assert.equal(
+    playbackAnimeForVideo(root, [root], { [seasonThree.anime_id]: seasonThree }, seasonThree.anime_id),
+    seasonThree,
+  );
+  assert.equal(playbackAnimeForVideo(root, [root], {}, seasonThree.anime_id), undefined);
+});
+
+test("episode selection applies global voices before an old resume voice", () => {
   const videos = [
     { number: "1", data: { dubbing: "Favourite" } },
     { number: "3", data: { dubbing: "Resume voice" } },
     { number: "3", data: { dubbing: "Fallback" } },
   ];
   assert.equal(
-    preferredDubbingForEpisode(videos, "3", "Resume voice", "Favourite", ["Favourite"], "Fallback"),
+    preferredDubbingForEpisode(videos, "3", "", "Favourite", ["Favourite"], "Resume voice", "Fallback"),
     "Resume voice",
   );
   assert.equal(
-    preferredDubbingForEpisode(videos, "3", "Missing", "Favourite", ["Favourite"], "Fallback"),
+    preferredDubbingForEpisode(videos, "3", "", "Favourite", ["Favourite"], "Missing", "Fallback"),
+    "Fallback",
+  );
+  assert.equal(
+    preferredDubbingForEpisode(videos, "3", "Fallback", "Favourite", [], "Resume voice", ""),
     "Fallback",
   );
 });
@@ -180,6 +288,84 @@ test("custom player keeps the picture when only the dubbing changes", () => {
     videoId: 4,
     iframeUrl: "https://kodik.example/another-source",
   }), false);
+  assert.equal(isSameEpisodeDubbingSwitch(previous, {
+    ...previous,
+    videoId: 5,
+    dubbing: "ТО Дубляжная",
+    translationId: 3084,
+    originEpisode: "9",
+    sourceId: "59193",
+  }), false);
+
+  const unresolvedFamily = {
+    ...previous,
+    originAnimeId: 300,
+    originEpisode: "5",
+    sourceId: "39535",
+    sourceIdType: "shikimori" as const,
+    sourceTitle: "Season 1",
+  };
+  const resolvedFamily = {
+    ...unresolvedFamily,
+    videoId: 6,
+    dubbing: "Voice B",
+    translationId: 202,
+    sourceId: "59193",
+    sourceTitle: "Season 3",
+  };
+  assert.equal(kodikStreamEpisodeKey(unresolvedFamily), kodikStreamEpisodeKey(resolvedFamily));
+  assert.notEqual(kodikStreamRequestKey(unresolvedFamily), kodikStreamRequestKey(resolvedFamily));
+  assert.equal(isSameEpisodeDubbingSwitch(unresolvedFamily, resolvedFamily), true);
+});
+
+test("Kodik stream identity changes when late family resolver metadata is corrected", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    requests.push(body);
+    return new Response(JSON.stringify({
+      sources: [{
+        quality: 720,
+        src: `https://cdn.example/${body.sourceId}.m3u8`,
+        type: "hls",
+      }],
+      subtitles: [],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  const wrongRootIdentity = {
+    videoId: "to-episode-9-cache-regression",
+    season: 3,
+    episode: "9",
+    originAnimeId: 300,
+    originEpisode: "9",
+    dubbing: "ТО Дубляжная",
+    translationId: 3084,
+    iframeUrl: "https://kodik.example/seria/episode-9/hash/720p",
+    sourceId: "39535",
+    sourceIdType: "shikimori" as const,
+    sourceTitle: "Season 1",
+  };
+  const exactSeasonIdentity = {
+    ...wrongRootIdentity,
+    sourceId: "59193",
+    sourceTitle: "Season 3",
+  };
+
+  try {
+    assert.notEqual(
+      kodikStreamRequestKey(wrongRootIdentity),
+      kodikStreamRequestKey(exactSeasonIdentity),
+    );
+    const wrong = await fetchKodikStream(wrongRootIdentity);
+    const exact = await fetchKodikStream(exactSeasonIdentity);
+    assert.equal(wrong.sources[0].src, "https://cdn.example/39535.m3u8");
+    assert.equal(exact.sources[0].src, "https://cdn.example/59193.m3u8");
+    assert.equal(requests.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("downloaded episodes use a direct local stream without calling Kodik", async () => {
@@ -205,6 +391,64 @@ test("downloaded episodes use a direct local stream without calling Kodik", asyn
     });
     assert.equal(calls, 0);
     assert.deepEqual(resolved, directStream);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("late media updates stay attached to their immutable episode", () => {
+  const first = createPlaybackProgressTarget({
+    season: 1,
+    episode: "1",
+    dub: "Voice A",
+    player: "AnimeSoul",
+    originAnimeId: 101,
+    originEpisode: "1",
+  });
+  const second = createPlaybackProgressTarget({
+    season: 1,
+    episode: "2",
+    dub: "Voice A",
+    player: "AnimeSoul",
+    originAnimeId: 101,
+    originEpisode: "2",
+  });
+
+  const afterFirst = recordPlaybackObservation(undefined, first, {
+    time: 40,
+    duration: 1_400,
+    updatedAt: 1,
+  }).value;
+  const afterSecond = recordPlaybackObservation(afterFirst, second, {
+    time: 12,
+    duration: 1_400,
+    updatedAt: 2,
+  }).value;
+  const afterLateFirstEvent = recordPlaybackObservation(afterSecond, first, {
+    time: 43,
+    // Teardown can race metadata reset. It must keep the valid duration that
+    // the same immutable episode recorded earlier.
+    duration: 0,
+    updatedAt: 3,
+  }).value;
+
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(afterLateFirstEvent.episodes["1:1"].position, 43);
+  assert.equal(afterLateFirstEvent.episodes["1:1"].duration, 1_400);
+  assert.equal(afterLateFirstEvent.episodes["1:2"].position, 12);
+});
+
+test("obsolete franchise discovery is aborted instead of retrying in the background", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  globalThis.fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+  });
+
+  try {
+    const pending = fetchFamily({ anime_id: 77, title: "Demo" }, "Demo", controller.signal);
+    controller.abort();
+    await assert.rejects(pending, error => error instanceof DOMException && error.name === "AbortError");
   } finally {
     globalThis.fetch = originalFetch;
   }

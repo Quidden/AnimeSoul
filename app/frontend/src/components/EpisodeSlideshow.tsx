@@ -91,6 +91,7 @@ export function EpisodeSlideshow({
       onClick={onClick}
       aria-label={`${label}${sublabel ? `, ${sublabel}` : ""}`}
     >
+      {source && <img key={source} src={source} alt="" />}
       {normalizedIframe
         ? <iframe
             className={`preview-video-layer ${iframeReady ? "ready" : ""}`}
@@ -104,7 +105,7 @@ export function EpisodeSlideshow({
               window.setTimeout(() => setIframeReady(true), 900);
             }}
           />
-        : source ? <img key={source} src={source} alt="" /> : <span className="preview-placeholder">AnimeSoul</span>}
+        : !source && <span className="preview-placeholder">AnimeSoul</span>}
       <span className="episode-preview-shade" />
       <span className="episode-preview-copy">
         <b>{label}</b>

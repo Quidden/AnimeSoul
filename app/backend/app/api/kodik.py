@@ -23,6 +23,7 @@ class KodikStreamPayload(BaseModel):
     videoId: int | str
     season: int = Field(ge=1, le=99)
     episode: str = Field(min_length=1, max_length=40)
+    originAnimeId: int | None = None
     originEpisode: str | None = Field(default=None, max_length=40)
     dubbing: str = Field(min_length=1, max_length=160)
     translationId: int | str | None = None
@@ -53,6 +54,7 @@ async def kodik_proxy(mode: str = "ping") -> dict[str, object]:
 @router.post("/stream")
 async def kodik_stream(payload: KodikStreamPayload) -> dict[str, object]:
     try:
-        return await playback.playback_source(payload.model_dump())
+        data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+        return await playback.playback_source(data)
     except OfflineLibraryError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

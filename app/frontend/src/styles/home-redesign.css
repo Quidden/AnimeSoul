@@ -50,11 +50,12 @@
 
 .home-cinema-trailer iframe {
   position: absolute;
-  top: -10%;
-  left: -10%;
-  width: 120%;
-  height: 120%;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 177.78svh);
+  height: max(100%, 56.25vw);
   pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 .home-cinema-trailer > .home-cinema-trailer-poster,
@@ -103,6 +104,19 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Kodik embeds can draw a title line at the very top of their document.
+ * Keep the stable episode artwork underneath and fade the decorative video
+ * into it, so provider chrome never leaks into the cinematic home hero. */
+.home-cinema-episode-media .preview-video-layer {
+  inset: 0;
+  /* Android WebView does not always apply a soft CSS mask to an iframe's
+     own document chrome.  Clip the provider-only edges first, then blend the
+     remaining picture into the poster underneath. */
+  clip-path: inset(12% 0 16% 0);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0 9%, #000 27% 80%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0 9%, #000 27% 80%, transparent 100%);
 }
 
 .home-cinema-episode-media .episode-preview-copy,
@@ -185,6 +199,13 @@
   font-weight: 750;
 }
 
+.home-cinema-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
 .home-hero-settings-wrap {
   position: absolute;
   right: clamp(20px, 3.2vw, 58px);
@@ -204,6 +225,131 @@
   width: min(100%, 1760px);
   margin: 0 auto;
   padding-inline: clamp(20px, 4vw, 72px);
+}
+
+.home-library-updates-wrap {
+  box-sizing: border-box;
+  width: min(100%, 1760px);
+  margin: 0 auto;
+  padding: clamp(16px, 2.4vw, 30px) clamp(20px, 4vw, 72px) 0;
+}
+
+.home-library-updates {
+  width: 100%;
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto 34px;
+  align-items: center;
+  gap: 15px;
+  box-sizing: border-box;
+  padding: 13px 16px;
+  color: var(--ink);
+  text-align: left;
+  background:
+    linear-gradient(105deg, rgb(112 233 162 / 9%), transparent 42%),
+    color-mix(in srgb, var(--panel) 95%, transparent);
+  border: 1px solid color-mix(in srgb, #70e9a2 24%, var(--line));
+  border-radius: 18px;
+  box-shadow: 0 14px 38px rgb(0 0 0 / 12%);
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.home-library-updates:hover {
+  border-color: color-mix(in srgb, #70e9a2 46%, var(--line));
+  box-shadow: 0 20px 52px rgb(0 0 0 / 18%);
+  transform: translateY(-2px);
+}
+
+.home-library-updates:focus-visible {
+  outline: 2px solid color-mix(in srgb, #70e9a2 72%, white 28%);
+  outline-offset: 3px;
+}
+
+.home-library-updates-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: #8af0b3;
+  background: rgb(112 233 162 / 10%);
+  border: 1px solid rgb(112 233 162 / 26%);
+  border-radius: 13px;
+}
+
+.home-library-updates-icon svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.home-library-updates-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.home-library-updates-copy > small {
+  color: #70e9a2;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.home-library-updates-copy > b {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-library-updates-copy > span {
+  color: color-mix(in srgb, var(--muted) 90%, white 10%);
+  font-size: 10px;
+}
+
+.home-library-updates-count {
+  min-width: 112px;
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  padding-left: 16px;
+  border-left: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.home-library-updates-count > b {
+  color: #70e9a2;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.home-library-updates-count > small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.home-library-updates-arrow {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: #8af0b3;
+  background: rgb(112 233 162 / 8%);
+  border-radius: 10px;
+  font-size: 17px;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.home-library-updates:hover .home-library-updates-arrow {
+  background: rgb(112 233 162 / 14%);
+  transform: translateX(2px);
 }
 
 .home-dashboard-flow {
@@ -688,48 +834,6 @@
   font-size: 12px;
 }
 
-.home-new-episodes-pill {
-  position: absolute;
-  top: clamp(24px, 3vw, 46px);
-  right: clamp(26px, 5vw, 88px);
-  z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 0 11px;
-  color: #dfffea;
-  background: rgb(10 15 14 / 74%);
-  border: 1px solid rgb(112 233 162 / 30%);
-  border-radius: 999px;
-  box-shadow: 0 12px 36px rgb(0 0 0 / 18%);
-  backdrop-filter: blur(12px);
-  font: 700 11px/1 inherit;
-  cursor: pointer;
-  transition:
-    transform 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease;
-}
-
-.home-new-episodes-pill:hover {
-  transform: translateY(-1px);
-  border-color: rgb(112 233 162 / 52%);
-  background: rgb(12 23 19 / 84%);
-}
-
-.home-new-episodes-pill i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #70e9a2;
-  box-shadow: 0 0 12px #70e9a2;
-}
-
-.home-new-episodes-pill b {
-  color: #70e9a2;
-}
-
 .home-hero-settings-wrap {
   z-index: 4;
 }
@@ -802,10 +906,6 @@
       linear-gradient(180deg, transparent 42%, rgb(5 4 9 / 28%) 100%);
   }
 
-  .home-new-episodes-pill {
-    top: 22px;
-    right: 28px;
-  }
 }
 
 @media (max-width: 640px) {
@@ -823,15 +923,187 @@
     font-size: 15px;
   }
 
-  .home-new-episodes-pill {
-    top: 18px;
-    right: 20px;
+}
+
+/* Mobile hero polish: the artwork remains cinematic, while the title no
+ * longer pushes the rest of the home dashboard below the first screen. */
+@media (max-width: 980px) {
+  .home-cinema-hero {
+    min-height: clamp(660px, 86svh, 820px);
   }
 
-  .home-new-episodes-pill span {
-    max-width: 180px;
+  /* Overscan embedded trailers inside the already-clipped media layer. This
+     keeps provider titles and controls outside the visible mobile hero even
+     when Android WebView reveals its iframe chrome during startup. */
+  .home-cinema-trailer iframe {
+    transform: translate(-50%, -50%) scale(1.14);
+  }
+
+  .home-cinema-media > img,
+  .home-cinema-media > video,
+  .home-cinema-episode-media .episode-slideshow > img,
+  .home-cinema-episode-media .preview-video-layer {
+    object-position: center 28%;
+  }
+
+  .home-cinema-vignette {
+    background:
+      radial-gradient(circle at 10% 24%, rgb(5 4 9 / 72%) 0%, rgb(5 4 9 / 28%) 44%, transparent 72%),
+      linear-gradient(90deg, rgb(5 4 9 / 72%) 0%, rgb(5 4 9 / 25%) 82%),
+      linear-gradient(180deg, rgb(5 4 9 / 8%) 28%, rgb(5 4 9 / 42%) 76%, var(--bg) 100%);
+  }
+
+  .home-cinema-copy {
+    top: calc(var(--floating-header-offset, 72px) + 12px);
+    right: 22px;
+    left: 22px;
+    max-width: 620px;
+  }
+
+  .home-cinema-copy h1 {
+    max-width: 15ch;
+    display: -webkit-box;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: clamp(30px, 7vw, 48px);
+    line-height: 1;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+}
+
+@media (max-width: 640px) {
+  .home-cinema-hero {
+    min-height: clamp(650px, 88svh, 780px);
+  }
+
+  .home-cinema-copy {
+    top: calc(var(--floating-header-offset, 72px) + 10px);
+    right: 18px;
+    left: 18px;
+  }
+
+  .home-cinema-copy .hero-resume-label {
+    font-size: 9px;
+    letter-spacing: .17em;
+  }
+
+  .home-cinema-copy h1 {
+    max-width: 14ch;
+    margin: 8px 0 9px;
+    font-size: clamp(27px, 8vw, 37px);
+    letter-spacing: -.042em;
+    text-shadow: 0 5px 26px rgb(0 0 0 / 58%);
+  }
+
+  .home-cinema-copy p {
+    max-width: 34ch;
+    margin-bottom: 13px;
+    color: rgb(255 255 255 / 82%);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .home-cinema-cta {
+    min-height: 42px;
+    padding-inline: 15px;
+    border-radius: 12px;
+    font-size: 11px;
+    box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .home-dashboard-flow,
+  .home-library-flow,
+  .home-library-updates-wrap {
+    padding-inline: 16px;
+  }
+
+  .home-library-updates-wrap {
+    padding-top: 14px;
+  }
+
+  .home-library-updates {
+    min-height: 78px;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 11px 12px;
+    border-radius: 16px;
+  }
+
+  .home-library-updates-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .home-library-updates-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .home-library-updates-copy > small {
+    font-size: 7px;
+    letter-spacing: .1em;
+  }
+
+  .home-library-updates-copy > b {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 1.25;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .home-library-updates-copy > span {
+    font-size: 9px;
+  }
+
+  .home-library-updates-count {
+    min-width: 62px;
+    padding-left: 10px;
+  }
+
+  .home-library-updates-count > b {
+    font-size: 20px;
+  }
+
+  .home-library-updates-count > small {
+    max-width: 68px;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .home-library-updates-arrow {
+    display: none;
+  }
+
+  .home-dashboard-flow {
+    gap: 18px;
+    padding-top: 24px;
+  }
+
+  .home-dashboard-panel {
+    min-height: 350px;
+    height: min(400px, 58svh);
+    padding: 15px;
+    border-radius: 18px;
+    box-shadow: 0 18px 44px rgb(0 0 0 / 16%);
+  }
+
+  .home-library-flow {
+    gap: 12px;
+    padding-top: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-cinema-trailer > .home-cinema-trailer-poster,
+  .home-cinema-trailer > video,
+  .home-cinema-trailer > iframe,
+  .home-dashboard-panel,
+  .home-library-updates {
+    transition: none;
   }
 }

@@ -87,7 +87,9 @@ export function useResumePreview({
     ]);
 
     useEffect(() => {
-        if (!lastAnimeId || !playerPrefs.homeEpisodePreview) {
+        const videoPreviewEnabled = playerPrefs.homeEpisodePreview
+            && playerPrefs.homePreviewMode === "screenshots";
+        if (!lastAnimeId || !videoPreviewEnabled) {
             setTrailer(null);
             return;
         }
@@ -125,6 +127,7 @@ export function useResumePreview({
         lastPoint?.state.originAnimeId,
         lastState?.originAnimeId,
         playerPrefs.homeEpisodePreview,
+        playerPrefs.homePreviewMode,
     ]);
 
     useEffect(() => {

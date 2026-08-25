@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response
+from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..services.catalog import CatalogueUnavailableError, HybridCatalogueService
@@ -14,9 +18,66 @@ from ..services.yummy import YummyAnimeGateway
 
 
 router = APIRouter(prefix="/api/yummy", tags=["YummyAnime", "Kodik"])
-gateway = YummyAnimeGateway(settings.yummy_token)
+credentials_file = settings.data_dir / "api-credentials.json"
+
+
+def _stored_yummy_token(path: Path = credentials_file) -> str:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    return str(payload.get("yummyPublicToken") or "").strip() if isinstance(payload, dict) else ""
+
+
+gateway = YummyAnimeGateway(_stored_yummy_token() or settings.yummy_token)
 kodik_gateway = KodikAnimeGateway(settings.data_dir)
 catalogue_service = HybridCatalogueService(gateway, kodik_gateway, settings.data_dir)
+
+
+class YummyCredentialsRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+
+
+@router.get("/credentials")
+async def yummy_credentials() -> dict[str, bool]:
+    """Report configuration without returning the public token itself."""
+
+    return {"configured": bool(gateway.token.strip())}
+
+
+@router.post("/credentials")
+async def save_yummy_credentials(payload: YummyCredentialsRequest) -> dict[str, bool]:
+    """Validate and store a per-device YummyAnime public token."""
+
+    token = payload.token.strip()
+    candidate = YummyAnimeGateway(token)
+    try:
+        await candidate.request("/anime", {"limit": 1, "offset": 0})
+    except httpx.HTTPStatusError as error:
+        detail = "YummyAnime отклонил Public token. Проверьте значение и доступ приложения."
+        raise HTTPException(status_code=422, detail=detail) from error
+    except (httpx.HTTPError, RuntimeError) as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Не удалось проверить Public token: источник временно недоступен.",
+        ) from error
+
+    credentials_file.parent.mkdir(parents=True, exist_ok=True)
+    current: dict[str, object] = {}
+    try:
+        loaded = json.loads(credentials_file.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            current = loaded
+    except (OSError, json.JSONDecodeError):
+        pass
+    current["yummyPublicToken"] = token
+    temporary = credentials_file.with_suffix(credentials_file.suffix + ".tmp")
+    encoded = json.dumps(current, ensure_ascii=False, indent=2) + "\n"
+    await asyncio.to_thread(temporary.write_text, encoded, encoding="utf-8")
+    await asyncio.to_thread(temporary.replace, credentials_file)
+    gateway.token = token
+    gateway._search_cache.clear()
+    return {"configured": True}
 
 
 def _source_headers(sources: dict[str, str]) -> dict[str, str]:

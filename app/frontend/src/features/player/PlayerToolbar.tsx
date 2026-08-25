@@ -1,7 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { PlayerPrefs, ToolbarPosition } from "../../lib/types";
 import { Toggle } from "../../components/Toggle";
+import { IS_ANDROID_APP } from "../../lib/platform";
+import { useModalAccessibility } from "../../lib/modalAccessibility";
 
 export type PlayerSelectOption = {
   value: string;
@@ -12,12 +14,12 @@ type PlayerToolbarProps = {
   dubbings: string[];
   dubbing: string;
   favoriteDubbings?: string[];
-  titleDubbing?: string;
+  preferredDubbing?: string;
   onDubbingChange: (value: string) => void;
   dubbingFavorite: boolean;
   onDubbingFavoriteToggle: () => void;
-  dubbingPreferredForTitle: boolean;
-  onDubbingPreferredForTitleToggle: () => void;
+  dubbingGloballyPreferred: boolean;
+  onDubbingGloballyPreferredToggle: () => void;
   episodes: PlayerSelectOption[];
   episode: string;
   onEpisodeChange: (value: string) => void;
@@ -58,12 +60,12 @@ export function PlayerToolbar({
   dubbings,
   dubbing,
   favoriteDubbings = [],
-  titleDubbing = "",
+  preferredDubbing = "",
   onDubbingChange,
   dubbingFavorite,
   onDubbingFavoriteToggle,
-  dubbingPreferredForTitle,
-  onDubbingPreferredForTitleToggle,
+  dubbingGloballyPreferred,
+  onDubbingGloballyPreferredToggle,
   episodes,
   episode,
   onEpisodeChange,
@@ -93,15 +95,9 @@ export function PlayerToolbar({
   downloadControls,
 }: PlayerToolbarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsDialogRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    if (!settingsOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSettingsOpen(false);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [settingsOpen]);
+  useModalAccessibility(settingsOpen, () => setSettingsOpen(false), settingsDialogRef);
 
   return (
     <div className={`player-toolbar${prefs.toolbarIconOnly ? " is-icon-only" : ""}`}>
@@ -111,7 +107,7 @@ export function PlayerToolbar({
           <select aria-label="Озвучка" value={dubbing} onChange={event => onDubbingChange(event.target.value)}>
             {dubbings.map(value => (
               <option key={value} value={value}>
-                {favoriteDubbings.includes(value) ? "★ " : ""}{titleDubbing === value ? "♥ " : ""}{value}
+                {preferredDubbing === value ? "♥ " : ""}{favoriteDubbings.includes(value) ? "★ " : ""}{value}
               </option>
             ))}
           </select>
@@ -126,11 +122,11 @@ export function PlayerToolbar({
         >★</button>
         <button
           type="button"
-          className={`toolbar-dubbing-action title-default${dubbingPreferredForTitle ? " active" : ""}`}
-          title={dubbingPreferredForTitle ? "Снять озвучку по умолчанию для этого аниме" : "Сделать озвучкой по умолчанию для этого аниме"}
-          aria-label={dubbingPreferredForTitle ? "Снять любимую озвучку тайтла" : "Назначить любимой озвучкой тайтла"}
-          aria-pressed={dubbingPreferredForTitle}
-          onClick={onDubbingPreferredForTitleToggle}
+          className={`toolbar-dubbing-action title-default${dubbingGloballyPreferred ? " active" : ""}`}
+          title={dubbingGloballyPreferred ? "Снять любимую озвучку для всех тайтлов" : "Сделать любимой озвучкой для всех тайтлов"}
+          aria-label={dubbingGloballyPreferred ? "Снять глобальную любимую озвучку" : "Назначить глобальную любимую озвучку"}
+          aria-pressed={dubbingGloballyPreferred}
+          onClick={onDubbingGloballyPreferredToggle}
         >♥</button>
 
         <label className="toolbar-select toolbar-select-episode" data-icon="≣" title="Серия">
@@ -168,10 +164,12 @@ export function PlayerToolbar({
       {settingsOpen && typeof document !== "undefined" && createPortal(
         <div className="player-settings-layer" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
           <section
+            ref={settingsDialogRef}
             className="player-settings-dialog"
             role="dialog"
             aria-modal="true"
             aria-label="Настройки просмотра"
+            tabIndex={-1}
             onMouseDown={event => event.stopPropagation()}
           >
             <header className="player-settings-header">
@@ -179,6 +177,23 @@ export function PlayerToolbar({
               <button type="button" aria-label="Закрыть настройки" title="Закрыть" onClick={() => setSettingsOpen(false)}>×</button>
             </header>
             <div className="player-settings-content">
+          <div className="player-settings-dubbing-actions">
+            <span>Текущая озвучка: <b>{dubbing}</b></span>
+            <div>
+              <button
+                type="button"
+                className={dubbingFavorite ? "active" : ""}
+                aria-pressed={dubbingFavorite}
+                onClick={onDubbingFavoriteToggle}
+              >★ Избранная</button>
+              <button
+                type="button"
+                className={dubbingGloballyPreferred ? "active title" : ""}
+                aria-pressed={dubbingGloballyPreferred}
+                onClick={onDubbingGloballyPreferredToggle}
+              >♥ Любимая везде</button>
+            </div>
+          </div>
           <Toggle label="Автоскип опенинга" value={autoSkipOpening} onChange={onAutoSkipOpeningChange} />
           <Toggle label="Автоскип эндинга" value={autoSkipEnding} onChange={onAutoSkipEndingChange} />
           <Toggle label="Автосерия" value={autoNext} onChange={onAutoNextChange} />
@@ -194,11 +209,12 @@ export function PlayerToolbar({
             value={prefs.toolbarIconOnly}
             onChange={toolbarIconOnly => onPrefsChange({ toolbarIconOnly })}
           />
-          <Toggle
-            label="Совместный режим"
-            value={prefs.watchPartyEnabled}
-            onChange={watchPartyEnabled => onPrefsChange({ watchPartyEnabled })}
-          />
+          {!IS_ANDROID_APP && <>
+            <Toggle
+              label="Совместный режим"
+              value={prefs.watchPartyEnabled}
+              onChange={watchPartyEnabled => onPrefsChange({ watchPartyEnabled })}
+            />
 
           {prefs.watchPartyEnabled && (
             <label title="Синхронизация подчиняется правилу комнаты. Свободный режим всегда доступен лично тебе, не принимает общие команды и не отправляет твои действия другим.">
@@ -244,8 +260,9 @@ export function PlayerToolbar({
               </select>
             </label>
           )}
+          </>}
 
-          <label title="Определяет, с какой стороны плеера расположены выбор озвучки, серии, источника и настройки.">
+          {!IS_ANDROID_APP && <label title="Определяет, с какой стороны плеера расположены выбор озвучки, серии, источника и настройки.">
             Панель
             <select
               value={position}
@@ -256,7 +273,7 @@ export function PlayerToolbar({
               <option value="left">Слева</option>
               <option value="right">Справа</option>
             </select>
-          </label>
+          </label>}
             </div>
           </section>
         </div>,

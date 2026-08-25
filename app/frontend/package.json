@@ -1,6 +1,6 @@
 {
   "name": "animesoul-frontend",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,8 @@
   "dependencies": {
     "hls.js": "^1.7.1",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "source-map-js": "^1.2.1"
   },
   "devDependencies": {
     "@types/react": "19.2.14",

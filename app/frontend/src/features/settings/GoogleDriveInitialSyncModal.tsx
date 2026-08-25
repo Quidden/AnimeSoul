@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from "react";
 import { createPortal } from "react-dom";
+import { useModalAccessibility } from "../../lib/modalAccessibility";
 
 type SyncMode = "merge" | "anime_only" | "cloud" | "local";
 
@@ -40,11 +42,14 @@ const dialogStyle = {
 } as const;
 
 export function GoogleDriveInitialSyncModal({ open, syncing, onClose, onSync }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalAccessibility(open, onClose, dialogRef);
+
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
     <div style={overlayStyle} onMouseDown={onClose} role="presentation">
-      <div style={dialogStyle} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="gdrive-sync-choice-title">
+      <div ref={dialogRef} style={dialogStyle} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="gdrive-sync-choice-title" tabIndex={-1}>
         <div className="settings-sync-choice-heading">
           <h3 id="gdrive-sync-choice-title">☁ Подключение Google Drive</h3>
           <button onClick={onClose} aria-label="Закрыть">×</button>

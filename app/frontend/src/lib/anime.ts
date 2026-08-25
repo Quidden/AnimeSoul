@@ -330,30 +330,55 @@ export function franchiseName(title: string) {
 export function franchiseKey(title: string) {
   return franchiseName(title).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
-export async function fetchFamily(anime: Anime, root = franchiseName(anime.title)) {
+function abortableRetryDelay(delay: number, signal?: AbortSignal) {
+  if (!signal) return new Promise<void>((resolve) => setTimeout(resolve, delay));
+  if (signal.aborted) return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, delay);
+    const abort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+export async function fetchFamily(
+  anime: Anime,
+  root = franchiseName(anime.title),
+  signal?: AbortSignal,
+) {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const response = await fetch(`/api/yummy?mode=details&ids=${anime.anime_id}`);
+      const response = await fetch(`/api/yummy?mode=details&ids=${anime.anime_id}`, { signal });
       const payload = await response.json();
       if (response.ok) {
         const detail = (payload.anime?.[0] ?? anime) as Anime;
         if (detail.viewing_order?.length)
           return [...new Map(detail.viewing_order.map((item) => [item.anime_id, item])).values()];
       }
-    } catch {}
-    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));
+    } catch (error) {
+      if (signal?.aborted) throw error;
+    }
+    if (attempt < 3) await abortableRetryDelay(600 * (attempt + 1), signal);
   }
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await fetch(`/api/yummy?mode=catalog&limit=48&q=${encodeURIComponent(root)}`);
+      const response = await fetch(`/api/yummy?mode=catalog&limit=48&q=${encodeURIComponent(root)}`, { signal });
       const payload = await response.json();
       if (response.ok) {
         const rootKey = franchiseKey(root);
         const family = ((payload.anime ?? []) as Anime[]).filter((item) => franchiseKey(item.title) === rootKey);
         if (family.length) return family;
       }
-    } catch {}
-    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+    } catch (error) {
+      if (signal?.aborted) throw error;
+    }
+    if (attempt < 2) await abortableRetryDelay(700 * (attempt + 1), signal);
   }
   return [anime];
 }

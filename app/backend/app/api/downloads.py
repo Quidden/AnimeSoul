@@ -14,6 +14,10 @@ from ..services.offline_library import OfflineLibraryError, OfflineLibraryServic
 
 router = APIRouter(tags=["Downloads"])
 offline_library = OfflineLibraryService(settings.data_dir)
+IMMUTABLE_LOCAL_MEDIA_HEADERS = {
+    "Cache-Control": "private, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff",
+}
 
 
 class OfflineSettingsPayload(BaseModel):
@@ -22,6 +26,11 @@ class OfflineSettingsPayload(BaseModel):
     kodikPrivateKey: str | None = Field(default=None, max_length=512)
     clearKodikPublicKey: bool = False
     clearKodikPrivateKey: bool = False
+    allowMobileDownloads: bool | None = None
+
+
+class DownloadNetworkPayload(BaseModel):
+    type: str = Field(min_length=1, max_length=24)
 
 
 class DownloadEpisodePayload(BaseModel):
@@ -47,7 +56,9 @@ class DownloadJobPayload(BaseModel):
     year: int | None = None
     posterUrl: str | None = Field(default=None, max_length=4096)
     quality: int = Field(default=720, ge=144, le=2160)
-    episodes: list[DownloadEpisodePayload] = Field(min_length=1, max_length=1000)
+    # ``min_items``/``max_items`` work in both Pydantic 1 (Android) and 2
+    # (desktop), while v1 rejects list constraints spelled as string lengths.
+    episodes: list[DownloadEpisodePayload] = Field(min_items=1, max_items=1000)
 
 
 def _http_error(error: Exception) -> HTTPException:
@@ -70,6 +81,7 @@ async def set_offline_settings(payload: OfflineSettingsPayload) -> dict[str, str
             payload.kodikPrivateKey,
             payload.clearKodikPublicKey,
             payload.clearKodikPrivateKey,
+            payload.allowMobileDownloads,
         )
     except OfflineLibraryError as error:
         raise _http_error(error) from error
@@ -85,10 +97,16 @@ async def get_download_jobs() -> dict[str, list[dict[str, Any]]]:
     return {"jobs": offline_library.jobs()}
 
 
+@router.post("/api/downloads/network")
+async def update_download_network(payload: DownloadNetworkPayload) -> dict[str, str]:
+    return await offline_library.set_network_type(payload.type)
+
+
 @router.post("/api/downloads/jobs")
 async def create_download_job(payload: DownloadJobPayload) -> dict[str, Any]:
     try:
-        return await offline_library.enqueue(payload.model_dump())
+        data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+        return await offline_library.enqueue(data)
     except OfflineLibraryError as error:
         raise _http_error(error) from error
 
@@ -126,7 +144,25 @@ async def downloaded_media(episode_id: str) -> FileResponse:
         path = await offline_library.media_path(episode_id)
     except (KeyError, OfflineLibraryError) as error:
         raise _http_error(error) from error
-    return FileResponse(path, media_type="video/mp4", filename=path.name, content_disposition_type="inline")
+    media_type = "application/vnd.apple.mpegurl" if path.suffix.casefold() == ".m3u8" else "video/mp4"
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=path.name,
+        content_disposition_type="inline",
+        headers=IMMUTABLE_LOCAL_MEDIA_HEADERS,
+    )
+
+
+@router.get("/api/downloads/assets/{episode_id}/{asset_name}")
+async def downloaded_media_asset(episode_id: str, asset_name: str) -> FileResponse:
+    try:
+        path = await offline_library.asset_path(episode_id, asset_name)
+    except (KeyError, OfflineLibraryError) as error:
+        raise _http_error(error) from error
+    suffix = path.suffix.casefold()
+    media_type = "video/mp2t" if suffix in {".ts", ".m2ts"} else "application/octet-stream"
+    return FileResponse(path, media_type=media_type, headers=IMMUTABLE_LOCAL_MEDIA_HEADERS)
 
 
 @router.get("/api/downloads/previews/{episode_id}")

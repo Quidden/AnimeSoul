@@ -20,6 +20,7 @@ interface CatalogPresentationOptions {
     active: Anime | null;
     catalog: Anime[];
     formatFilter: string;
+    dubbingFilter: string;
     genre: string;
     groupFilter: string;
     query: string;
@@ -47,6 +48,7 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         active,
         catalog,
         formatFilter,
+        dubbingFilter,
         genre,
         groupFilter,
         query,
@@ -100,6 +102,7 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         [
             cardMeta,
             formatFilter,
+            dubbingFilter,
             franchises,
             genre,
             groupFilter,
@@ -137,6 +140,12 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         ];
     }, [franchises]);
 
+    const dubbings = useMemo(() => [
+        "all",
+        ...Array.from(new Set(Object.values(cardMeta).flatMap(meta => meta.dubbings ?? [])))
+            .sort((left, right) => left.localeCompare(right, "ru")),
+    ], [cardMeta]);
+
     useEffect(() => {
         if (active) return;
 
@@ -165,6 +174,7 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
 
     return {
         cardMeta,
+        dubbings,
         franchises,
         genres,
         randomCandidates,
@@ -194,6 +204,8 @@ function matchesCatalogFilters(
             : familyCount === 1);
     const matchesFormat = options.formatFilter === "all"
         || (options.formatFilter === "movie" ? movie : !movie);
+    const matchesDubbing = options.dubbingFilter === "all"
+        || Boolean(meta?.dubbings.includes(options.dubbingFilter));
     const selectedRating = ratingForSource(
         anime,
         options.ratings[anime.anime_id],
@@ -209,6 +221,7 @@ function matchesCatalogFilters(
         && matchesEndYear
         && matchesGroup
         && matchesFormat
+        && matchesDubbing
         && matchesRating,
     );
 }
@@ -286,7 +299,10 @@ async function loadCardMetadata(anime: Anime) {
     const statusSource = members.find(item => releaseStatus(item).kind === "airing")
         ?? members.find(item => releaseStatus(item).kind === "planned")
         ?? anime;
-    const videos = await fetchAnimeVideos(anime.anime_id);
+    const memberVideos = await Promise.all(members.map(member =>
+        fetchAnimeVideos(member.anime_id).catch(() => []),
+    ));
+    const videos = memberVideos.flat();
     const uniqueVideos = [
         ...new Map(videos.map(video => [video.number, video])).values(),
     ];
@@ -301,6 +317,14 @@ async function loadCardMetadata(anime: Anime) {
         durationMin: durations.length ? Math.min(...durations) : 0,
         durationMax: durations.length ? Math.max(...durations) : 0,
         status: releaseStatus(statusSource),
+        dubbings: Array.from(new Set(videos
+            .filter(video => {
+                const kind = String(video.data.translation_type ?? "").toLocaleLowerCase();
+                const title = video.data.dubbing.toLocaleLowerCase();
+                return !kind.includes("subtit") && !title.includes("субтит") && !title.includes("subtit");
+            })
+            .map(video => video.data.dubbing)))
+            .sort((left, right) => left.localeCompare(right, "ru")),
     };
 
     return Object.fromEntries(

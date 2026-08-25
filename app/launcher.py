@@ -105,7 +105,7 @@ def validate_public_token(token: str) -> tuple[bool, str]:
             "X-Application": token,
             "Lang": "ru",
             "Accept": "application/json",
-            "User-Agent": "AnimeSoul-Launcher/0.2.2",
+            "User-Agent": "AnimeSoul-Launcher/0.2.3",
         },
     )
     try:

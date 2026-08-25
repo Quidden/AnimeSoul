@@ -19,6 +19,8 @@ if not exist "frontend\node_modules" (
 )
 
 echo Building React interface...
+rem Never let a mobile build flag leak into the desktop bundle.
+set "VITE_ANIMESOUL_PLATFORM="
 call npm --prefix frontend run build
 if errorlevel 1 goto :error
 

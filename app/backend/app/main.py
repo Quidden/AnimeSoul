@@ -25,7 +25,7 @@ from .config import settings
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.2.2",
+    version="0.2.3",
     description="FastAPI backend for the AnimeSoul desktop and web client.",
 )
 
@@ -44,7 +44,9 @@ app.include_router(yummy_router)
 app.include_router(kodik_router)
 app.include_router(downloads_router)
 app.include_router(storage_router)
-app.include_router(party_router)
+# The standalone Android product intentionally has no Watch Party surface.
+if os.getenv("ANIMESOUL_MOBILE", "").casefold() != "android":
+    app.include_router(party_router)
 app.include_router(gdrive_router)
 app.include_router(community_ratings_router)
 

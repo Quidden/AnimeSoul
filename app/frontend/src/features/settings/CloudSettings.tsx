@@ -30,6 +30,9 @@ export function CloudSettings({ state }: Props) {
     setClientIdInput,
     clientSecretInput,
     setClientSecretInput,
+    credentialsSaving,
+    credentialsMessage,
+    credentialsTone,
     connect,
     disconnect,
     saveCredentials,
@@ -198,6 +201,9 @@ export function CloudSettings({ state }: Props) {
         clientSecret={clientSecretInput}
         setClientSecret={setClientSecretInput}
         onSave={saveCredentials}
+        saving={credentialsSaving}
+        message={credentialsMessage}
+        messageTone={credentialsTone}
       />
     </section>
   );

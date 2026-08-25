@@ -1,0 +1,187 @@
+import groovy.json.JsonSlurper
+import java.util.Properties
+
+plugins {
+    id 'com.android.application'
+    id 'com.chaquo.python'
+}
+
+dependencies {
+    implementation 'dev.ffmpegkit-maintained:ffmpeg-kit-https:8.1.7'
+    implementation 'com.arthenica:smart-exception-common:0.2.1'
+    implementation 'com.arthenica:smart-exception-java:0.2.1'
+}
+
+def desktopConfigFile = file('../../../animesoul.python.json')
+def desktopConfig = desktopConfigFile.isFile()
+        ? (Map<String, Object>) new JsonSlurper().parse(desktopConfigFile)
+        : [:]
+def javaString = { Object value ->
+    '"' + String.valueOf(value ?: '')
+            .replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('\r', '')
+            .replace('\n', '\\n') + '"'
+}
+def releasePropertiesFile = file('../signing/keystore.properties')
+def releaseProperties = new Properties()
+if (releasePropertiesFile.isFile()) {
+    releasePropertiesFile.withInputStream { releaseProperties.load(it) }
+}
+def releaseKeystoreFile = System.getenv('ANIMESOUL_RELEASE_KEYSTORE')
+        ?: releaseProperties.getProperty('storeFile')
+def releaseKeystorePassword = System.getenv('ANIMESOUL_RELEASE_KEYSTORE_PASSWORD')
+        ?: releaseProperties.getProperty('storePassword')
+def releaseKeyAlias = System.getenv('ANIMESOUL_RELEASE_KEY_ALIAS')
+        ?: releaseProperties.getProperty('keyAlias')
+def releaseKeyPassword = System.getenv('ANIMESOUL_RELEASE_KEY_PASSWORD')
+        ?: releaseProperties.getProperty('keyPassword')
+def releaseSigningReady = [
+        releaseKeystoreFile,
+        releaseKeystorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+].every { it != null && !it.trim().isEmpty() }
+
+if (gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') } && !releaseSigningReady) {
+    throw new GradleException('Release signing variables are required; see app/mobile/UPDATE_SIGNING.md')
+}
+
+android {
+    namespace 'com.animesoul.mobile'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.animesoul.mobile'
+        minSdk 24
+        targetSdk 35
+        versionCode 2030001
+        versionName '0.2.3'
+
+        ndk {
+            // The installable test build targets current physical Android phones.
+            abiFilters 'arm64-v8a'
+        }
+
+        buildConfigField 'String', 'YUMMY_PUBLIC_TOKEN', javaString(
+                desktopConfig.get('yummy_public_token') ?: desktopConfig.get('yummyAnimeToken'))
+        // OAuth credentials are entered on-device and stored in the private
+        // app sandbox. Never copy the desktop secret into a distributable APK.
+        buildConfigField 'String', 'GOOGLE_CLIENT_ID', javaString('')
+        buildConfigField 'String', 'GOOGLE_CLIENT_SECRET', javaString('')
+        buildConfigField 'int', 'LOCAL_SERVER_PORT', '19082'
+    }
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            release {
+                storeFile releasePropertiesFile.isFile() && !new File(releaseKeystoreFile).isAbsolute()
+                        ? new File(releasePropertiesFile.parentFile, releaseKeystoreFile)
+                        : file(releaseKeystoreFile)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+                enableV4Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (releaseSigningReady) signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources {
+            excludes += [
+                    'META-INF/DEPENDENCIES',
+                    'META-INF/LICENSE',
+                    'META-INF/LICENSE.txt',
+                    'META-INF/NOTICE',
+                    'META-INF/NOTICE.txt',
+            ]
+        }
+    }
+}
+
+def generatedPython = layout.buildDirectory.dir('generated/animesoul/python')
+def generatedAssets = layout.buildDirectory.dir('generated/animesoul/assets')
+def frontendDirectory = file('../../../frontend')
+
+tasks.register('syncAnimeSoulPython', Sync) {
+    from('../../../backend') {
+        into 'backend'
+        exclude 'tests/**', '**/__pycache__/**', '**/*.pyc'
+    }
+    from('../../../runtime_instance.py')
+    into generatedPython
+}
+
+tasks.register('buildAnimeSoulFrontend', Exec) {
+    workingDir frontendDirectory
+    environment 'VITE_ANIMESOUL_PLATFORM', 'android'
+    commandLine 'cmd', '/c', 'npm', 'run', 'build'
+    inputs.files(fileTree(frontendDirectory) {
+        include 'src/**', 'public/**', 'index.html', 'package.json', 'tsconfig.json', 'vite.config.ts'
+        exclude 'dist/**', 'node_modules/**'
+    })
+    outputs.dir(new File(frontendDirectory, 'dist-android'))
+}
+
+tasks.register('syncAnimeSoulFrontend', Sync) {
+    dependsOn 'buildAnimeSoulFrontend'
+    from(new File(frontendDirectory, 'dist-android'))
+    into generatedAssets.map { it.dir('frontend') }
+}
+
+chaquopy {
+    defaultConfig {
+        version = '3.12'
+        buildPython('../../../.venv/Scripts/python.exe')
+        pip {
+            install 'fastapi==0.116.1'
+            install 'httpx==0.28.1'
+            // Chaquopy's Android repository provides this pure-Python line.
+            install 'pydantic==1.10.26'
+            install 'uvicorn==0.35.0'
+        }
+        pyc {
+            src = true
+            pip = true
+        }
+    }
+    sourceSets {
+        main {
+            srcDir generatedPython
+        }
+    }
+}
+
+android.sourceSets.main.assets.srcDir(generatedAssets)
+
+tasks.named('preBuild').configure {
+    dependsOn 'syncAnimeSoulPython', 'syncAnimeSoulFrontend'
+}
+
+tasks.configureEach { task ->
+    if (task.name.endsWith('PythonSources')) {
+        task.dependsOn 'syncAnimeSoulPython'
+    }
+    if (task.name.endsWith('Assets')) {
+        task.dependsOn 'syncAnimeSoulFrontend'
+    }
+}

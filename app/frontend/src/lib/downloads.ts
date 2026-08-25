@@ -9,9 +9,15 @@ export type OfflineEpisode = {
   translationId?: number | string;
   quality: number;
   duration?: number;
+  mediaType?: "video/mp4" | "application/vnd.apple.mpegurl";
   downloadedAt: number;
   mediaUrl: string;
   previewUrl?: string;
+  sizeBytes: number;
+  skips?: {
+    opening?: { time: number; length: number };
+    ending?: { time: number; length: number };
+  };
 };
 
 export type OfflineAnime = {
@@ -21,11 +27,12 @@ export type OfflineAnime = {
   poster?: string;
   posterUrl?: string;
   episodes: OfflineEpisode[];
+  sizeBytes: number;
 };
 
 export type DownloadJob = {
   id: string;
-  status: "queued" | "downloading" | "completed" | "cancelled" | "error";
+  status: "queued" | "downloading" | "paused" | "completed" | "cancelled" | "error";
   title: string;
   quality: number;
   total: number;
@@ -33,6 +40,7 @@ export type DownloadJob = {
   progress: number;
   current: string;
   error: string;
+  pauseReason?: "mobile-network" | "";
   createdAt: number;
 };
 
@@ -40,12 +48,19 @@ export type OfflineLibrary = {
   directory: string;
   anime: OfflineAnime[];
   jobs: DownloadJob[];
+  storage: {
+    totalBytes: number;
+    usedBytes: number;
+    freeBytes: number;
+    libraryBytes: number;
+  };
 };
 
 export type OfflineSettings = {
   directory: string;
   kodikPublicKeyConfigured: boolean;
   kodikPrivateKeyConfigured: boolean;
+  allowMobileDownloads: boolean;
 };
 
 export type OfflineSettingsUpdate = {
@@ -54,7 +69,42 @@ export type OfflineSettingsUpdate = {
   kodikPrivateKey?: string;
   clearKodikPublicKey?: boolean;
   clearKodikPrivateKey?: boolean;
+  allowMobileDownloads?: boolean;
 };
+
+type AndroidDownloadBridge = {
+  prepareNotificationPermission?: () => void;
+  startForegroundMonitoring?: () => void;
+  notifyMobileDownloadsBlocked?: () => void;
+};
+
+let lastNativeMonitorRequest = 0;
+
+function androidDownloadBridge() {
+  if (typeof window === "undefined") return undefined;
+  return (window as typeof window & { AnimeSoulDownloads?: AndroidDownloadBridge }).AnimeSoulDownloads;
+}
+
+/** Request Android 13 notification access in direct response to the download click. */
+function prepareNativeDownloadNotification() {
+  try {
+    androidDownloadBridge()?.prepareNotificationPermission?.();
+  } catch {
+    // Desktop/browser builds and older APKs intentionally continue without it.
+  }
+}
+
+/** Ensure the native poller is alive without coupling it to React/WebView timers. */
+function startNativeDownloadMonitoring(force = false) {
+  const now = Date.now();
+  if (!force && now - lastNativeMonitorRequest < 5_000) return;
+  try {
+    androidDownloadBridge()?.startForegroundMonitoring?.();
+    lastNativeMonitorRequest = now;
+  } catch {
+    // The local Python queue remains usable if the native bridge is unavailable.
+  }
+}
 
 export const KODIK_ACCESS_CHANGED_EVENT = "animesoul:kodik-access-changed";
 
@@ -100,18 +150,40 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export const fetchOfflineLibrary = () => api<OfflineLibrary>("/api/downloads/library", { cache: "no-store" });
+export const fetchOfflineLibrary = async () => {
+  const library = await api<OfflineLibrary>("/api/downloads/library", { cache: "no-store" });
+  const hasActiveJobs = library.jobs.some(job => ["queued", "downloading", "paused"].includes(job.status));
+  if (hasActiveJobs) {
+    startNativeDownloadMonitoring();
+  } else {
+    lastNativeMonitorRequest = 0;
+  }
+  return library;
+};
 export const fetchOfflineSettings = () => api<OfflineSettings>("/api/downloads/settings", { cache: "no-store" });
 export const updateOfflineSettings = (payload: OfflineSettingsUpdate) => api<OfflineSettings>("/api/downloads/settings", {
   method: "PUT",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(payload),
 });
-export const enqueueDownload = (payload: DownloadJobRequest) => api<DownloadJob>("/api/downloads/jobs", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(payload),
-});
+export const enqueueDownload = async (payload: DownloadJobRequest) => {
+  prepareNativeDownloadNotification();
+  let job: DownloadJob;
+  try {
+    job = await api<DownloadJob>("/api/downloads/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.toLocaleLowerCase("ru").includes("мобильн")) {
+      try { androidDownloadBridge()?.notifyMobileDownloadsBlocked?.(); } catch { /* optional native bridge */ }
+    }
+    throw error;
+  }
+  startNativeDownloadMonitoring(true);
+  return job;
+};
 export const cancelDownload = (jobId: string) => api<{ cancelled: boolean }>(`/api/downloads/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" });
 export const deleteOfflineEpisode = (episodeId: string) => api<{ deleted: boolean }>(`/api/downloads/episodes/${encodeURIComponent(episodeId)}`, { method: "DELETE" });
 export const deleteOfflineAnime = (animeId: number) => api<{ deleted: number }>(`/api/downloads/anime/${animeId}`, { method: "DELETE" });

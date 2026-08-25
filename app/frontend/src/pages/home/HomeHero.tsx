@@ -3,6 +3,7 @@ import type { KeyboardEvent, MouseEvent } from "react";
 
 import { EpisodeSlideshow, episodePreviewImages } from "../../components/EpisodeSlideshow";
 import { formatTime } from "../../lib/anime";
+import { IS_ANDROID_APP } from "../../lib/platform";
 import { homeTrailerEmbedUrl, isYouTubeTrailer } from "../../lib/trailer";
 import type { HeroTrailer } from "../../lib/types";
 import type { HomePageActions, HomePageModel, HomePageProps } from "./types";
@@ -51,8 +52,13 @@ export function HomeHero({ model, actions }: HomePageProps) {
   const { resume, playerPrefs } = model;
   const { anime, state, point } = resume;
   const hasResume = Boolean(anime && state);
+  // Storage can be ready before the matching catalogue card has arrived.
+  // Keep the honest loading state instead of briefly claiming that there is
+  // no unfinished viewing during a cold Android start.
+  const isHydrating = !model.storageReady || (resume.hasStoredResume && !anime);
 
   const openHero = () => {
+    if (isHydrating) return;
     if (anime && state) actions.openAnime(anime, true);
     else actions.chooseCatalog();
   };
@@ -79,53 +85,49 @@ export function HomeHero({ model, actions }: HomePageProps) {
 
   return (
     <section
-      className={`home-cinema-hero ${hasResume ? "has-resume" : "empty-resume"}`}
-      role="link"
-      tabIndex={0}
-      aria-label={hasResume ? `Продолжить ${anime?.title}` : "Выбрать аниме"}
+      className={`home-cinema-hero ${isHydrating ? "hydrating-resume" : hasResume ? "has-resume" : "empty-resume"}`}
+      role={isHydrating ? "status" : "link"}
+      tabIndex={isHydrating ? -1 : 0}
+      aria-busy={isHydrating}
+      aria-label={isHydrating ? "Загружаем сохранённый прогресс" : hasResume ? `Продолжить ${anime?.title}` : "Выбрать аниме"}
       onClick={onHeroClick}
       onKeyDown={onHeroKeyDown}
     >
       <HeroMedia model={model} actions={actions} />
       <div className="home-cinema-vignette" />
 
-      {model.totalNewEpisodes > 0 && (
-        <button
-          type="button"
-          className="home-new-episodes-pill"
-          onClick={event => {
-            event.stopPropagation();
-            document
-              .getElementById("home-tracking-panel")
-              ?.scrollIntoView({ behavior: "smooth", block: "center" });
-          }}
-        >
-          <i aria-hidden="true" />
-          <span>Замечены новые серии</span>
-          <b>+{model.totalNewEpisodes}</b>
-        </button>
-      )}
-
       <div className="home-cinema-copy">
-        <button type="button" className="eyebrow hero-resume-label" onClick={openHero}>
-          {hasResume ? "ПРОДОЛЖИТЬ ПРОСМОТР" : "ВЫБРАТЬ ЧТО ПОСМОТРЕТЬ"}
+        <button type="button" className="eyebrow hero-resume-label" disabled={isHydrating} onClick={openHero}>
+          {isHydrating ? "ЗАГРУЖАЕМ СОХРАНЕНИЯ" : hasResume ? "ПРОДОЛЖИТЬ ПРОСМОТР" : "ВЫБРАТЬ ЧТО ПОСМОТРЕТЬ"}
         </button>
-        {hasResume && anime && state ? (
+        {isHydrating ? (
+          <>
+            <h1>Возвращаем твой<br /><i>прогресс просмотра.</i></h1>
+            <p>Читаем сохранения активного профиля. Это займёт всего несколько секунд.</p>
+          </>
+        ) : hasResume && anime && state ? (
           <>
             <h1>{anime.title}</h1>
             <p>
               {seasonLabel} · серия {resume.displayEpisode} · остановились на{" "}
               {formatTime(position)}
             </p>
-            <span className="home-cinema-cta">▶ Продолжить с {formatTime(position)}</span>
           </>
         ) : (
           <>
             <h1>Твоя коллекция.<br /><i>Твои правила.</i></h1>
             <p>Незавершённого просмотра пока нет — выбери новое аниме в каталоге.</p>
-            <span className="home-cinema-cta">⌕ Открыть каталог</span>
           </>
         )}
+        <div className="home-cinema-actions">
+          <span className="home-cinema-cta">
+            {isHydrating
+              ? "Синхронизация…"
+              : hasResume
+                ? `▶ Продолжить с ${formatTime(position)}`
+                : "⌕ Открыть каталог"}
+          </span>
+        </div>
       </div>
     </section>
   );
@@ -140,8 +142,21 @@ function HeroMedia({ model, actions }: HomePageProps) {
     ?? anime?.poster?.fullsize
     ?? anime?.poster?.big;
 
-  if (previewEnabled && trailer) {
+  if (previewEnabled && playerPrefs.homePreviewMode === "screenshots" && trailer) {
     return <TrailerMedia trailer={trailer} fallback={fallback} />;
+  }
+
+  // A slideshow can eventually mount an episode iframe. On a phone that feels
+  // like an empty/broken player when the title has no trailer, so keep the
+  // hero honest and lightweight: artwork only.
+  if (IS_ANDROID_APP && previewEnabled && playerPrefs.homePreviewMode === "screenshots") {
+    return (
+      <div className="home-cinema-media home-cinema-mobile-banner" aria-hidden="true">
+        {fallback
+          ? <img src={fallback} alt="" fetchPriority="high" />
+          : <span className="home-cinema-placeholder">AnimeSoul</span>}
+      </div>
+    );
   }
 
   if (previewEnabled && playerPrefs.homePreviewMode === "screenshots" && anime) {

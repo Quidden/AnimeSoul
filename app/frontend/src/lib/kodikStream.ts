@@ -2,6 +2,7 @@ export type KodikStreamRequest = {
   videoId: number | string;
   season: number;
   episode: string;
+  originAnimeId?: number;
   originEpisode?: string;
   dubbing: string;
   translationId?: number | string;
@@ -59,9 +60,25 @@ export function isSameEpisodeDubbingSwitch(
   previous: KodikStreamRequest,
   next: KodikStreamRequest,
 ) {
-  if (previous.season !== next.season || previous.episode !== next.episode) return false;
+  if (kodikStreamEpisodeKey(previous) !== kodikStreamEpisodeKey(next)) return false;
   return previous.dubbing !== next.dubbing
     || previous.translationId !== next.translationId;
+}
+
+/** Display episode numbers are local to the combined franchise UI. Resolver
+ * metadata identifies the concrete provider episode behind that number. */
+export function kodikStreamEpisodeKey(request: KodikStreamRequest) {
+  const sourceIdentity = request.originAnimeId != null
+    ? ["anime", request.originAnimeId]
+    : request.sourceId
+      ? [request.sourceIdType, request.sourceId]
+      : ["title", request.sourceTitle, request.sourceOriginalTitle];
+  return JSON.stringify([
+    request.season,
+    request.episode,
+    request.originEpisode ?? request.episode,
+    ...sourceIdentity,
+  ]);
 }
 
 /** Audio carriers use the lightest rendition because their picture stays hidden. */
@@ -69,16 +86,25 @@ export function lowestQualitySource(sources: KodikDirectSource[]) {
   return [...sources].sort((left, right) => left.quality - right.quality)[0];
 }
 
-function streamCacheKey(request: KodikStreamRequest) {
-  return [
+/** Every field consulted by the local resolver belongs to the request
+ * identity. Family metadata is filled asynchronously, so omitting it can
+ * reuse a stream resolved earlier with another season/title identity. */
+export function kodikStreamRequestKey(request: KodikStreamRequest) {
+  return JSON.stringify([
     request.videoId,
     request.season,
     request.episode,
+    request.originAnimeId,
     request.originEpisode,
     request.dubbing,
     request.translationId,
     request.iframeUrl,
-  ].join("|");
+    request.sourceId,
+    request.sourceIdType,
+    request.sourceTitle,
+    request.sourceOriginalTitle,
+    request.directStream?.sources.map(source => [source.quality, source.src, source.type]),
+  ]);
 }
 
 export async function fetchKodikStream(
@@ -91,7 +117,7 @@ export async function fetchKodikStream(
     }
     return request.directStream;
   }
-  const cacheKey = streamCacheKey(request);
+  const cacheKey = kodikStreamRequestKey(request);
   const cached = streamCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.info;
   const response = await fetch("/api/kodik/stream", {

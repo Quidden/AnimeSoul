@@ -1,5 +1,7 @@
+import {useRef} from "react";
 import {ReleaseMark} from "../components/ReleaseMark";
 import {formatTime, watchTimeProgress} from "../lib/anime";
+import {useModalAccessibility} from "../lib/modalAccessibility";
 import type {Anime, CardMeta, Folder, Progress} from "../lib/types";
 
 export function FolderView({folder, known, progress, cardMeta, onOpen, onNote, onReorder, onDelete, onClose}: {
@@ -13,12 +15,16 @@ export function FolderView({folder, known, progress, cardMeta, onOpen, onNote, o
     onDelete: () => void;
     onClose: () => void;
 }) {
+    const dialogRef = useRef<HTMLDivElement>(null);
+    useModalAccessibility(true, onClose, dialogRef);
+
     return <div className="modal-backdrop" onMouseDown={onClose}>
-        <div className="modal folder-view" onMouseDown={e => e.stopPropagation()}>
-            <button className="modal-close" onClick={onClose}>×</button>
+        <div ref={dialogRef} className="modal folder-view" role="dialog" aria-modal="true"
+             aria-labelledby="folder-view-title" tabIndex={-1} onMouseDown={e => e.stopPropagation()}>
+            <button type="button" className="modal-close" onClick={onClose} aria-label="Закрыть">×</button>
             <div className="folder-view-head">
-                <div><span className="eyebrow">ПАПКА · ПЕРЕТАЩИ ДЛЯ СОРТИРОВКИ</span><h2>{folder.name}</h2></div>
-                <button className="danger outline" onClick={onDelete}>Удалить папку</button>
+                <div><span className="eyebrow">ПАПКА · ПЕРЕТАЩИ ДЛЯ СОРТИРОВКИ</span><h2 id="folder-view-title">{folder.name}</h2></div>
+                <button type="button" className="danger outline" onClick={onDelete}>Удалить папку</button>
             </div>
             <div className="folder-anime-list">{folder.animeIds.map(id => {
                 const a = known(id), p = progress[id],

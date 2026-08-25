@@ -241,7 +241,7 @@
   display: none!important;
 }
 
-.settings-scroll[data-active-tab="watching"]>[data-settings-tab="watching"],.settings-scroll[data-active-tab="player"]>[data-settings-tab="player"],.settings-scroll[data-active-tab="appearance"]>[data-settings-tab="appearance"],.settings-scroll[data-active-tab="offline"]>[data-settings-tab="offline"],.settings-scroll[data-active-tab="cloud"]>[data-settings-tab="cloud"],.settings-scroll[data-active-tab="party"]>[data-settings-tab="party"],.settings-scroll[data-active-tab="profiles"]>[data-settings-tab="profiles"],.settings-scroll[data-active-tab="debug"]>[data-settings-tab="debug"] {
+.settings-scroll[data-active-tab="watching"]>[data-settings-tab="watching"],.settings-scroll[data-active-tab="player"]>[data-settings-tab="player"],.settings-scroll[data-active-tab="appearance"]>[data-settings-tab="appearance"],.settings-scroll[data-active-tab="credentials"]>[data-settings-tab="credentials"],.settings-scroll[data-active-tab="offline"]>[data-settings-tab="offline"],.settings-scroll[data-active-tab="cloud"]>[data-settings-tab="cloud"],.settings-scroll[data-active-tab="party"]>[data-settings-tab="party"],.settings-scroll[data-active-tab="profiles"]>[data-settings-tab="profiles"],.settings-scroll[data-active-tab="changelog"]>[data-settings-tab="changelog"],.settings-scroll[data-active-tab="debug"]>[data-settings-tab="debug"] {
   display: grid!important;
 }
 
@@ -256,6 +256,17 @@
 
 .settings-scroll .settings-group:last-child {
   margin-bottom: 0;
+}
+
+.settings-scroll [data-global-search-target="true"] {
+  border-color: color-mix(in srgb,var(--accent) 72%,white 12%)!important;
+  box-shadow: 0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent),0 14px 36px color-mix(in srgb,var(--accent) 12%,transparent);
+  animation: settings-search-target 700ms ease both;
+}
+
+@keyframes settings-search-target {
+  from { transform: translateY(4px); opacity: .72; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .settings-group-title {
@@ -394,6 +405,80 @@ html[data-color-scheme="light"] .settings-search input,html[data-color-scheme="l
   color: #2b2530;
 }
 
+.credentials-settings { gap: 12px; }
+
+.settings-item.credentials-card {
+  grid-template-columns: minmax(220px, .72fr) minmax(360px, 1.28fr);
+  align-items: start;
+  gap: 22px;
+}
+
+.credentials-card-heading {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.credentials-card-heading > b { color: #f1ebf4; font-size: 15px; }
+.credentials-card-heading > p { margin: 0; color: #9c94a2; font-size: 12px; line-height: 1.5; }
+
+.credentials-state {
+  width: fit-content;
+  padding: 5px 8px;
+  border: 1px solid #55485e;
+  border-radius: 999px;
+  color: #aaa0b0;
+  background: #ffffff08;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.credentials-state.ready { border-color: #58c98966; color: #8be7ae; background: #12312077; }
+.credentials-state.missing { border-color: #d5a45555; color: #e9c37a; background: #392b1266; }
+
+.credentials-card-controls {
+  display: grid!important;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: start;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+}
+
+.credentials-card-controls .settings-text-input { width: 100%; min-width: 0; }
+.credentials-kodik-grid,
+.credentials-google-grid { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
+.credentials-actions { display: flex; gap: 8px; }
+
+.credentials-feedback {
+  grid-column: 1 / -1;
+  margin: 1px 0 0;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.credentials-feedback.success,
+.offline-settings-message.success { border-color: #55c98655; color: #8de5ae; background: #12301f70; }
+.credentials-feedback.error,
+.offline-settings-message.error { border-color: #df66705c; color: #f0a2aa; background: #3b151c70; }
+
+.offline-kodik-setting-controls > .offline-settings-message {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  padding: 9px 11px;
+  border-style: solid;
+  border-width: 1px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+@media(max-width:1080px) {
+  .settings-item.credentials-card { grid-template-columns: 1fr; }
+}
+
 @media(max-width:860px){
   .settings-layout {
     grid-template-columns: 1fr;
@@ -463,4 +548,11 @@ html[data-color-scheme="light"] .settings-search input,html[data-color-scheme="l
   .settings-tab-list>button {
     flex-basis: 138px;
   }
+  .credentials-card-controls,
+  .credentials-kodik-grid,
+  .credentials-google-grid {
+    grid-template-columns: 1fr;
+  }
+  .credentials-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .credentials-feedback { grid-column: 1; }
 }

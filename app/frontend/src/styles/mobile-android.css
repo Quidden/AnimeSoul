@@ -1,0 +1,1248 @@
+/* Standalone Android layout. Desktop/browser builds never receive the marker. */
+html[data-platform="android"] {
+  --android-safe-top: env(safe-area-inset-top, 0px);
+  --android-safe-right: env(safe-area-inset-right, 0px);
+  --android-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --android-safe-left: env(safe-area-inset-left, 0px);
+  --floating-header-offset: 68px;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+html[data-platform="android"] body {
+  min-width: 0;
+  overscroll-behavior-y: contain;
+}
+
+html[data-platform="android"] .app {
+  padding-bottom: calc(66px + var(--android-safe-bottom));
+}
+
+html[data-platform="android"] .app > .app-header {
+  position: fixed;
+  inset: var(--android-safe-top) var(--android-safe-right) auto var(--android-safe-left);
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  width: 100%;
+  height: var(--floating-header-offset);
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+/* Keep the home artwork underneath the floating search. Pages without a
+   cinematic background reserve exactly one header clearance of their own. */
+html[data-platform="android"] .app > .app-header + #catalog.catalog-page,
+html[data-platform="android"] .app > .app-header + .downloads-page,
+html[data-platform="android"] .app > .app-header + .statistics-page,
+html[data-platform="android"] .app > .app-header + .ratings-page {
+  padding-top: calc(var(--android-safe-top) + var(--floating-header-offset) + 20px);
+}
+
+html[data-platform="android"] .app > .app-header + .watch-shell {
+  padding-top: calc(var(--android-safe-top) + var(--floating-header-offset) + 18px);
+}
+
+html[data-platform="android"] .app > .app-header.search-hidden + #catalog.catalog-page,
+html[data-platform="android"] .app > .app-header.search-hidden + .downloads-page,
+html[data-platform="android"] .app > .app-header.search-hidden + .statistics-page,
+html[data-platform="android"] .app > .app-header.search-hidden + .ratings-page,
+html[data-platform="android"] .app > .app-header.search-hidden + .watch-shell {
+  padding-top: calc(var(--android-safe-top) + 18px);
+}
+
+html[data-platform="android"] .app > .app-header + .catalog-page > .section-head > .outline,
+html[data-platform="android"] .app > .app-header + .statistics-page > .section-head > .outline,
+html[data-platform="android"] .app > .app-header + .ratings-page > .section-head > .outline,
+html[data-platform="android"] .app > .app-header + .downloads-page .downloads-hero .downloads-back-button {
+  display: none;
+}
+
+html[data-platform="android"] .app > .app-header > .brand {
+  display: none;
+}
+
+html[data-platform="android"] .app > .app-header > .search-wrap {
+  position: static!important;
+  inset: auto!important;
+  width: min(520px,100%);
+  margin: 0 auto;
+  translate: none!important;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity .24s ease, transform .24s ease;
+  will-change: opacity, transform;
+}
+
+html[data-platform="android"] .app > .app-header.search-hidden > .search-wrap {
+  opacity: 0;
+  transform: translateY(calc(-100% - var(--android-safe-top) - 12px));
+  pointer-events: none;
+}
+
+html[data-platform="android"] .app > .app-header + .home-cinema-hero .home-cinema-copy {
+  top: calc(var(--android-safe-top) + var(--floating-header-offset) + 14px);
+  transition: top .24s ease;
+}
+
+html[data-platform="android"] .app > .app-header.search-hidden + .home-cinema-hero .home-cinema-copy {
+  top: calc(var(--android-safe-top) + 16px);
+}
+
+html[data-platform="android"] .home-cinema-mobile-banner > img {
+  object-fit: cover;
+  object-position: center 24%;
+}
+
+/* Android PiP shrinks the whole Activity, so lift the existing player and
+   each layout ancestor into that tiny viewport before the native transition. */
+html[data-platform="android"].animesoul-native-pip,
+html[data-platform="android"].animesoul-native-pip body,
+html[data-platform="android"].animesoul-native-pip #root,
+html[data-platform="android"].animesoul-native-pip .app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden !important;
+  background: #000 !important;
+}
+
+html[data-platform="android"].animesoul-native-pip .app > .app-header,
+html[data-platform="android"].animesoul-native-pip .watch-shell > :not(.episode-carousel),
+html[data-platform="android"].animesoul-native-pip .episode-carousel > :not(.video-layout) {
+  display: none !important;
+}
+
+html[data-platform="android"].animesoul-native-pip .watch-shell,
+html[data-platform="android"].animesoul-native-pip .episode-carousel,
+html[data-platform="android"].animesoul-native-pip .video-layout,
+html[data-platform="android"].animesoul-native-pip .player-frame {
+  position: fixed !important;
+  z-index: 9998 !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  transform: none !important;
+}
+
+html[data-platform="android"].animesoul-native-pip .video-layout {
+  display: block !important;
+}
+
+html[data-platform="android"].animesoul-native-pip .animesoul-player {
+  z-index: 9999 !important;
+}
+
+html[data-platform="android"] .app > .app-header .header-search {
+  position: static!important;
+  inset: auto!important;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  padding: 3px 4px 3px 17px;
+  border: 1px solid #ffffff24;
+  border-radius: 999px;
+  background: color-mix(in srgb,var(--panel) 77%,transparent);
+  box-shadow: 0 10px 34px #0007,0 1px 0 #ffffff12 inset;
+  backdrop-filter: blur(22px) saturate(145%);
+  translate: none!important;
+}
+
+html[data-platform="android"] .app > .app-header .header-search input {
+  width: 100%;
+  min-width: 0;
+  font-size: 16px;
+}
+
+html[data-platform="android"] .app > .app-header .header-search button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: color-mix(in srgb,var(--accent) 17%,transparent);
+}
+
+html[data-platform="android"] .app > .app-header .suggestions {
+  top: calc(100% + 8px);
+  border-radius: 16px;
+  background: color-mix(in srgb,var(--panel) 94%,transparent);
+  backdrop-filter: blur(22px);
+}
+
+html[data-platform="android"] .app > .app-header > .header-actions,
+html[data-platform="android"] .app > .app-header .header-statuses {
+  display: contents;
+  margin: 0;
+}
+
+html[data-platform="android"] .app > .app-header .header-statuses > .save-indicator,
+html[data-platform="android"] .app > .app-header .header-statuses > .changelog-trigger {
+  display: none;
+}
+
+html[data-platform="android"] .app > .app-header .status-popover {
+  position: fixed;
+  z-index: 500;
+  top: calc(var(--android-safe-top) + var(--floating-header-offset) + 6px);
+  left: 50%;
+  translate: -50% 0;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  pointer-events: auto;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation {
+  position: fixed;
+  z-index: 250;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid!important;
+  grid-template-columns: repeat(6,minmax(0,1fr));
+  gap: 0;
+  height: calc(62px + var(--android-safe-bottom));
+  padding: 3px max(4px, var(--android-safe-right)) var(--android-safe-bottom) max(4px, var(--android-safe-left));
+  border-top: 1px solid #ffffff18;
+  background: #0d0a11f2;
+  box-shadow: 0 -12px 35px #0008;
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation > button,
+html[data-platform="android"] .app > .app-header .settings-center-trigger {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 56px;
+  gap: 2px;
+  padding: 3px 1px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: #b8afc1;
+  box-shadow: none;
+  transition: color .18s ease,background .18s ease,transform .18s ease;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation .mobile-nav-only,
+html[data-platform="android"] .app > .app-header > .app-navigation .nav-icon {
+  display: grid;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation .nav-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation .nav-label::after {
+  content: attr(data-mobile-label);
+  font-size: clamp(8px,2.25vw,10px);
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation > button.is-active,
+html[data-platform="android"] .app > .app-header .settings-center-trigger[aria-expanded="true"] {
+  color: #fff;
+  background: color-mix(in srgb,var(--accent) 13%,transparent);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation > button.is-active .nav-icon {
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+html[data-platform="android"] .app > .app-header .navigation-settings-slot {
+  position: static;
+  display: contents;
+  translate: none;
+}
+
+html[data-platform="android"] .app > .app-header .settings-center-trigger {
+  width: auto;
+  height: auto;
+  font-size: 0;
+  pointer-events: auto;
+}
+
+html[data-platform="android"] .app > .app-header .settings-center-trigger:hover,
+html[data-platform="android"] .app > .app-header .settings-center-trigger:active {
+  transform: none;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation:has(.settings-center-trigger[aria-expanded="true"]) > button.is-active {
+  background: transparent;
+  color: #b8afc1;
+  box-shadow: none;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation:has(.settings-center-trigger[aria-expanded="true"]) > button.is-active .nav-icon {
+  color: inherit;
+  transform: none;
+}
+
+html[data-platform="android"] .app > .app-header .settings-center-trigger::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M19.14 12.94a7.72 7.72 0 0 0 .05-.94 7.72 7.72 0 0 0-.05-.94l2.03-1.58-1.92-3.32-2.39.96a7.3 7.3 0 0 0-1.62-.94L14.88 3h-3.84l-.36 3.18c-.58.24-1.12.56-1.62.94l-2.39-.96-1.92 3.32 2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.04.7 1.62.94l.36 3.18h3.84l.36-3.18c.58-.24 1.12-.55 1.62-.94l2.39.96 1.92-3.32-2.03-1.58ZM12.96 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M19.14 12.94a7.72 7.72 0 0 0 .05-.94 7.72 7.72 0 0 0-.05-.94l2.03-1.58-1.92-3.32-2.39.96a7.3 7.3 0 0 0-1.62-.94L14.88 3h-3.84l-.36 3.18c-.58.24-1.12.56-1.62.94l-2.39-.96-1.92 3.32 2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.04.7 1.62.94l.36 3.18h3.84l.36-3.18c.58-.24 1.12-.55 1.62-.94l2.39.96 1.92-3.32-2.03-1.58ZM12.96 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+html[data-platform="android"] .app > .app-header .settings-center-trigger::after {
+  content: "Настройки";
+  font-size: clamp(8px,2.25vw,10px);
+  line-height: 1;
+}
+
+html[data-platform="android"] .episode-carousel,
+html[data-platform="android"] .episode-carousel.enabled {
+  padding-inline: 0;
+}
+
+html[data-platform="android"] .episode-carousel > .carousel-side {
+  display: none;
+}
+
+html[data-platform="android"] .watch-shell,
+html[data-platform="android"] .downloads-page,
+html[data-platform="android"] .statistics-page,
+html[data-platform="android"] .ratings-page {
+  padding-inline: 12px;
+}
+
+html[data-platform="android"] .watch-heading h1 {
+  font-size: clamp(26px,8vw,40px);
+}
+
+html[data-platform="android"] .watch-rating-desktop { display: none; }
+html[data-platform="android"] .watch-rating-mobile {
+  display: grid;
+  margin-top: 12px;
+}
+
+html[data-platform="android"] .video-layout {
+  border-radius: 12px;
+}
+
+html[data-platform="android"] .player-frame,
+html[data-platform="android"] .animesoul-player {
+  border-radius: 12px;
+}
+
+html[data-platform="android"] button,
+html[data-platform="android"] select {
+  touch-action: manipulation;
+}
+
+html[data-platform="android"] .settings-modal-backdrop {
+  inset: 0 0 calc(62px + var(--android-safe-bottom));
+  padding: 0;
+  background: #0e0b12;
+  backdrop-filter: none;
+}
+
+html[data-platform="android"] .settings-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+html[data-platform="android"] .settings-modal > header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: calc(64px + var(--android-safe-top))!important;
+  padding: calc(10px + var(--android-safe-top)) max(12px,var(--android-safe-right)) 10px max(12px,var(--android-safe-left))!important;
+  background: #0e0b12f7;
+}
+
+html[data-platform="android"] .settings-modal > header > div:first-child {
+  min-width: 0;
+}
+
+html[data-platform="android"] .settings-modal > header span,
+html[data-platform="android"] .settings-modal > header p {
+  display: none;
+}
+
+html[data-platform="android"] .settings-modal > header h2 {
+  overflow: hidden;
+  margin: 0;
+  font-family: Inter,system-ui,sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .settings-header-actions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+html[data-platform="android"] .settings-modal > header .settings-header-actions > button,
+html[data-platform="android"] .settings-modal > header .settings-header-actions > button:last-child,
+html[data-platform="android"] .settings-modal > header .settings-header-actions > .settings-reset {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 0!important;
+}
+
+html[data-platform="android"] .settings-modal > header .settings-header-actions > .settings-reset:first-letter {
+  font-size: 0;
+}
+
+html[data-platform="android"] .settings-modal > header .settings-header-actions > .settings-reset::before {
+  content: "↺";
+  font-size: 22px;
+}
+
+html[data-platform="android"] .settings-modal > header .settings-header-actions > button:last-child {
+  font-size: 27px!important;
+}
+
+html[data-platform="android"] .settings-layout {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0,1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html[data-platform="android"] .settings-tabs {
+  align-items: stretch;
+  min-height: auto;
+  padding: 8px 10px 0;
+  border-right: 0;
+  border-bottom: 1px solid #ffffff12;
+  background: #111014;
+  overflow: hidden;
+}
+
+html[data-platform="android"] .settings-search {
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  margin: 0 0 8px;
+  border-radius: 12px;
+}
+
+html[data-platform="android"] .settings-search input {
+  font-size: 16px;
+}
+
+html[data-platform="android"] .settings-tab-list {
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  overflow-x: auto;
+  gap: 7px;
+  padding: 0 0 9px;
+  scrollbar-width: none;
+  scroll-padding-inline: 10px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+html[data-platform="android"] .settings-tab-list button {
+  flex: 0 0 auto;
+  display: flex;
+  grid-template-columns: none;
+  width: auto!important;
+  min-width: max-content;
+  min-height: 42px;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid #302a35;
+  border-radius: 999px;
+  background: #18151c;
+  scroll-snap-align: center;
+}
+
+html[data-platform="android"] .settings-tab-list button.active {
+  box-shadow: none;
+}
+
+html[data-platform="android"] .settings-tab-list button > i {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+html[data-platform="android"] .settings-tab-list button > span {
+  display: block;
+}
+
+html[data-platform="android"] .settings-tab-list button span b {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .settings-tab-list button span small {
+  display: none;
+}
+
+html[data-platform="android"] .settings-workspace,
+html[data-platform="android"] .settings-scroll {
+  min-height: 0;
+}
+
+html[data-platform="android"] .settings-panel-heading {
+  display: none;
+}
+
+html[data-platform="android"] .settings-workspace > .settings-scroll {
+  padding: 14px 12px 28px;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
+
+html[data-platform="android"] .settings-scroll > [data-settings-tab],
+html[data-platform="android"] .settings-scroll .settings-group,
+html[data-platform="android"] .settings-scroll .settings-item {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+html[data-platform="android"] .settings-scroll .settings-group {
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+html[data-platform="android"] .settings-group-title {
+  gap: 4px;
+  margin: 0 2px 3px;
+  padding-bottom: 5px;
+}
+
+html[data-platform="android"] .settings-group-title b {
+  font-size: 17px;
+}
+
+html[data-platform="android"] .settings-group-title span {
+  max-width: none;
+  color: #9a929f;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+html[data-platform="android"] .settings-item {
+  grid-template-columns: 1fr;
+  gap: 12px;
+  min-height: 0;
+  padding: 15px!important;
+  border-radius: 14px!important;
+}
+
+html[data-platform="android"] .settings-item > div:first-child {
+  gap: 7px;
+}
+
+html[data-platform="android"] .settings-item > div:first-child > b {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+html[data-platform="android"] .settings-item p {
+  font-size: 13px!important;
+  line-height: 1.48!important;
+}
+
+html[data-platform="android"] .settings-item small {
+  font-size: 12px!important;
+  line-height: 1.45!important;
+}
+
+html[data-platform="android"] .settings-item > div:last-child {
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+html[data-platform="android"] .settings-item select,
+html[data-platform="android"] .settings-item input,
+html[data-platform="android"] .settings-item button:not(.toggle) {
+  max-width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+}
+
+html[data-platform="android"] .settings-item .toggle-row {
+  min-height: 44px;
+  font-size: 13px;
+}
+
+html[data-platform="android"] .mobile-storage-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #65d69555;
+  border-radius: 10px;
+  color: #74c99a;
+  background: #12301f66;
+  font-size: 11px;
+}
+
+html[data-platform="android"] .mobile-download-network-controls {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+html[data-platform="android"] .mobile-download-network-controls .toggle-row {
+  justify-content: flex-start;
+}
+
+/* Catalog filters ------------------------------------------------------- */
+html[data-platform="android"] #catalog.catalog-page {
+  padding-top: calc(var(--android-safe-top) + var(--floating-header-offset) + 20px);
+}
+
+html[data-platform="android"] .catalog-controls,
+html[data-platform="android"] .catalog-controls:has(.catalog-filter-drawer[open]) {
+  position: static;
+  z-index: auto;
+  top: auto;
+  margin: 0 0 16px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+html[data-platform="android"] .catalog-page .section-head {
+  align-items: center;
+  gap: 12px;
+}
+
+html[data-platform="android"] .catalog-page .section-head > div {
+  min-width: 0;
+}
+
+html[data-platform="android"] .catalog-page .section-head h2 {
+  margin-top: 6px;
+  font-size: clamp(34px, 9vw, 42px);
+  line-height: 1.02;
+}
+
+html[data-platform="android"] .catalog-page .section-head > .outline {
+  flex: 0 0 auto;
+  max-width: 116px;
+  min-height: 44px;
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+html[data-platform="android"] .catalog-filter-drawer {
+  margin: 14px 0 12px;
+}
+
+html[data-platform="android"] .catalog-filter-drawer > summary {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 10px 13px;
+  border: 1px solid #3a3045;
+  border-radius: 13px;
+  background: #15121a;
+  color: #f0eaf4;
+  list-style: none;
+}
+
+html[data-platform="android"] .catalog-filter-drawer > summary::-webkit-details-marker { display: none; }
+html[data-platform="android"] .catalog-filter-drawer > summary span { font-size: 14px; font-weight: 700; }
+html[data-platform="android"] .catalog-filter-drawer > summary b { color: #a99fb1; font-size: 10px; font-weight: 500; }
+html[data-platform="android"] .catalog-filter-drawer > summary i { color: var(--accent); font-style: normal; transition: rotate .18s ease; }
+html[data-platform="android"] .catalog-filter-drawer[open] > summary i { rotate: 180deg; }
+
+html[data-platform="android"] .catalog-filter-drawer > .filter-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  gap: 9px;
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid #322a39;
+  border-radius: 13px;
+  background: #100d14;
+}
+
+html[data-platform="android"] .catalog-filter-drawer .filter-panel > select {
+  grid-column: 1 / -1;
+}
+
+html[data-platform="android"] .catalog-filter-drawer .filter-panel label {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+  font-size: 10px;
+}
+
+html[data-platform="android"] .catalog-filter-drawer .filter-panel select,
+html[data-platform="android"] .catalog-filter-drawer .filter-panel input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1px solid #3b3344;
+  border-radius: 10px;
+  background: #211c27;
+  color: #f5f1f7;
+  font-size: 16px;
+}
+
+html[data-platform="android"] .catalog-filter-drawer .filter-panel > button {
+  min-height: 40px;
+  border: 1px solid #392f43;
+  border-radius: 10px;
+  background: #19151e;
+  font-size: 12px;
+}
+
+html[data-platform="android"] .catalog-filter-drawer .random-panel {
+  margin-top: 8px;
+}
+
+html[data-platform="android"] .catalog-page .genre-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 5px;
+  scrollbar-width: none;
+}
+
+html[data-platform="android"] .catalog-page .genre-row button { flex: 0 0 auto; }
+
+/* Compact external player toolbar -------------------------------------- */
+html[data-platform="android"] .watch-shell { padding-top: calc(var(--android-safe-top) + var(--floating-header-offset) + 18px); }
+html[data-platform="android"] .watch-heading { margin-bottom: 13px; }
+html[data-platform="android"] .season-tabs { margin-bottom: 10px; }
+html[data-platform="android"] .video-layout { --toolbar-control-size: 36px; }
+
+html[data-platform="android"] .video-layout > .player-toolbar,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only {
+  display: grid!important;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center!important;
+  gap: 7px!important;
+  min-height: 0;
+  padding: 8px!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar > .player-toolbar-controls,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only > .player-toolbar-controls {
+  display: grid!important;
+  grid-template-columns: minmax(0,1.2fr) 62px minmax(82px,.9fr)!important;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar .toolbar-select,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select {
+  position: relative;
+  display: block!important;
+  width: auto;
+  height: 36px;
+  min-width: 0;
+  min-height: 36px;
+  overflow: visible;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar .toolbar-select > span,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select > span,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select::before,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select::after {
+  display: none!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar .toolbar-select select,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select select {
+  position: static;
+  width: 100%;
+  height: 36px;
+  min-height: 36px;
+  padding: 5px 22px 5px 8px;
+  border: 1px solid #3b3344;
+  border-radius: 9px;
+  background: #211c27;
+  color: #f5f1f7;
+  font-size: 11px;
+  opacity: 1;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar .toolbar-dubbing-action { display: none; }
+
+html[data-platform="android"] .video-layout > .player-toolbar .toolbar-skip {
+  grid-column: 1 / -1;
+  min-height: 34px;
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar > .player-toolbar-actions {
+  align-items: center;
+  gap: 5px;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar .offline-download-menu summary,
+html[data-platform="android"] .video-layout > .player-toolbar .player-settings-trigger {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 10px;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar .offline-download-menu-content {
+  position: fixed!important;
+  z-index: 5100;
+  right: 10px;
+  bottom: calc(74px + var(--android-safe-bottom));
+  width: min(300px, calc(100vw - 20px));
+}
+
+/* Android always keeps the external controls below the picture. Saved
+   desktop side/top positions must never turn the phone toolbar into a tall,
+   mostly empty column. */
+html[data-platform="android"] .video-layout.toolbar-top,
+html[data-platform="android"] .video-layout.toolbar-bottom,
+html[data-platform="android"] .video-layout.toolbar-left,
+html[data-platform="android"] .video-layout.toolbar-right {
+  display: grid!important;
+  grid-template-columns: minmax(0,1fr)!important;
+  padding: 0!important;
+}
+
+html[data-platform="android"] .video-layout.toolbar-top > .player-frame,
+html[data-platform="android"] .video-layout.toolbar-bottom > .player-frame,
+html[data-platform="android"] .video-layout.toolbar-left > .player-frame,
+html[data-platform="android"] .video-layout.toolbar-right > .player-frame {
+  grid-row: 1;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar,
+html[data-platform="android"] .toolbar-left > .player-toolbar,
+html[data-platform="android"] .toolbar-right > .player-toolbar,
+html[data-platform="android"] .toolbar-left > .player-toolbar.is-icon-only,
+html[data-platform="android"] .toolbar-right > .player-toolbar.is-icon-only {
+  position: static!important;
+  inset: auto!important;
+  grid-row: 2;
+  width: 100%!important;
+  height: auto!important;
+  overflow: visible!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) {
+  display: grid!important;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  align-items: center!important;
+  gap: 7px!important;
+  padding: 8px!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) > .player-toolbar-controls,
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) > .player-toolbar-actions {
+  display: contents!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) .toolbar-select-dubbing {
+  grid-column: 1 / span 2;
+  grid-row: 1;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) .toolbar-select-episode {
+  grid-column: 3 / span 2;
+  grid-row: 1;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) .toolbar-select-source {
+  grid-column: 1 / span 2;
+  grid-row: 2;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) .toolbar-skip {
+  grid-column: 1 / -1;
+  min-height: 34px;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) .offline-download-controls {
+  position: static!important;
+  grid-column: 3!important;
+  grid-row: 2!important;
+  justify-self: end;
+  margin: 0!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar:not(.is-icon-only) .player-settings-trigger {
+  position: static!important;
+  grid-column: 4!important;
+  grid-row: 2!important;
+  justify-self: end;
+  margin: 0!important;
+}
+
+/* Compact really means one short row of five touch targets. The native
+   selects remain over their icons, so every target still opens immediately. */
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only {
+  display: grid!important;
+  grid-template-columns: repeat(5,minmax(0,1fr));
+  align-items: center!important;
+  gap: 6px!important;
+  min-height: 0!important;
+  padding: 6px!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only > .player-toolbar-controls,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only > .player-toolbar-actions {
+  display: contents!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select {
+  position: relative!important;
+  grid-row: 1;
+  width: 100%!important;
+  height: 40px!important;
+  min-height: 40px!important;
+  border: 1px solid #3b3344!important;
+  border-radius: 10px!important;
+  background: #211c27!important;
+  overflow: hidden!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select-dubbing { grid-column: 1; }
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select-episode { grid-column: 2; }
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select-source { grid-column: 3; }
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select::before {
+  position: absolute!important;
+  z-index: 1!important;
+  inset: 0!important;
+  display: grid!important;
+  width: auto!important;
+  height: auto!important;
+  place-items: center!important;
+  content: attr(data-icon)!important;
+  background: none!important;
+  color: #eee7f4!important;
+  -webkit-mask: none!important;
+  mask: none!important;
+  font-size: 17px!important;
+  pointer-events: none;
+  transform: none!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-select select {
+  position: absolute!important;
+  z-index: 2;
+  inset: 0!important;
+  width: 100%!important;
+  height: 100%!important;
+  opacity: 0!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .offline-download-controls {
+  position: static!important;
+  grid-column: 4!important;
+  grid-row: 1!important;
+  justify-self: stretch;
+  width: 100%!important;
+  min-width: 0!important;
+  margin: 0!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .offline-download-menu,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .offline-download-menu summary,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .player-settings-trigger {
+  width: 100%!important;
+  height: 40px!important;
+  min-height: 40px!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .player-settings-trigger {
+  position: static!important;
+  grid-column: 5!important;
+  grid-row: 1!important;
+  justify-self: stretch;
+  margin: 0!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-skip {
+  grid-row: 2;
+  min-height: 32px;
+  padding: 4px!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-skip-opening { grid-column: 1 / span 2; }
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-skip-ending { grid-column: 3 / span 3; }
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .player-toolbar-controls:has(.toolbar-skip-opening):not(:has(.toolbar-skip-ending)) .toolbar-skip-opening,
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .player-toolbar-controls:has(.toolbar-skip-ending):not(:has(.toolbar-skip-opening)) .toolbar-skip-ending {
+  grid-column: 1 / -1;
+}
+
+/* Android WebView can calculate wildly uneven tracks when grid items are
+   flattened through display: contents. Keep the two semantic groups as real
+   flex children: three equal selectors on the left, two fixed action buttons
+   on the right. This also gives long dubbing names no opportunity to widen a
+   compact target. */
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only {
+  display: flex!important;
+  flex-direction: row!important;
+  align-items: flex-start!important;
+  align-self: start!important;
+  height: fit-content!important;
+  min-height: 0!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only > .player-toolbar-controls {
+  display: grid!important;
+  grid-template-columns: repeat(3,minmax(0,1fr))!important;
+  flex: 1 1 auto;
+  gap: 6px!important;
+  min-width: 0;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only > .player-toolbar-actions {
+  position: static!important;
+  inset: auto!important;
+  display: grid!important;
+  grid-template-columns: repeat(2,40px)!important;
+  grid-template-rows: 40px!important;
+  grid-auto-flow: row!important;
+  flex: 0 0 86px;
+  align-self: start!important;
+  width: 86px!important;
+  height: 40px!important;
+  gap: 6px!important;
+  margin: 0!important;
+  min-width: 86px;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only > .player-toolbar-actions .offline-download-controls {
+  grid-column: 1!important;
+  grid-row: 1!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only > .player-toolbar-actions .player-settings-trigger {
+  grid-column: 2!important;
+  grid-row: 1!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .toolbar-skip {
+  grid-column: 1 / -1!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .player-toolbar-controls:has(.toolbar-skip-opening):has(.toolbar-skip-ending) .toolbar-skip-opening {
+  grid-column: 1!important;
+}
+
+html[data-platform="android"] .video-layout > .player-toolbar.is-icon-only .player-toolbar-controls:has(.toolbar-skip-opening):has(.toolbar-skip-ending) .toolbar-skip-ending {
+  grid-column: 2 / -1!important;
+}
+
+html[data-platform="android"] .player-settings-layer {
+  place-items: end center;
+  padding: 0;
+  background: #050408b8;
+  backdrop-filter: blur(5px);
+}
+
+html[data-platform="android"] .player-settings-dialog {
+  width: 100%;
+  max-height: 78dvh;
+  border-width: 1px 0 0;
+  border-radius: 20px 20px 0 0;
+}
+
+html[data-platform="android"] .player-settings-header {
+  min-height: 54px;
+  padding-inline: 16px 10px;
+}
+
+html[data-platform="android"] .player-settings-header button { width: 40px; height: 40px; }
+html[data-platform="android"] .player-settings-content { gap: 0; padding: 6px 14px calc(14px + var(--android-safe-bottom)); }
+
+html[data-platform="android"] .player-settings-content > .toggle-row {
+  min-height: 48px;
+  margin: 0;
+  padding: 8px 2px;
+  border-bottom: 1px solid #ffffff0d;
+}
+
+html[data-platform="android"] .player-settings-content > .toggle-row > span { font-size: 13px; }
+html[data-platform="android"] .player-settings-content > label:not(.toggle-row) { margin-top: 10px; }
+html[data-platform="android"] .player-settings-content > label select { min-height: 44px; font-size: 16px; }
+html[data-platform="android"] .player-settings-dubbing-actions { margin: 7px 0; }
+
+/* Compact AnimeSoul player --------------------------------------------- */
+html[data-platform="android"] .animesoul-player-top-navigation,
+html[data-platform="android"] .animesoul-player.is-local .animesoul-player-top-navigation {
+  top: 8px;
+  right: 48px;
+  left: 8px;
+  max-width: none;
+  gap: 6px;
+}
+
+html[data-platform="android"] .animesoul-player-context {
+  min-width: 0;
+  max-width: none;
+  padding: 7px 9px;
+  border-radius: 9px;
+}
+
+html[data-platform="android"] .animesoul-player-context-copy > span { display: none; }
+html[data-platform="android"] .animesoul-player-context-copy strong { font-size: 10px; }
+
+html[data-platform="android"] .animesoul-player-voice-pill {
+  min-width: 0;
+  max-width: 45%;
+  padding: 6px 8px;
+  border-radius: 9px;
+}
+
+html[data-platform="android"] .animesoul-player-voice-pill > span { display: none; }
+html[data-platform="android"] .animesoul-player-voice-pill select { font-size: 10px; }
+
+html[data-platform="android"] .animesoul-player-local-badge {
+  top: 8px;
+  right: 8px;
+  left: auto;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 10px;
+}
+
+html[data-platform="android"] .animesoul-player-local-badge span { display: none; }
+html[data-platform="android"] .animesoul-player-quick-picker,
+html[data-platform="android"] .animesoul-player.is-local .animesoul-player-quick-picker {
+  top: 54px;
+  left: 8px;
+  width: calc(100% - 16px);
+  padding: 8px;
+}
+
+html[data-platform="android"] .animesoul-player-controls { right: 7px; bottom: 5px; left: 7px; }
+html[data-platform="android"] .animesoul-player-control-row { gap: 0; }
+html[data-platform="android"] .animesoul-player-control-row button { min-width: 28px; height: 30px; padding: 0 4px; font-size: 13px; }
+html[data-platform="android"] .animesoul-player-control-row label { height: 30px; padding: 0 2px; }
+html[data-platform="android"] .animesoul-player-control-row select { max-width: 68px; font-size: 9px; }
+html[data-platform="android"] .animesoul-player-time { font-size: 9px; }
+html[data-platform="android"] .animesoul-player-center-play { width: 64px; height: 64px; font-size: 22px; }
+
+html[data-platform="android"] .animesoul-player-settings-layer {
+  position: fixed;
+  z-index: 5200;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  background: #050408b8;
+  backdrop-filter: blur(5px);
+}
+
+html[data-platform="android"] .animesoul-player-settings-layer > .animesoul-player-settings {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-height: 76dvh;
+  border-width: 1px 0 0;
+  border-radius: 20px 20px 0 0;
+  background: #100d14fa;
+}
+
+html[data-platform="android"] .animesoul-player-settings > header { min-height: 54px; padding: 8px 12px 8px 16px; }
+html[data-platform="android"] .animesoul-player-settings > header button { width: 40px; height: 40px; }
+
+html[data-platform="android"] .animesoul-player-settings-content {
+  height: auto;
+  max-height: calc(76dvh - 54px);
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  padding: 12px 14px calc(14px + var(--android-safe-bottom));
+}
+
+html[data-platform="android"] .animesoul-player-settings-content > label:first-child,
+html[data-platform="android"] .animesoul-player-dubbing-actions,
+html[data-platform="android"] .animesoul-player-duration-warning,
+html[data-platform="android"] .animesoul-player-settings-content > label:nth-of-type(4),
+html[data-platform="android"] .animesoul-player-stream-state,
+html[data-platform="android"] .animesoul-player-toolbar-toggle,
+html[data-platform="android"] .animesoul-player-downloads,
+html[data-platform="android"] .animesoul-player-kodik-fallback {
+  grid-column: 1 / -1;
+}
+
+html[data-platform="android"] .animesoul-player-settings-content select { height: 44px; font-size: 16px; }
+
+html[data-platform="android"] .offline-download-notice {
+  bottom: calc(76px + var(--android-safe-bottom));
+  width: calc(100vw - 24px);
+}
+
+/* Credentials cards stay single-column even on wider Android phones. */
+html[data-platform="android"] .settings-item.credentials-card { grid-template-columns: 1fr; }
+html[data-platform="android"] .credentials-card-controls,
+html[data-platform="android"] .credentials-kodik-grid,
+html[data-platform="android"] .credentials-google-grid { grid-template-columns: 1fr; }
+html[data-platform="android"] .credentials-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+html[data-platform="android"] .credentials-feedback { grid-column: 1; }
+
+@media(max-width:430px) {
+  html[data-platform="android"] .app > header .brand {
+    width: 34px;
+    overflow: hidden;
+    color: transparent;
+  }
+
+  html[data-platform="android"] .app > header .brand img {
+    flex: 0 0 32px;
+  }
+}

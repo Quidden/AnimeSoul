@@ -12,18 +12,49 @@ import json
 from typing import Any, Literal
 
 
-def _document_timestamp(document: dict[str, Any]) -> float:
-    """Return a comparable timestamp for last-writer-wins collection fields."""
+FieldSource = Literal["local", "cloud"] | None
 
-    value = document.get("updatedAt")
-    if isinstance(value, (int, float)):
-        return float(value)
+
+def _normalized_timestamp(value: Any) -> float:
+    """Normalize JS milliseconds and Unix seconds to one comparable scale."""
+
     if isinstance(value, str) and value:
         try:
             return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
         except ValueError:
             return 0.0
-    return 0.0
+    try:
+        timestamp = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return timestamp / 1000 if timestamp > 10_000_000_000 else timestamp
+
+
+def _document_timestamp(document: dict[str, Any]) -> float:
+    """Return a comparable timestamp for last-writer-wins collection fields."""
+
+    return _normalized_timestamp(document.get("updatedAt"))
+
+
+def _field_updated_at(
+    snapshot: dict[str, Any], field: str, fallback: float = 0.0
+) -> float:
+    revisions = _as_dict(snapshot.get("fieldUpdatedAt"))
+    return _normalized_timestamp(revisions.get(field)) or fallback
+
+
+def _field_source(
+    field: str,
+    local_snapshot: dict[str, Any],
+    cloud_snapshot: dict[str, Any],
+    local_fallback: float = 0.0,
+    cloud_fallback: float = 0.0,
+) -> FieldSource:
+    local_time = _field_updated_at(local_snapshot, field, local_fallback)
+    cloud_time = _field_updated_at(cloud_snapshot, field, cloud_fallback)
+    if not local_time and not cloud_time:
+        return None
+    return "local" if local_time >= cloud_time else "cloud"
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -50,6 +81,13 @@ def _unique(values: list[Any]) -> list[Any]:
 def _episode_updated_at(value: dict[str, Any]) -> float:
     try:
         return float(value.get("updatedAt", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _progress_reset_at(value: dict[str, Any]) -> float:
+    try:
+        return float(value.get("resetAt", 0) or 0)
     except (TypeError, ValueError):
         return 0.0
 
@@ -136,14 +174,10 @@ def merge_storage_documents(
         if isinstance(profile, dict) and profile.get("id")
     }
 
-    # Profile membership follows the latest complete document.  Otherwise a
-    # profile deleted on one device is resurrected by an older cloud copy.
-    if anime_only or collection_source is None:
-        profile_ids = list(local_by_id)
-        profile_ids.extend(pid for pid in cloud_by_id if pid not in local_by_id)
-    else:
-        source = local_by_id if collection_source == "local" else cloud_by_id
-        profile_ids = list(source)
+    # Profiles have no deletion UI/tombstones yet. Union is therefore safer:
+    # merely opening a stale device must never delete a newer cloud profile.
+    profile_ids = list(local_by_id)
+    profile_ids.extend(pid for pid in cloud_by_id if pid not in local_by_id)
 
     merged_profiles: list[dict[str, Any]] = []
     for profile_id in profile_ids:
@@ -157,6 +191,8 @@ def merge_storage_documents(
                     prefer_watched=prefer_watched,
                     anime_only=anime_only,
                     collection_source=collection_source,
+                    local_document_time=local_time,
+                    cloud_document_time=cloud_time,
                 )
             )
         elif local_profile:
@@ -179,6 +215,8 @@ def merge_profile(
     prefer_watched: bool = True,
     anime_only: bool = False,
     collection_source: Literal["local", "cloud"] | None = None,
+    local_document_time: float = 0.0,
+    cloud_document_time: float = 0.0,
 ) -> dict[str, Any]:
     """Merge two profiles sharing the same ID."""
 
@@ -199,6 +237,8 @@ def merge_profile(
         prefer_watched=prefer_watched,
         anime_only=anime_only,
         collection_source=collection_source,
+        local_document_time=local_document_time,
+        cloud_document_time=cloud_document_time,
     )
     return merged_profile
 
@@ -209,6 +249,8 @@ def merge_snapshot(
     prefer_watched: bool = True,
     anime_only: bool = False,
     collection_source: Literal["local", "cloud"] | None = None,
+    local_document_time: float = 0.0,
+    cloud_document_time: float = 0.0,
 ) -> dict[str, Any]:
     """Merge favorites, folders, tracking, progress, ratings, and profile metadata."""
 
@@ -223,19 +265,73 @@ def merge_snapshot(
         if "theme" in local_snapshot:
             merged["theme"] = local_snapshot["theme"]
 
+    synced_fields = (
+        "favorites",
+        "folders",
+        "progress",
+        "ratings",
+        "tracked",
+        "theme",
+        "toolbar",
+        "playerPrefs",
+        "historyClearedAt",
+        "historyEnabled",
+        "libraryExpanded",
+        "watchingExpanded",
+        "historyExpanded",
+        "watchingHidden",
+    )
+    field_sources = {
+        field: _field_source(
+            field,
+            local_snapshot,
+            cloud_snapshot,
+            local_document_time,
+            cloud_document_time,
+        )
+        for field in synced_fields
+    }
+    merged["fieldUpdatedAt"] = {
+        field: max(
+            _field_updated_at(local_snapshot, field, local_document_time),
+            _field_updated_at(cloud_snapshot, field, cloud_document_time),
+        )
+        for field in synced_fields
+    }
+
+    # Settings follow their own revisions. A progress change on an old device
+    # must not roll back a newer theme or player preference from the cloud.
+    if not anime_only:
+        for field in (
+            "theme",
+            "toolbar",
+            "playerPrefs",
+            "historyClearedAt",
+            "historyEnabled",
+            "libraryExpanded",
+            "watchingExpanded",
+            "historyExpanded",
+        ):
+            source = field_sources[field]
+            source_snapshot = cloud_snapshot if source == "cloud" else local_snapshot
+            if source and field in source_snapshot:
+                merged[field] = source_snapshot[field]
+
     local_favorites = _as_list(local_snapshot.get("favorites"))
     cloud_favorites = _as_list(cloud_snapshot.get("favorites"))
-    if collection_source == "local":
+    favorites_source = field_sources["favorites"]
+    if favorites_source == "local":
         merged["favorites"] = local_favorites
-    elif collection_source == "cloud":
+    elif favorites_source == "cloud":
         merged["favorites"] = cloud_favorites
     else:
         merged["favorites"] = sorted(set(local_favorites) | set(cloud_favorites))
 
     local_folders = _as_list(local_snapshot.get("folders"))
     cloud_folders = _as_list(cloud_snapshot.get("folders"))
-    source_folders = cloud_folders if collection_source == "cloud" else local_folders
-    other_folders = local_folders if collection_source == "cloud" else cloud_folders
+    folders_source = field_sources["folders"]
+    source_folders = cloud_folders if folders_source == "cloud" else local_folders
+    other_folders = local_folders if folders_source == "cloud" else cloud_folders
     other_by_id = {
         str(folder.get("id")): folder
         for folder in other_folders
@@ -249,7 +345,7 @@ def merge_snapshot(
         if folder_id in other_by_id:
             other_folder = other_by_id[folder_id]
             merged_folder = dict(source_folder)
-            if collection_source is None:
+            if folders_source is None:
                 merged_folder["animeIds"] = sorted(
                     set(_as_list(source_folder.get("animeIds")))
                     | set(_as_list(other_folder.get("animeIds")))
@@ -267,7 +363,7 @@ def merge_snapshot(
     }
     for other_folder in other_folders:
         if (
-            collection_source is None
+            folders_source is None
             and isinstance(other_folder, dict)
             and str(other_folder.get("id")) not in source_folder_ids
         ):
@@ -278,8 +374,9 @@ def merge_snapshot(
     # undone by a stale cloud copy.  Baselines are still merged conservatively.
     local_tracked = _as_list(local_snapshot.get("tracked"))
     cloud_tracked = _as_list(cloud_snapshot.get("tracked"))
-    source_tracked = cloud_tracked if collection_source == "cloud" else local_tracked
-    other_tracked = local_tracked if collection_source == "cloud" else cloud_tracked
+    tracked_source = field_sources["tracked"]
+    source_tracked = cloud_tracked if tracked_source == "cloud" else local_tracked
+    other_tracked = local_tracked if tracked_source == "cloud" else cloud_tracked
     other_tracked_by_id = {
         int(tracker["animeId"]): tracker
         for tracker in other_tracked
@@ -315,7 +412,7 @@ def merge_snapshot(
             int(other_tracker.get("knownEpisodes", 0) or 0),
             len(known_keys),
         )
-        if collection_source is None:
+        if tracked_source is None:
             item["dubs"] = sorted(
                 set(_as_list(source_tracker.get("dubs")))
                 | set(_as_list(other_tracker.get("dubs")))
@@ -328,7 +425,7 @@ def merge_snapshot(
             pending = _as_list(source_tracker.get("pendingEpisodeKeys"))
         item["pendingEpisodeKeys"] = pending
         item["newEpisodes"] = len(pending)
-        if collection_source is None:
+        if tracked_source is None:
             pending_other_dub = sorted(
                 set(_as_list(source_tracker.get("pendingOtherDubEpisodeKeys")))
                 | set(_as_list(other_tracker.get("pendingOtherDubEpisodeKeys")))
@@ -346,7 +443,7 @@ def merge_snapshot(
             )
         merged_tracked.append(item)
 
-    if collection_source is None:
+    if tracked_source is None:
         for tracker in other_tracked:
             if (
                 isinstance(tracker, dict)
@@ -362,15 +459,26 @@ def merge_snapshot(
     for anime_id in set(local_progress) | set(cloud_progress):
         local_item = _as_dict(local_progress.get(anime_id))
         cloud_item = _as_dict(cloud_progress.get(anime_id))
-        local_episodes = _as_dict(local_item.get("episodes"))
-        cloud_episodes = _as_dict(cloud_item.get("episodes"))
+        reset_at = max(_progress_reset_at(local_item), _progress_reset_at(cloud_item))
+        local_episodes = {
+            key: value
+            for key, value in _as_dict(local_item.get("episodes")).items()
+            if isinstance(value, dict)
+            and (not reset_at or _episode_updated_at(value) > reset_at)
+        }
+        cloud_episodes = {
+            key: value
+            for key, value in _as_dict(cloud_item.get("episodes")).items()
+            if isinstance(value, dict)
+            and (not reset_at or _episode_updated_at(value) > reset_at)
+        }
         local_latest = max(
             (
                 _episode_updated_at(value)
                 for value in local_episodes.values()
                 if isinstance(value, dict)
             ),
-            default=0,
+            default=_progress_reset_at(local_item),
         )
         cloud_latest = max(
             (
@@ -378,7 +486,7 @@ def merge_snapshot(
                 for value in cloud_episodes.values()
                 if isinstance(value, dict)
             ),
-            default=0,
+            default=_progress_reset_at(cloud_item),
         )
         merged_item = (
             {**cloud_item, **local_item}
@@ -393,6 +501,8 @@ def merge_snapshot(
             )
             for key in set(local_episodes) | set(cloud_episodes)
         }
+        if reset_at:
+            merged_item["resetAt"] = reset_at
         merged_progress[anime_id] = merged_item
     merged["progress"] = merged_progress
 
@@ -400,9 +510,10 @@ def merge_snapshot(
     # during an unprioritized merge, keep the newest edit for every anime.
     local_ratings = _as_dict(local_snapshot.get("ratings"))
     cloud_ratings = _as_dict(cloud_snapshot.get("ratings"))
-    if collection_source == "local":
+    ratings_source = field_sources["ratings"]
+    if ratings_source == "local":
         merged["ratings"] = local_ratings
-    elif collection_source == "cloud":
+    elif ratings_source == "cloud":
         merged["ratings"] = cloud_ratings
     else:
         merged_ratings: dict[str, Any] = {}
@@ -439,9 +550,10 @@ def merge_snapshot(
 
     local_hidden = _as_list(local_snapshot.get("watchingHidden"))
     cloud_hidden = _as_list(cloud_snapshot.get("watchingHidden"))
-    if collection_source == "local":
+    hidden_source = field_sources["watchingHidden"]
+    if hidden_source == "local":
         merged["watchingHidden"] = local_hidden
-    elif collection_source == "cloud":
+    elif hidden_source == "cloud":
         merged["watchingHidden"] = cloud_hidden
     else:
         merged["watchingHidden"] = sorted(set(local_hidden) | set(cloud_hidden))

@@ -19,6 +19,7 @@ from .gdrive_merge import (
     merge_snapshot,
     merge_storage_documents,
 )
+from .storage import validate_storage_document
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,12 @@ class GoogleDriveService:
         self.data_dir = data_dir
         self.tokens_file = data_dir / "gdrive-tokens.json"
         self.credentials_file = data_dir / "gdrive-credentials.json"
+        self.pending_oauth_file = data_dir / "gdrive-pending-oauth.json"
         self._lock = asyncio.Lock()
         self._pending_document: dict[str, Any] | None = None
         self._sync_task: asyncio.Task[None] | None = None
         self._pending_mode: Literal["visible", "appdata"] = "visible"
+        self._pending_prefer_watched = True
         self._local_reader: Callable[[], Awaitable[dict[str, Any] | None]] | None = None
         self._local_writer: Callable[[dict[str, Any]], Awaitable[None]] | None = None
         stored_tokens = self.load_tokens() or {}
@@ -163,11 +166,36 @@ class GoogleDriveService:
         self.save_tokens(tokens)
 
     def disconnect(self) -> None:
+        self.clear_pending_oauth()
         if self.tokens_file.exists():
             try:
                 self.tokens_file.unlink()
             except OSError:
                 pass
+
+    async def revoke_and_disconnect(self) -> bool:
+        """Best-effort revoke at Google, then always remove local credentials."""
+
+        tokens = self.load_tokens() or {}
+        token = tokens.get("refresh_token") or tokens.get("access_token")
+        revoked = False
+        if token:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.post(
+                        "https://oauth2.googleapis.com/revoke",
+                        data={"token": str(token)},
+                        headers={"content-type": "application/x-www-form-urlencoded"},
+                    )
+                revoked = response.is_success
+                if not revoked:
+                    logger.warning(
+                        "Google token revoke returned HTTP %s", response.status_code
+                    )
+            except Exception as error:
+                logger.warning("Google token revoke failed: %s", error)
+        self.disconnect()
+        return revoked
 
     def get_auth_url(self, redirect_uri: str) -> tuple[str, str]:
         from urllib.parse import urlencode
@@ -189,6 +217,40 @@ class GoogleDriveService:
     def consume_oauth_state(self, state: str) -> bool:
         expires_at = self._oauth_states.pop(state, 0)
         return bool(expires_at and expires_at >= time.time())
+
+    def save_pending_oauth(self, code: str, redirect_uri: str) -> None:
+        """Persist the callback until Android brings AnimeSoul to foreground."""
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "expires_at": time.time() + 540,
+        }
+        temporary = self.pending_oauth_file.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload), encoding="utf-8")
+        temporary.replace(self.pending_oauth_file)
+
+    def load_pending_oauth(self) -> dict[str, Any] | None:
+        if not self.pending_oauth_file.exists():
+            return None
+        try:
+            payload = json.loads(self.pending_oauth_file.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or float(payload.get("expires_at") or 0) < time.time():
+                self.clear_pending_oauth()
+                return None
+            if not payload.get("code") or not payload.get("redirect_uri"):
+                self.clear_pending_oauth()
+                return None
+            return payload
+        except Exception:
+            self.clear_pending_oauth()
+            return None
+
+    def clear_pending_oauth(self) -> None:
+        try:
+            self.pending_oauth_file.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     async def exchange_code(self, code: str, redirect_uri: str) -> dict[str, Any]:
         client_id, client_secret = self.get_client_credentials()
@@ -364,6 +426,11 @@ class GoogleDriveService:
             )
             file_res.raise_for_status()
             doc = file_res.json()
+            if not validate_storage_document(doc):
+                raise ValueError(
+                    "Облачное сохранение повреждено или имеет неизвестный формат. "
+                    "Локальные данные не изменены."
+                )
             return doc, file_id
 
     async def write_cloud_storage(
@@ -442,6 +509,7 @@ class GoogleDriveService:
         document: dict[str, Any],
         mode: Literal["visible", "appdata"] = "visible",
         *,
+        prefer_watched: bool = True,
         local_reader: Callable[[], Awaitable[dict[str, Any] | None]] | None = None,
         local_writer: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
@@ -449,6 +517,7 @@ class GoogleDriveService:
 
         self._pending_document = deepcopy(document)
         self._pending_mode = mode
+        self._pending_prefer_watched = prefer_watched
         self._local_reader = local_reader
         self._local_writer = local_writer
         self.mark_sync_started()
@@ -461,6 +530,7 @@ class GoogleDriveService:
                 pending = self._pending_document
                 self._pending_document = None
                 pending_mode = self._pending_mode
+                pending_prefer_watched = self._pending_prefer_watched
                 local_reader = self._local_reader
                 local_writer = self._local_writer
                 try:
@@ -471,7 +541,11 @@ class GoogleDriveService:
                             pending = latest_local
 
                     cloud_document, _ = await self.read_cloud_storage(mode=pending_mode)
-                    merged = merge_storage_documents(pending, cloud_document or {})
+                    merged = merge_storage_documents(
+                        pending,
+                        cloud_document or {},
+                        prefer_watched=pending_prefer_watched,
+                    )
                     await self.write_cloud_storage(merged, mode=pending_mode)
 
                     # Do not overwrite a save that arrived while the network request

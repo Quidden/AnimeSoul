@@ -37,7 +37,12 @@ function WatchingSection({ model, actions }: HomePageProps) {
               actions={actions}
             />
           ))}
-          {!model.watchingItems.length && (
+          {!model.storageReady && (
+            <div className="empty watching-empty" role="status" aria-live="polite">
+              Загружаем сохранённый прогресс…
+            </div>
+          )}
+          {model.storageReady && !model.watchingItems.length && (
             <div className="empty watching-empty">
               Здесь появятся аниме, просмотр которых ты начал. Пока можно выбрать новое в каталоге.
             </div>
@@ -135,7 +140,12 @@ function HistorySection({ model, actions }: HomePageProps) {
                 actions={actions}
               />
             ))}
-            {!model.historyItems.length && (
+            {!model.storageReady && (
+              <div className="empty history-empty" role="status" aria-live="polite">
+                Загружаем историю просмотра…
+              </div>
+            )}
+            {model.storageReady && !model.historyItems.length && (
               <div className="empty history-empty">
                 {model.historyEnabled
                   ? "История очищена. Новые просмотры появятся здесь автоматически."
@@ -216,7 +226,7 @@ function CollapseShell({
 }) {
   return (
     <div className={`collapse-shell ${expanded ? "expanded" : ""}`}>
-      <div className="collapse-inner">{children}</div>
+      <div className="collapse-inner" aria-hidden={!expanded} inert={!expanded}>{children}</div>
     </div>
   );
 }

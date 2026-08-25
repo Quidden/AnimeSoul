@@ -75,6 +75,7 @@ export function WatchInfo({
       totalEpisodes,
       totalDuration,
       episodes: {},
+      resetAt: Date.now(),
     });
   };
 

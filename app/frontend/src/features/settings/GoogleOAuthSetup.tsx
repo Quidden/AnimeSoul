@@ -7,6 +7,9 @@ type Props = {
   clientSecret: string;
   setClientSecret: (value: string) => void;
   onSave: () => void;
+  saving?: boolean;
+  message?: string;
+  messageTone?: "success" | "error";
 };
 
 /**
@@ -23,6 +26,9 @@ export function GoogleOAuthSetup({
   clientSecret,
   setClientSecret,
   onSave,
+  saving = false,
+  message = "",
+  messageTone = "success",
 }: Props) {
   return (
     <details
@@ -114,7 +120,14 @@ export function GoogleOAuthSetup({
                 : "Хранится только локально и не добавляется в Git."}
             </small>
           </label>
-          <button className="cloud-oauth-save" onClick={onSave}>Сохранить OAuth-ключи</button>
+          <button className="cloud-oauth-save" disabled={saving} onClick={onSave}>
+            {saving ? "Проверяем…" : "Сохранить OAuth-ключи"}
+          </button>
+          {message && (
+            <p className={`credentials-feedback ${messageTone}`} role="status" aria-live="polite">
+              {message}
+            </p>
+          )}
         </div>
 
         <p className="cloud-oauth-warning">

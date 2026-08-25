@@ -9,6 +9,7 @@ import { readLocal as read, writeLocal as write } from "../lib/storage";
 import { emitAppEvent, listenAppEvent } from "../lib/events";
 import { Toggle } from "./Toggle";
 import { DebugPanel } from "./DebugPanel";
+import { ChangelogPanel } from "./ChangelogModal";
 import { Setting, SettingsSearchContext } from "../features/settings/Setting";
 import {
   matchesSettingsQuery,
@@ -22,6 +23,9 @@ import { GoogleDriveInitialSyncModal } from "../features/settings/GoogleDriveIni
 import { AppearanceSettings } from "../features/settings/AppearanceSettings";
 import { ProfileSettings } from "../features/settings/ProfileSettings";
 import { OfflineSettings } from "../features/settings/OfflineSettings";
+import { CredentialsSettings } from "../features/settings/CredentialsSettings";
+import { IS_ANDROID_APP } from "../lib/platform";
+import { useModalAccessibility } from "../lib/modalAccessibility";
 
 type Props = {
   theme: Theme;
@@ -42,8 +46,13 @@ export function SettingsCenter(props: Props) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>("watching");
   const [searchQuery, setSearchQuery] = useState("");
+  const [globalSearchTarget, setGlobalSearchTarget] = useState("");
   const [toolbar, setToolbarState] = useState<ToolbarPosition>(read(K.toolbar, "bottom"));
   const modalRef = useRef<HTMLElement>(null);
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const settingsTabs = IS_ANDROID_APP
+    ? SETTINGS_TABS.filter(tab => tab.id !== "party")
+    : SETTINGS_TABS;
 
   const googleDrive = useGoogleDriveSettings({ onStorageReload: props.onStorageReload });
   const {
@@ -54,11 +63,13 @@ export function SettingsCenter(props: Props) {
     syncNow: handleSyncNow,
   } = googleDrive;
 
+  useModalAccessibility(open, () => setOpen(false), modalRef);
+
   useEffect(() => {
     const query = searchQuery.trim();
     if (!query) return;
 
-    const matchingTab = SETTINGS_TABS.find((tab) => {
+    const matchingTab = settingsTabs.find((tab) => {
       const searchableText = `${tab.label} ${tab.description} ${SETTINGS_SEARCH_TERMS[tab.id]}`;
       return matchesSettingsQuery(searchableText, query);
     });
@@ -77,6 +88,55 @@ export function SettingsCenter(props: Props) {
     return listenAppEvent("open-gdrive-choice", handleChoiceEvent);
   }, []);
 
+  useEffect(() => listenAppEvent("open-settings", ({ tab, targetTitle }) => {
+    if (IS_ANDROID_APP && tab === "party") return;
+    setActiveTab(tab);
+    setSearchQuery("");
+    setGlobalSearchTarget(targetTitle ?? "");
+    setOpen(true);
+  }), []);
+
+  useEffect(() => listenAppEvent("close-settings", () => setOpen(false)), []);
+
+  useEffect(() => {
+    if (!open || !globalSearchTarget) return;
+
+    let highlighted: HTMLElement | null = null;
+    let clearTimer = 0;
+    const frame = window.requestAnimationFrame(() => {
+      const modal = modalRef.current;
+      if (!modal) return;
+      const target = globalSearchTarget.toLocaleLowerCase("ru");
+      const candidates = modal.querySelectorAll<HTMLElement>(
+        ".settings-item, .cloud-settings-card, .cloud-settings-field, .cloud-settings-details, .settings-group-title, .debug-privacy",
+      );
+      highlighted = Array.from(candidates).find((element) => (
+        element.textContent?.toLocaleLowerCase("ru").includes(target)
+      )) ?? null;
+      if (!highlighted) {
+        setGlobalSearchTarget("");
+        return;
+      }
+
+      highlighted.dataset.globalSearchTarget = "true";
+      highlighted.scrollIntoView({ block: "center", behavior: "smooth" });
+      clearTimer = window.setTimeout(() => {
+        highlighted?.removeAttribute("data-global-search-target");
+        setGlobalSearchTarget("");
+      }, 2_400);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (clearTimer) window.clearTimeout(clearTimer);
+      highlighted?.removeAttribute("data-global-search-target");
+    };
+  }, [activeTab, globalSearchTarget, open]);
+
+  useEffect(() => {
+    if (!open && globalSearchTarget) setGlobalSearchTarget("");
+  }, [globalSearchTarget, open]);
+
   useEffect(() => {
     if (!open) return;
     loadGDriveStatus();
@@ -90,19 +150,37 @@ export function SettingsCenter(props: Props) {
     };
 
     window.addEventListener("message", handleMessage);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+    const handleOAuthReturn = () => void loadGDriveStatus();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void loadGDriveStatus();
     };
-    window.addEventListener("keydown", close);
+    window.addEventListener("animesoul-oauth-return", handleOAuthReturn);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleOAuthReturn);
     return () => {
       window.clearInterval(statusTimer);
       window.removeEventListener("message", handleMessage);
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", close);
+      window.removeEventListener("animesoul-oauth-return", handleOAuthReturn);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleOAuthReturn);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !IS_ANDROID_APP) return;
+    const tabList = tabListRef.current;
+    const activeButton = tabList?.querySelector<HTMLButtonElement>('button[aria-selected="true"]');
+    if (!tabList || !activeButton) return;
+    const buttonLeft = activeButton.offsetLeft;
+    const buttonRight = buttonLeft + activeButton.offsetWidth;
+    const visibleLeft = tabList.scrollLeft;
+    const visibleRight = visibleLeft + tabList.clientWidth;
+    if (buttonLeft < visibleLeft) {
+      tabList.scrollTo({ left: Math.max(0, buttonLeft - 10), behavior: "auto" });
+    } else if (buttonRight > visibleRight) {
+      tabList.scrollTo({ left: buttonRight - tabList.clientWidth + 10, behavior: "auto" });
+    }
+  }, [activeTab, open]);
 
   const setPrefs = (partial: Partial<PlayerPrefs>) => {
     const next = { ...DEFAULT_PLAYER_PREFS, ...props.playerPrefs, ...partial };
@@ -138,9 +216,13 @@ export function SettingsCenter(props: Props) {
   return (
     <>
       <button
+        type="button"
         className="settings-center-trigger"
         title="Открыть все настройки AnimeSoul"
-        onClick={() => setOpen(true)}
+        aria-label="Открыть настройки AnimeSoul"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
       >
         ⚙
       </button>
@@ -169,15 +251,21 @@ export function SettingsCenter(props: Props) {
               role="dialog"
               aria-modal="true"
               aria-label="Настройки AnimeSoul"
+              tabIndex={-1}
             >
               <header>
                 <div>
                   <span>ЦЕНТР УПРАВЛЕНИЯ</span>
-                  <h2>Настройки AnimeSoul</h2>
+                  <h2>{IS_ANDROID_APP ? "Настройки" : "Настройки AnimeSoul"}</h2>
                   <p>Все параметры сохраняются в активном профиле автоматически.</p>
                 </div>
                 <div className="settings-header-actions">
-                  <button className="settings-reset" onClick={resetSettings}>
+                  <button
+                    className="settings-reset"
+                    onClick={resetSettings}
+                    aria-label="Сбросить настройки"
+                    title="Сбросить настройки"
+                  >
                     ↺ Сбросить
                   </button>
                   <button onClick={() => setOpen(false)} aria-label="Закрыть">
@@ -201,8 +289,8 @@ export function SettingsCenter(props: Props) {
                       </button>
                     )}
                   </label>
-                  <div className="settings-tab-list" role="tablist">
-                    {SETTINGS_TABS.map((tab) => (
+                  <div ref={tabListRef} className="settings-tab-list" role="tablist">
+                    {settingsTabs.map((tab) => (
                       <button
                         key={tab.id}
                         type="button"
@@ -223,10 +311,10 @@ export function SettingsCenter(props: Props) {
                 <main className="settings-workspace">
                   <div className="settings-panel-heading">
                     <div>
-                      <span>{SETTINGS_TABS.find((tab) => tab.id === activeTab)?.icon}</span>
+                      <span>{settingsTabs.find((tab) => tab.id === activeTab)?.icon}</span>
                       <div>
-                        <h3>{SETTINGS_TABS.find((tab) => tab.id === activeTab)?.label}</h3>
-                        <p>{SETTINGS_TABS.find((tab) => tab.id === activeTab)?.description}</p>
+                        <h3>{settingsTabs.find((tab) => tab.id === activeTab)?.label}</h3>
+                        <p>{settingsTabs.find((tab) => tab.id === activeTab)?.description}</p>
                       </div>
                     </div>
                     <small>{searchQuery ? `Поиск: «${searchQuery}»` : "Изменения сохраняются автоматически"}</small>
@@ -419,11 +507,13 @@ export function SettingsCenter(props: Props) {
                   onImport={props.onImport}
                 />
 
+                <CredentialsSettings googleDrive={googleDrive} />
+
                 <OfflineSettings />
 
                 <CloudSettings state={googleDrive} />
 
-                <section className="settings-group" data-settings-tab="party">
+                {!IS_ANDROID_APP && <section className="settings-group" data-settings-tab="party">
                   <div className="settings-group-title">
                     <b>Совместный просмотр</b>
                     <span>Комнаты через Hamachi, Tailscale или домашнюю сеть</span>
@@ -722,14 +812,21 @@ export function SettingsCenter(props: Props) {
                       </section>
                     </div>
                   </details>
-                </section>
-                <section className="settings-group settings-debug-group" data-settings-tab="debug">
+                </section>}
+                {activeTab === "changelog" && <section className="settings-group settings-changelog-group" data-settings-tab="changelog">
+                  <div className="settings-group-title">
+                    <b>История изменений</b>
+                    <span>Все релизы AnimeSoul, новые возможности и исправленные проблемы</span>
+                  </div>
+                  <ChangelogPanel />
+                </section>}
+                {activeTab === "debug" && <section className="settings-group settings-debug-group" data-settings-tab="debug">
                   <div className="settings-group-title">
                     <b>Журнал отладки</b>
                     <span>Все важные действия, статусы и ошибки текущего устройства</span>
                   </div>
                   <DebugPanel />
-                </section>
+                </section>}
                   </div>
                   </SettingsSearchContext.Provider>
                 </main>
@@ -743,7 +840,7 @@ export function SettingsCenter(props: Props) {
         open={initialChoiceModal}
         syncing={syncing}
         onClose={() => setInitialChoiceModal(false)}
-        onSync={handleSyncNow}
+        onSync={(mode) => void handleSyncNow(mode, true)}
       />
     </>
   );

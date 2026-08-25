@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
 from typing import Any, Literal
+import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from ..config import settings
 from ..services.gdrive import get_gdrive_service, merge_storage_documents
-from ..services.storage import JsonStorage
+from ..services.storage import JsonStorage, validate_storage_document
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/gdrive", tags=["Google Drive Sync"])
 
 gdrive_service = get_gdrive_service(settings.data_dir)
 local_storage = JsonStorage(settings.data_dir)
+oauth_completion_lock = asyncio.Lock()
 
 
 class CredentialsRequest(BaseModel):
@@ -30,6 +32,7 @@ class SyncRequest(BaseModel):
     mode: Literal["auto", "local", "cloud", "merge", "anime_only"] = "auto"
     prefer_watched: bool = True
     folder_mode: Literal["visible", "appdata"] = "visible"
+    resolve_initial_choice: bool = False
 
 
 @router.get("/status")
@@ -44,6 +47,7 @@ async def get_status() -> dict[str, Any]:
 
     return {
         "connected": has_tokens,
+        "oauth_pending": gdrive_service.load_pending_oauth() is not None,
         "user_email": tokens.get("user_email", "") if has_tokens else "",
         "user_name": tokens.get("user_name", "") if has_tokens else "",
         "has_credentials": bool(client_id),
@@ -52,6 +56,20 @@ async def get_status() -> dict[str, Any]:
         "choice_pending": choice_pending,
         **gdrive_service.sync_status(),
     }
+
+
+@router.get("/network-check")
+async def network_check() -> dict[str, Any]:
+    """Check the Google OAuth host without sending credentials or changing OAuth state."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+            response = await client.get("https://oauth2.googleapis.com/")
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Google OAuth недоступен: {error}",
+        ) from error
+    return {"reachable": True, "status_code": response.status_code}
 
 
 @router.post("/credentials")
@@ -89,14 +107,16 @@ async def oauth2callback(request: Request, code: str = Query(...), state: str = 
     try:
         if not gdrive_service.consume_oauth_state(state):
             raise ValueError("OAuth session expired or has an invalid state. Start connection again.")
-        tokens = await gdrive_service.exchange_code(code, redirect_uri)
-        email = tokens.get("user_email", "Google Account")
+        # Android suspends Chaquopy networking while Chrome owns the screen.
+        # Store the one-time code now and exchange it after AnimeSoul returns
+        # to the foreground. This callback therefore performs no remote I/O.
+        gdrive_service.save_pending_oauth(code, redirect_uri)
         return f"""
         <!DOCTYPE html>
         <html lang="ru">
         <head>
             <meta charset="utf-8">
-            <title>AnimeSoul — Google Drive подключен</title>
+            <title>AnimeSoul — завершаем подключение</title>
             <style>
                 body {{
                     font-family: system-ui, -apple-system, sans-serif;
@@ -119,19 +139,17 @@ async def oauth2callback(request: Request, code: str = Query(...), state: str = 
                 }}
                 h2 {{ color: #a78bfa; margin-top: 0; }}
                 p {{ color: #94a3b8; font-size: 14px; line-height: 1.5; }}
+                a {{ display:inline-block;margin-top:14px;padding:12px 18px;border-radius:12px;background:#8f6df2;color:white;text-decoration:none;font-weight:700; }}
             </style>
         </head>
         <body>
             <div class="card">
-                <h2>Google Диск подключен!</h2>
-                <p>Вы успешно авторизовались как <strong>{email}</strong>.</p>
-                <p>Окно можно закрыть, сохранение AnimeSoul обновлено.</p>
+                <h2>Код Google получен</h2>
+                <p>Вернитесь в AnimeSoul — приложение завершит подключение на переднем плане.</p>
+                <a href="animesoul://oauth-complete">Вернуться в AnimeSoul</a>
             </div>
             <script>
-                if (window.opener) {{
-                    window.opener.postMessage({{ type: "GDRIVE_AUTH_SUCCESS" }}, {json.dumps(base)});
-                    setTimeout(() => window.close(), 1500);
-                }}
+                setTimeout(() => {{ window.location.href = "animesoul://oauth-complete"; }}, 700);
             </script>
         </body>
         </html>
@@ -150,11 +168,40 @@ async def oauth2callback(request: Request, code: str = Query(...), state: str = 
         """
 
 
+@router.post("/complete-auth")
+async def complete_auth() -> dict[str, Any]:
+    """Exchange a pending Android callback after the app is foregrounded."""
+    # Both the Android deep link and the foreground listener can request
+    # completion. Serialize them so Google's one-time code is exchanged once.
+    async with oauth_completion_lock:
+        pending = gdrive_service.load_pending_oauth()
+        if not pending:
+            return {"pending": False, "connected": bool(gdrive_service.load_tokens())}
+        try:
+            tokens = await gdrive_service.exchange_code(
+                str(pending["code"]),
+                str(pending["redirect_uri"]),
+            )
+        except httpx.TransportError as error:
+            # Keep a still-valid one-time code so foreground polling can retry a
+            # transient Android network transition.
+            raise HTTPException(status_code=503, detail=f"Google OAuth временно недоступен: {error}") from error
+        except Exception as error:
+            gdrive_service.clear_pending_oauth()
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        gdrive_service.clear_pending_oauth()
+        return {
+            "pending": False,
+            "connected": True,
+            "user_email": tokens.get("user_email", ""),
+        }
+
+
 @router.post("/disconnect")
 async def disconnect() -> dict[str, bool]:
-    """Disconnect Google Drive account."""
-    gdrive_service.disconnect()
-    return {"disconnected": True}
+    """Revoke Google access when reachable, then disconnect this device."""
+    revoked = await gdrive_service.revoke_and_disconnect()
+    return {"disconnected": True, "revoked": revoked}
 
 
 async def _sync_drive_impl(payload: SyncRequest) -> dict[str, Any]:
@@ -163,12 +210,36 @@ async def _sync_drive_impl(payload: SyncRequest) -> dict[str, Any]:
     if not tokens or not isinstance(tokens, dict):
         raise HTTPException(status_code=401, detail="Google Диск не подключен.")
 
-    local_doc = await local_storage.read() or {}
+    if tokens.get("choice_pending"):
+        if not payload.resolve_initial_choice:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Сначала выберите, как объединить найденное облачное сохранение. "
+                    "Фоновая синхронизация пока заблокирована."
+                ),
+            )
+        if payload.mode == "auto":
+            raise HTTPException(
+                status_code=422,
+                detail="Для первого объединения выберите явный режим.",
+            )
+
+    local_document = await local_storage.read()
+    if local_document is not None and not validate_storage_document(local_document):
+        raise HTTPException(
+            status_code=500,
+            detail="Локальное сохранение повреждено. Облачные данные не изменены.",
+        )
+    local_doc = local_document or {}
     cloud_doc, _ = await gdrive_service.read_cloud_storage(mode=payload.folder_mode)
 
-    gdrive_service.set_choice_pending(False)
-
     if payload.mode == "local" or (payload.mode == "auto" and not cloud_doc):
+        if not local_document:
+            raise HTTPException(
+                status_code=409,
+                detail="Локальное сохранение отсутствует; облако не перезаписано.",
+            )
         # Upload local document to cloud
         file_id = await gdrive_service.write_cloud_storage(local_doc, mode=payload.folder_mode)
         gdrive_service.update_cloud_status(has_cloud_file=bool(file_id), choice_pending=False)
@@ -187,9 +258,16 @@ async def _sync_drive_impl(payload: SyncRequest) -> dict[str, Any]:
         # Download cloud document and replace local
         if not cloud_doc:
             raise HTTPException(status_code=444, detail="Сохранение на Google Диске не найдено.")
-        await local_storage.write(cloud_doc)
+        backup = await local_storage.replace_with_backup(
+            cloud_doc,
+            "before-cloud-restore",
+        )
         gdrive_service.update_cloud_status(has_cloud_file=True, choice_pending=False)
-        return {"status": "downloaded", "document": cloud_doc}
+        return {
+            "status": "downloaded",
+            "document": cloud_doc,
+            "backup": str(backup) if backup else None,
+        }
 
     # Mode: merge (or auto when both exist)
     if cloud_doc and local_doc:
@@ -202,9 +280,16 @@ async def _sync_drive_impl(payload: SyncRequest) -> dict[str, Any]:
         return {"status": "merged", "file_id": file_id, "document": merged}
 
     if cloud_doc:
-        await local_storage.write(cloud_doc)
+        backup = await local_storage.replace_with_backup(
+            cloud_doc,
+            "before-cloud-restore",
+        )
         gdrive_service.update_cloud_status(has_cloud_file=True, choice_pending=False)
-        return {"status": "downloaded", "document": cloud_doc}
+        return {
+            "status": "downloaded",
+            "document": cloud_doc,
+            "backup": str(backup) if backup else None,
+        }
 
     file_id = await gdrive_service.write_cloud_storage(local_doc, mode=payload.folder_mode)
     gdrive_service.update_cloud_status(has_cloud_file=bool(file_id), choice_pending=False)

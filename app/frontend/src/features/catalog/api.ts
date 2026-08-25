@@ -19,6 +19,8 @@ type CatalogCacheEntry = {
 const CATALOG_SEARCH_CACHE_TTL = 5 * 60_000;
 const CATALOG_SEARCH_CACHE_LIMIT = 40;
 const catalogSearchCache = new Map<string, CatalogCacheEntry>();
+const VIDEO_CACHE_TTL = 10 * 60_000;
+const videoCache = new Map<number, { expiresAt: number; request: Promise<Video[]> }>();
 
 async function requestJson<T extends {error?: string}>(url: string): Promise<T> {
     const response = await fetch(url);
@@ -99,10 +101,18 @@ export async function fetchAnimeDetails(ids: number[]): Promise<Anime[]> {
 
 /** Load all player variants and episodes exposed for one API anime record. */
 export async function fetchAnimeVideos(animeId: number): Promise<Video[]> {
-    const payload = await requestJson<VideoPayload>(
-        `/api/yummy?mode=videos&id=${animeId}`,
-    );
-    return payload.videos ?? [];
+    const now = Date.now();
+    const cached = videoCache.get(animeId);
+    if (cached && cached.expiresAt > now) return cached.request;
+    if (cached) videoCache.delete(animeId);
+    const request = requestJson<VideoPayload>(`/api/yummy?mode=videos&id=${animeId}`)
+        .then(payload => payload.videos ?? [])
+        .catch(error => {
+            videoCache.delete(animeId);
+            throw error;
+        });
+    videoCache.set(animeId, { expiresAt: now + VIDEO_CACHE_TTL, request });
+    return request;
 }
 
 /** Load and normalize trailer sources exposed by YummyAnime for one title. */

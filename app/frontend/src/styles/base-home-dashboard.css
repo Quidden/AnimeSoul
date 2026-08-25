@@ -151,6 +151,9 @@
   margin-bottom: 13px;
 }
 
+.catalog-filter-drawer > summary { display: none; }
+.catalog-filter-drawer > .filter-panel { margin-bottom: 13px; }
+
 .filter-panel label {
   display: flex;
   align-items: center;

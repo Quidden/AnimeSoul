@@ -27,8 +27,10 @@
   padding: 8px;
 }
 
-.suggestions button:hover {
+.suggestions button:hover,
+.suggestions button:focus-visible {
   background: #211b28;
+  outline: none;
 }
 
 .suggestions img {
@@ -47,6 +49,50 @@
 .suggestions small {
   color: #837b88;
   margin-top: 3px;
+}
+
+.suggestions .setting-suggestion {
+  background: color-mix(in srgb,var(--accent) 4%,transparent);
+}
+
+.suggestions .setting-suggestion > .nav-icon {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--accent);
+  background: color-mix(in srgb,var(--accent) 13%,transparent);
+  border: 1px solid color-mix(in srgb,var(--accent) 25%,transparent);
+  border-radius: 10px;
+}
+
+.suggestions .setting-suggestion > .nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.suggestions .setting-suggestion > .suggestion-copy {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.suggestions .setting-suggestion em {
+  margin-bottom: 3px;
+  color: var(--accent);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.suggestions .setting-suggestion small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .theme-palette {

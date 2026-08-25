@@ -42,6 +42,7 @@ export type HomePageModel = {
     anime?: Anime;
     state?: AnimeProgress;
     point?: ResumePoint;
+    hasStoredResume: boolean;
     displayEpisode: string;
     previewAnime: Anime | null;
     previewVideo: Video | null;
@@ -64,6 +65,7 @@ export type HomePageModel = {
   watchingExpanded: boolean;
   historyExpanded: boolean;
   historyEnabled: boolean;
+  storageReady: boolean;
 };
 
 export type HomePageActions = {

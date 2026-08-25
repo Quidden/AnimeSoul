@@ -10,6 +10,16 @@
   gap: 20px;
 }
 
+.catalog-feedback {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+}
+
+.catalog-feedback .outline {
+  min-height: 42px;
+}
+
 .watching-section {
   margin-top: 55px;
 }
@@ -811,4 +821,430 @@ footer .app-version {
 
 html[data-color-scheme="light"] .season-summary b {
   background: #ece6f0;
+}
+
+/* Catalog visual hierarchy -------------------------------------------------
+ * Filters stay reachable while browsing, but the cards themselves only carry
+ * the information needed to choose a title at a glance. */
+.catalog-page {
+  --catalog-control-radius: 12px;
+  --catalog-surface-radius: 18px;
+}
+
+.catalog-controls {
+  position: sticky;
+  z-index: 22;
+  top: var(--floating-header-offset, 72px);
+  margin: 0 0 18px;
+  padding-top: 8px;
+  background: linear-gradient(180deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 94%, transparent) 78%, transparent 100%);
+}
+
+.catalog-controls .genre-row {
+  padding: 3px 0 13px;
+}
+
+.catalog-controls .genre-row button,
+.catalog-filter-drawer .filter-panel select,
+.catalog-filter-drawer .filter-panel input,
+.catalog-filter-drawer .filter-panel button {
+  border-radius: var(--catalog-control-radius);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.catalog-controls .genre-row button:hover,
+.catalog-filter-drawer .filter-panel button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  transform: translateY(-1px);
+}
+
+.catalog-filter-backdrop {
+  display: none;
+}
+
+.filter-panel .filter-reset:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: .48;
+}
+
+.availability-check,
+.mobile-card-rating {
+  position: absolute;
+  z-index: 3;
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 999px;
+  background: rgb(10 8 13 / 76%);
+  box-shadow: 0 7px 20px rgb(0 0 0 / 20%);
+  backdrop-filter: blur(10px);
+}
+
+.availability-check {
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  gap: 6px;
+  min-height: 25px;
+  padding: 0 8px;
+  color: #b8afc0;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+
+.availability-check > i {
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: availability-spin .8s linear infinite;
+}
+
+.mobile-card-rating {
+  bottom: 9px;
+  left: 9px;
+  display: none;
+  gap: 4px;
+  min-height: 27px;
+  padding: 0 8px;
+  color: #fff2bf;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mobile-card-rating > i {
+  color: #ffd76b;
+  font-size: 9px;
+  font-style: normal;
+}
+
+@keyframes availability-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 800px) {
+  /* Mobile navigation already keeps search in reach. Let catalog controls
+     scroll with the results instead of stacking a second floating toolbar. */
+  .catalog-controls {
+    position: static;
+    z-index: auto;
+    top: auto;
+    margin: 0 0 16px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .catalog-page {
+    padding-inline: 16px;
+  }
+
+  .catalog-controls {
+    position: static;
+    z-index: auto;
+    top: auto;
+    margin: 0 0 16px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  /* The sheet and backdrop own their fixed viewport layers; the ordinary
+     controls container must not create another stacking context around them. */
+  .catalog-controls:has(.catalog-filter-drawer[open]) {
+    z-index: auto;
+    backdrop-filter: none;
+  }
+
+  .catalog-controls .catalog-filter-drawer > summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 9px;
+    min-height: 44px;
+    box-sizing: border-box;
+    margin: 0 0 8px;
+    padding: 0 13px;
+    color: var(--ink);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--line) 88%, white 4%);
+    border-radius: var(--catalog-control-radius);
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .catalog-controls .catalog-filter-drawer > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .catalog-controls .catalog-filter-drawer > summary span {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 760;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .catalog-controls .catalog-filter-drawer > summary b {
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .catalog-controls .catalog-filter-drawer > summary i {
+    color: var(--accent);
+    font-style: normal;
+  }
+
+  .catalog-filter-backdrop {
+    position: fixed;
+    z-index: 4799;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgb(5 4 8 / 68%);
+    backdrop-filter: blur(4px);
+  }
+
+  .catalog-controls .catalog-filter-drawer[open] {
+    position: fixed;
+    z-index: 4800;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    max-height: min(82dvh, 760px);
+    box-sizing: border-box;
+    overflow: auto;
+    overscroll-behavior: contain;
+    margin: 0;
+    padding: 8px 14px calc(16px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--panel) 97%, black 3%);
+    border: 1px solid color-mix(in srgb, var(--line) 78%, white 8%);
+    border-width: 1px 0 0;
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -24px 70px rgb(0 0 0 / 48%);
+    animation: catalog-sheet-in 220ms cubic-bezier(.2, .8, .2, 1);
+  }
+
+  .catalog-controls .catalog-filter-drawer[open] > summary {
+    position: sticky;
+    top: -8px;
+    z-index: 2;
+    min-height: 56px;
+    margin: 0 -2px 8px;
+    padding-top: 8px;
+    background: color-mix(in srgb, var(--panel) 98%, black 2%);
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+
+  .catalog-controls .catalog-filter-drawer > summary:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 78%, white 22%);
+    outline-offset: -2px;
+  }
+
+  .catalog-controls .catalog-filter-drawer[open] > summary::before {
+    content: "";
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    width: 34px;
+    height: 4px;
+    background: color-mix(in srgb, var(--muted) 38%, transparent);
+    border-radius: 999px;
+    transform: translateX(-50%);
+  }
+
+  .catalog-controls .catalog-filter-drawer[open] > summary i {
+    font-size: 0;
+    rotate: none !important;
+  }
+
+  .catalog-controls .catalog-filter-drawer[open] > summary i::after {
+    content: "×";
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    color: var(--ink);
+    background: color-mix(in srgb, var(--line) 52%, transparent);
+    border-radius: 11px;
+    font-size: 24px;
+    font-weight: 400;
+  }
+
+  .catalog-controls .catalog-filter-drawer > .filter-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+    padding: 6px 0 2px;
+    background: transparent;
+    border: 0;
+  }
+
+  .catalog-controls .catalog-filter-drawer .filter-panel > select {
+    grid-column: 1 / -1;
+  }
+
+  .catalog-controls .catalog-filter-drawer .filter-panel select,
+  .catalog-controls .catalog-filter-drawer .filter-panel input,
+  .catalog-controls .catalog-filter-drawer .filter-panel > button {
+    min-height: 44px;
+  }
+
+  .catalog-controls .catalog-filter-drawer .filter-panel > button {
+    border: 1px solid color-mix(in srgb, var(--line) 90%, white 5%);
+    background: color-mix(in srgb, var(--panel) 75%, white 3%);
+  }
+
+  .catalog-controls .catalog-filter-drawer .filter-panel > .filter-reset:not(:disabled) {
+    color: #ff9caf;
+    border-color: rgb(232 108 132 / 26%);
+    background: rgb(232 108 132 / 8%);
+  }
+
+  .catalog-controls .genre-row {
+    margin: 0;
+    padding: 0 0 9px;
+    scrollbar-width: none;
+  }
+
+  .catalog-controls .genre-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .catalog-page .cards {
+    gap: 22px 12px;
+  }
+
+  .catalog-page .anime-card {
+    min-width: 0;
+    transform: translateZ(0);
+  }
+
+  .catalog-page .anime-card .poster {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2 / 3;
+    border-radius: 16px;
+    box-shadow: 0 15px 34px rgb(0 0 0 / 34%);
+  }
+
+  .catalog-page .anime-card .poster::after {
+    background: linear-gradient(0deg, rgb(7 6 10 / 82%) 0%, transparent 40%);
+  }
+
+  .catalog-page .anime-card:active .poster {
+    transform: scale(.985);
+  }
+
+  .catalog-page .anime-card .poster,
+  .catalog-page .anime-card .poster img {
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .catalog-page .anime-card .franchise-badge,
+  .catalog-page .anime-card .card-rating-board,
+  .catalog-page .anime-card > .tagline,
+  .catalog-page .anime-card .card-format-details,
+  .catalog-page .anime-card .play {
+    display: none;
+  }
+
+  .catalog-page .anime-card .mobile-card-rating {
+    display: inline-flex;
+  }
+
+  .catalog-page .anime-card .release-badge {
+    top: 8px;
+    right: 8px;
+    min-height: 25px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 999px;
+    backdrop-filter: blur(10px);
+  }
+
+  .catalog-page .anime-card .availability-check {
+    top: 8px;
+    left: 8px;
+  }
+
+  .catalog-page .anime-card .card-actions {
+    right: 8px;
+    bottom: 8px;
+    gap: 5px;
+  }
+
+  .catalog-page .anime-card .card-actions button {
+    width: 30px;
+    height: 30px;
+    border-color: rgb(255 255 255 / 18%);
+    background: rgb(10 8 13 / 76%);
+    backdrop-filter: blur(10px);
+  }
+
+  .catalog-page .anime-card h3 {
+    min-height: 38px;
+    max-height: 38px;
+    margin: 10px 1px 4px;
+    color: color-mix(in srgb, var(--ink) 96%, white 4%);
+    font-size: calc(13px * var(--interface-font-scale, 1));
+    line-height: 1.42;
+  }
+
+  .catalog-page .anime-card > .card-meta-line {
+    min-height: auto;
+    max-height: none;
+    margin-inline: 1px;
+    color: color-mix(in srgb, var(--muted) 88%, white 12%);
+    font-size: 10px;
+  }
+
+  .catalog-page .anime-card > .card-progress {
+    height: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+  }
+
+  .catalog-page .anime-card > .card-progress small {
+    display: none;
+  }
+}
+
+@keyframes catalog-sheet-in {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .availability-check > i {
+    animation-duration: 1.8s;
+  }
+
+  .catalog-controls .catalog-filter-drawer[open] {
+    animation: none;
+  }
+
+  .catalog-page .anime-card .poster,
+  .catalog-page .anime-card .poster img,
+  .catalog-controls button {
+    transition: none;
+  }
 }

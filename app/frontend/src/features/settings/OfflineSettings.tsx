@@ -7,6 +7,8 @@ import {
   KODIK_ACCESS_CHANGED_EVENT,
   updateOfflineSettings,
 } from "../../lib/downloads";
+import { IS_ANDROID_APP } from "../../lib/platform";
+import { Toggle } from "../../components/Toggle";
 
 export function OfflineSettings() {
   const [directory, setDirectory] = useState("");
@@ -15,14 +17,19 @@ export function OfflineSettings() {
   const [kodikPrivateKey, setKodikPrivateKey] = useState("");
   const [kodikPublicKeyConfigured, setKodikPublicKeyConfigured] = useState(false);
   const [kodikPrivateKeyConfigured, setKodikPrivateKeyConfigured] = useState(false);
+  const [allowMobileDownloads, setAllowMobileDownloads] = useState(false);
   const [episodes, setEpisodes] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "saving" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [networkMessage, setNetworkMessage] = useState("");
 
-  const applyKodikStatus = (settings: { kodikPublicKeyConfigured: boolean; kodikPrivateKeyConfigured: boolean }) => {
+  const applyKodikStatus = (
+    settings: { kodikPublicKeyConfigured: boolean; kodikPrivateKeyConfigured: boolean },
+    notify = false,
+  ) => {
     setKodikPublicKeyConfigured(settings.kodikPublicKeyConfigured);
     setKodikPrivateKeyConfigured(settings.kodikPrivateKeyConfigured);
-    window.dispatchEvent(new Event(KODIK_ACCESS_CHANGED_EVENT));
+    if (notify) window.dispatchEvent(new Event(KODIK_ACCESS_CHANGED_EVENT));
   };
 
   const refresh = async () => {
@@ -31,6 +38,7 @@ export function OfflineSettings() {
       setDirectory(settings.directory);
       setSavedDirectory(settings.directory);
       applyKodikStatus(settings);
+      setAllowMobileDownloads(settings.allowMobileDownloads);
       setEpisodes(library.anime.reduce((total, anime) => total + anime.episodes.length, 0));
       setStatus("ready");
     } catch (error) {
@@ -39,7 +47,12 @@ export function OfflineSettings() {
     }
   };
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    void refresh();
+    const handleAccessChange = () => { void refresh(); };
+    window.addEventListener(KODIK_ACCESS_CHANGED_EVENT, handleAccessChange);
+    return () => window.removeEventListener(KODIK_ACCESS_CHANGED_EVENT, handleAccessChange);
+  }, []);
 
   const saveDirectory = async () => {
     setStatus("saving");
@@ -68,9 +81,11 @@ export function OfflineSettings() {
       });
       setKodikPublicKey("");
       setKodikPrivateKey("");
-      applyKodikStatus(result);
+      applyKodikStatus(result, true);
       setStatus("ready");
-      setMessage("Ключи Kodik сохранены на этом компьютере. Приватный ключ больше не отображается в интерфейсе.");
+      setMessage(result.kodikPublicKeyConfigured && result.kodikPrivateKeyConfigured
+        ? "Оба ключа Kodik сохранены — собственный плеер и скачивание включены."
+        : "Изменения сохранены, но для плеера и скачивания нужны оба ключа Kodik.");
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Не удалось сохранить ключи Kodik.");
@@ -88,12 +103,31 @@ export function OfflineSettings() {
       });
       setKodikPublicKey("");
       setKodikPrivateKey("");
-      applyKodikStatus(result);
+      applyKodikStatus(result, true);
       setStatus("ready");
-      setMessage("Ключи Kodik удалены с этого компьютера.");
+      setMessage(`Ключи Kodik удалены с этого ${IS_ANDROID_APP ? "устройства" : "компьютера"}.`);
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Не удалось удалить ключи Kodik.");
+    }
+  };
+
+  const setMobileDownloads = async (value: boolean) => {
+    const previous = allowMobileDownloads;
+    setAllowMobileDownloads(value);
+    setStatus("saving");
+    setNetworkMessage("");
+    try {
+      const result = await updateOfflineSettings({ directory, allowMobileDownloads: value });
+      setAllowMobileDownloads(result.allowMobileDownloads);
+      setStatus("ready");
+      setNetworkMessage(result.allowMobileDownloads
+        ? "Скачивание через мобильную сеть разрешено. Учитывайте расход трафика."
+        : "При переходе на мобильную сеть активные загрузки будут приостановлены.");
+    } catch (error) {
+      setAllowMobileDownloads(previous);
+      setStatus("error");
+      setNetworkMessage(error instanceof Error ? error.message : "Не удалось изменить правило сети.");
     }
   };
 
@@ -105,7 +139,7 @@ export function OfflineSettings() {
         <b>Офлайн-библиотека</b>
         <span>Серии, постеры и список загрузок хранятся в выбранной папке и доступны без интернета.</span>
       </div>
-      <article className="settings-item offline-directory-setting">
+      {!IS_ANDROID_APP ? <article className="settings-item offline-directory-setting">
         <div>
           <b>Папка для аниме</b>
           <p>Укажи существующую или новую папку. AnimeSoul создаст внутри неё свой индекс библиотеки.</p>
@@ -124,11 +158,37 @@ export function OfflineSettings() {
             {status === "saving" ? "Сохраняем…" : "Сохранить папку"}
           </button>
         </div>
-      </article>
+      </article> : <article className="settings-item offline-directory-setting mobile-storage-setting">
+        <div>
+          <b>Папка Movies/AnimeSoul</b>
+          <p>Новые серии сохраняются единым MP4 в видимой папке устройства. Их можно открыть из файлового менеджера и после обновления приложения.</p>
+          <small>{episodes ? `На устройстве доступно серий: ${episodes}.` : "На устройстве пока нет скачанных серий."}</small>
+        </div>
+        <div><span className="mobile-storage-badge">Видимые MP4</span></div>
+      </article>}
+      {IS_ANDROID_APP && <article className="settings-item mobile-download-network-setting">
+        <div>
+          <b>Мобильная сеть</b>
+          <p>По умолчанию AnimeSoul скачивает только по Wi‑Fi. Если сеть сменится, текущая загрузка остановится и продолжится при разрешённом подключении.</p>
+          <small>Мобильный трафик может быстро израсходовать пакет оператора.</small>
+        </div>
+        <div className="mobile-download-network-controls">
+          <Toggle
+            label="Разрешить скачивание через мобильную сеть"
+            value={allowMobileDownloads}
+            onChange={value => { if (status !== "saving") void setMobileDownloads(value); }}
+          />
+          {networkMessage && (
+            <p className={`offline-settings-message ${status === "error" ? "error" : "success"}`} role="status" aria-live="polite">
+              {status === "error" ? "! " : "✓ "}{networkMessage}
+            </p>
+          )}
+        </div>
+      </article>}
       <article className="settings-item offline-kodik-setting">
         <div>
           <b>Официальный API Kodik</b>
-          <p>Собственный плеер и скачивание используют прямые ссылки приватного API Kodik. Запрос и подпись выполняются только локально на этом компьютере.</p>
+          <p>Собственный плеер и скачивание используют прямые ссылки приватного API Kodik. Запрос и подпись выполняются только локально на этом {IS_ANDROID_APP ? "устройстве" : "компьютере"}.</p>
           <small>{keysReady ? "Оба ключа настроены — собственный плеер и скачивание доступны." : "Добавьте оба ключа из профиля Kodik, чтобы включить собственный плеер и скачивание."}</small>
         </div>
         <div className="offline-kodik-setting-controls">
@@ -163,10 +223,14 @@ export function OfflineSettings() {
               </button>
             )}
           </div>
+          {message && (
+            <p className={`offline-settings-message ${status === "error" ? "error" : "success"}`} role="status" aria-live="polite">
+              {status === "error" ? "! " : "✓ "}{message}
+            </p>
+          )}
         </div>
       </article>
-      {message && <p className={`offline-settings-message ${status === "error" ? "error" : ""}`}>{message}</p>}
-      <p className="offline-settings-note">В совместном просмотре AnimeSoul всегда использует онлайн-источник, чтобы участники видели одну и ту же серию.</p>
+      {!IS_ANDROID_APP && <p className="offline-settings-note">В совместном просмотре AnimeSoul всегда использует онлайн-источник, чтобы участники видели одну и ту же серию.</p>}
     </section>
   );
 }

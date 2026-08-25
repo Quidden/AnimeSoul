@@ -646,7 +646,7 @@ footer span:nth-of-type(1) {
 }
 
 @media(max-width:800px){
-  nav {
+  header>nav {
     display: none;
   }
   .hero {

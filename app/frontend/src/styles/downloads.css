@@ -218,10 +218,28 @@
   content: "";
 }
 
+.downloads-stats > div:last-child {
+  min-width: 112px;
+}
+
+.download-jobs.is-error {
+  border-color: rgba(255, 131, 151, .25);
+}
+
+.download-jobs.is-error .download-jobs-refresh::before {
+  background: #ff8397;
+  box-shadow: 0 0 0 4px rgba(255, 131, 151, .08);
+}
+
+.download-job {
+  padding: 14px 15px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .025);
+}
+
 .download-job + .download-job {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  margin-top: 10px;
 }
 
 .download-job-topline {
@@ -260,6 +278,21 @@
   background: rgba(73, 167, 218, .17);
 }
 
+.download-job-state.is-paused {
+  color: #ffc96b;
+  border-color: rgba(255, 190, 84, .28);
+  background: rgba(112, 70, 13, .24);
+}
+
+.download-job-state.is-error {
+  color: #ffd1d9;
+  background: rgba(255, 105, 130, .14);
+}
+
+.download-job.is-error p {
+  color: #ffb4c0;
+}
+
 .download-job p,
 .downloaded-anime-body > p {
   margin: 5px 0 9px;
@@ -280,6 +313,15 @@
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #8870f5, #57cdf4);
+}
+
+.download-job-footer {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .downloads-empty-card {
@@ -422,17 +464,20 @@
 
 .downloaded-anime-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 232px));
-  gap: 20px;
-  justify-content: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
 }
 
 .downloaded-anime-card {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
-  border-radius: 17px;
-  background: rgba(255, 255, 255, .035);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, .16);
+  min-height: 240px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 88% -20%, rgba(143, 97, 246, .12), transparent 42%),
+    color-mix(in srgb, var(--panel) 95%, white 5%);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .13);
   transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
@@ -442,27 +487,18 @@
   transform: translateY(-3px);
 }
 
-.downloaded-anime-open {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  color: var(--text);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
 .downloaded-anime-cover {
-  position: relative;
+  position: absolute;
+  z-index: -1;
+  inset: 0 auto 0 0;
   display: block;
   overflow: hidden;
-  width: 100%;
-  aspect-ratio: 2 / 3;
+  width: clamp(300px, 43%, 570px);
   background:
     radial-gradient(circle at 35% 20%, rgba(159, 126, 255, .2), transparent 34%),
     linear-gradient(145deg, #25212e, #17141d);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 43%, rgba(0, 0, 0, .88) 62%, transparent 100%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 43%, rgba(0, 0, 0, .88) 62%, transparent 100%);
 }
 
 .downloaded-anime-cover img {
@@ -470,12 +506,14 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: filter .24s ease, transform .3s ease;
+  object-position: center 28%;
+  filter: brightness(.8) saturate(.9);
+  transition: filter .24s ease, transform .45s ease;
 }
 
 .downloaded-anime-card:hover .downloaded-anime-cover img {
-  filter: brightness(.82);
-  transform: scale(1.045);
+  filter: brightness(.88) saturate(1);
+  transform: scale(1.025);
 }
 
 .downloaded-anime-placeholder {
@@ -489,73 +527,230 @@
 }
 
 .downloaded-anime-count {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  padding: 5px 8px;
-  border: 1px solid rgba(255, 255, 255, .15);
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid rgba(159, 126, 255, .21);
   border-radius: 999px;
-  color: #fff;
-  background: rgba(11, 9, 15, .8);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
-  backdrop-filter: blur(8px);
+  color: #d9ccff;
+  background: rgba(137, 104, 229, .11);
   font-size: 11px;
   font-weight: 800;
-}
-
-.downloaded-anime-play {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, .3);
-  border-radius: 50%;
-  color: #fff;
-  background: rgba(15, 11, 21, .7);
-  opacity: 0;
-  transform: translate(-50%, -42%) scale(.9);
-  transition: opacity .2s ease, transform .2s ease;
-}
-
-.downloaded-anime-card:hover .downloaded-anime-play,
-.downloaded-anime-open:focus-visible .downloaded-anime-play {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
+  white-space: nowrap;
 }
 
 .downloaded-anime-body {
   display: grid;
   min-width: 0;
-  gap: 6px;
-  padding: 15px 16px 17px;
+  min-height: 238px;
+  gap: 15px;
+  margin-left: clamp(220px, 30%, 395px);
+  padding: 21px 23px 18px 12px;
+}
+
+.downloaded-anime-heading {
+  display: flex;
+  min-width: 0;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.downloaded-anime-heading > div {
+  min-width: 0;
 }
 
 .downloaded-anime-title {
-  display: -webkit-box;
-  overflow: hidden;
-  min-height: 42px;
-  font-size: 15px;
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: clamp(18px, 1.8vw, 24px);
   font-weight: 800;
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  line-height: 1.18;
+  text-shadow: 0 2px 14px rgba(5, 4, 8, .72);
+  text-wrap: balance;
 }
 
 .downloaded-anime-meta {
+  margin: 6px 0 0;
   color: var(--muted);
   font-size: 12px;
 }
 
-.downloaded-anime-summary {
-  overflow: hidden;
-  color: #c8b9db;
+.downloaded-anime-state {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  color: #8ae2bf;
   font-size: 11px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 750;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.downloaded-anime-state i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #67d4a9;
+  box-shadow: 0 0 0 4px rgba(103, 212, 169, .09);
+}
+
+.downloaded-anime-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  gap: 9px 18px;
+  margin: 0;
+}
+
+.downloaded-anime-details > div {
+  min-width: 0;
+}
+
+.downloaded-anime-details > div.is-wide {
+  grid-column: 1 / -1;
+}
+
+.downloaded-anime-details dt {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.downloaded-anime-details dd {
+  margin: 0;
+  color: #ddd5e7;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.downloaded-anime-details dd > span {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: baseline;
+  margin: 0 6px 5px 0;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 7px;
+  background: rgba(7, 6, 10, .26);
+}
+
+.downloaded-anime-details small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.downloaded-anime-details .downloaded-episode-sizes dd {
+  display: grid;
+  gap: 6px;
+}
+
+.downloaded-episode-sizes details {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 9px;
+  background: rgba(7, 6, 10, .22);
+}
+
+.downloaded-episode-sizes summary {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  color: #ddd5e7;
+  cursor: pointer;
+  list-style: none;
+}
+
+.downloaded-episode-sizes summary::-webkit-details-marker { display: none; }
+.downloaded-episode-sizes summary::before { content: "›"; margin-right: 7px; color: var(--accent); }
+.downloaded-episode-sizes details[open] summary::before { transform: rotate(90deg); }
+.downloaded-episode-sizes summary span { margin-left: auto; color: var(--muted); }
+
+.downloaded-episode-sizes details > div {
+  display: grid;
+  gap: 1px;
+  padding: 0 10px 7px 25px;
+}
+
+.downloaded-episode-sizes details p {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0;
+  padding: 5px 0;
+  border-top: 1px solid rgba(255, 255, 255, .045);
+  color: var(--muted);
+}
+
+.downloaded-episode-sizes details p b {
+  flex: 0 0 auto;
+  color: #d8d0e1;
+  font-weight: 650;
+}
+
+.downloaded-anime-footer {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  align-self: end;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, .065);
+}
+
+.downloaded-anime-footer > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.downloaded-anime-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.downloaded-anime-open,
+.downloaded-anime-delete {
+  display: inline-flex;
+  min-height: 38px;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  transition: border-color .18s ease, color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.downloaded-anime-open {
+  border-color: rgba(157, 125, 247, .46);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(114, 83, 211, .92), rgba(147, 105, 222, .92));
+  box-shadow: 0 7px 20px rgba(92, 61, 178, .17);
+}
+
+.downloaded-anime-open > span {
+  font-size: 10px;
+}
+
+.downloaded-anime-open:hover {
+  border-color: rgba(185, 160, 255, .72);
+  background: linear-gradient(135deg, #805ee1, #a276e9);
+  transform: translateY(-1px);
+}
+
+.downloaded-anime-open:focus-visible,
+.downloaded-anime-delete:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .text-button {
@@ -568,23 +763,8 @@
 }
 
 .downloaded-anime-delete {
-  position: absolute;
-  z-index: 2;
-  top: 10px;
-  right: 10px;
-  display: inline-grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, .16);
-  border-radius: 10px;
-  color: #eee7f4;
-  background: rgba(11, 9, 15, .74);
-  box-shadow: 0 5px 16px rgba(0, 0, 0, .24);
-  backdrop-filter: blur(8px);
-  cursor: pointer;
-  transition: border-color .18s ease, color .18s ease, background .18s ease;
+  color: #bcb3c7;
+  background: rgba(255, 255, 255, .025);
 }
 
 .downloaded-anime-delete svg,
@@ -605,7 +785,7 @@
 .downloaded-anime-delete:hover {
   border-color: rgba(255, 131, 151, .5);
   color: #ffd1d9;
-  background: rgba(160, 48, 72, .78);
+  background: rgba(160, 48, 72, .28);
 }
 
 .text-button {
@@ -834,6 +1014,15 @@
 
   .downloads-empty-icon { width: 72px; height: 72px; border-radius: 21px; }
   .downloads-empty-steps { display: grid; grid-template-columns: 1fr; gap: 10px; }
+
+  .downloaded-anime-card { min-height: 280px; }
+  .downloaded-anime-cover { width: 56%; }
+  .downloaded-anime-body {
+    min-height: 278px;
+    margin-left: 124px;
+    padding: 18px 17px 16px 6px;
+  }
+  .downloaded-anime-details { grid-template-columns: repeat(2, minmax(90px, 1fr)); }
 }
 
 @media (max-width: 600px) {
@@ -849,11 +1038,39 @@
 
   .downloads-page { padding-inline: 14px; }
   .downloads-library { padding: 16px; }
-  .downloaded-anime-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .downloaded-anime-body { padding: 12px; }
-  .downloaded-anime-title { min-height: 38px; font-size: 13px; }
-  .downloaded-anime-summary { display: none; }
-  .downloaded-anime-delete { top: 7px; right: 7px; width: 30px; height: 30px; }
+  .downloaded-anime-list { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .downloaded-anime-card { min-height: 350px; }
+  .downloaded-anime-cover {
+    width: 64%;
+    opacity: .72;
+    -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .75) 38%, transparent 100%);
+    mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .75) 38%, transparent 100%);
+  }
+  .downloaded-anime-body {
+    min-height: 348px;
+    gap: 13px;
+    margin-left: 68px;
+    padding: 16px 13px 14px 4px;
+  }
+  .downloaded-anime-heading { gap: 9px; }
+  .downloaded-anime-title { font-size: 18px; }
+  .downloaded-anime-count { display: none; }
+  .downloaded-anime-details {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, .055);
+    border-radius: 11px;
+    background: rgba(11, 9, 15, .55);
+    backdrop-filter: blur(8px);
+  }
+  .downloaded-anime-details > div.is-wide { grid-column: auto; }
+  .downloaded-anime-details dd > span { display: flex; width: fit-content; max-width: 100%; }
+  .downloaded-anime-footer { align-items: stretch; flex-direction: column; gap: 9px; }
+  .downloaded-anime-actions { width: 100%; }
+  .downloaded-anime-open { flex: 1; }
+  .downloaded-anime-delete { padding-inline: 11px; }
+  .download-job-footer { align-items: flex-start; flex-direction: column; gap: 7px; }
   .settings-item.offline-directory-setting > div:last-child,
   .settings-item.offline-kodik-setting > .offline-kodik-setting-controls {
     grid-template-columns: 1fr;

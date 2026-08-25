@@ -1,5 +1,23 @@
 import { DEFAULT_PLAYER_PREFS, SCHEMA_VERSION, STORAGE_KEYS, THEMES } from "./settings";
 import type { AnimeProgress, AnimeUserRatings, ConfigSnapshot, Folder, StorageDocument, ToolbarPosition } from "./types";
+import {
+  backfillFieldRevisions,
+  isStorageDocumentShape,
+} from "./storageSafety";
+
+export { SYNCED_SNAPSHOT_FIELDS } from "./storageSafety";
+
+function documentRevision(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string" || !value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/** Reject malformed 200 responses instead of migrating them into an empty save. */
+export function isStorageDocument(value: unknown): value is StorageDocument {
+  return isStorageDocumentShape(value);
+}
 
 export function readLocal<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -10,8 +28,15 @@ export function readLocal<T>(key: string, fallback: T): T {
   }
 }
 
-export function writeLocal<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value));
+export function writeLocal<T>(key: string, value: T): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.warn(`Не удалось сохранить браузерную копию «${key}»`, error);
+    return false;
+  }
 }
 
 /**
@@ -162,8 +187,18 @@ function normalizeUserRatingMap(value: unknown): Record<string, number> {
 }
 
 export function migrateDocument(input: Partial<StorageDocument> | null | undefined): StorageDocument {
+  const fallbackRevision = documentRevision(input?.updatedAt);
   const profiles = Array.isArray(input?.profiles)
-    ? input.profiles.map((profile) => ({ ...profile, snapshot: migrateSnapshot(profile.snapshot, profile.name) }))
+    ? input.profiles.map((profile) => {
+        const snapshot = migrateSnapshot(profile.snapshot, profile.name);
+        if (fallbackRevision) {
+          snapshot.fieldUpdatedAt = backfillFieldRevisions(
+            snapshot.fieldUpdatedAt,
+            fallbackRevision,
+          );
+        }
+        return { ...profile, snapshot };
+      })
     : [];
   const ensured = profiles.length
     ? profiles
@@ -188,7 +223,10 @@ export function migrateDocument(input: Partial<StorageDocument> | null | undefin
 // exactly the same storage contract.
 export const STORAGE_URL = "/api/storage";
 
-export function saveStorageDocument(document: StorageDocument) {
+export function saveStorageDocument(
+  document: StorageDocument,
+  signal?: AbortSignal,
+) {
   const mode = readLocal("animesoul:gdrive-auto-sync-mode", "instant");
   const initialChoiceDone = readLocal("animesoul:gdrive-initial-choice-done", false);
   const hasCloudFile = readLocal("animesoul:gdrive-has-cloud-file", false);
@@ -196,11 +234,19 @@ export function saveStorageDocument(document: StorageDocument) {
   // Block automatic background sync if a cloud file exists and user hasn't made initial choice
   const allowAutoSync = mode === "instant" && (!hasCloudFile || initialChoiceDone);
   const autoSyncParam = allowAutoSync ? "true" : "false";
+  const folderMode = readLocal<"visible" | "appdata">("animesoul:gdrive-folder-mode", "visible");
+  const preferWatched = readLocal("animesoul:gdrive-prefer-watched", true);
+  const query = new URLSearchParams({
+    auto_sync: autoSyncParam,
+    folder_mode: folderMode,
+    prefer_watched: preferWatched ? "true" : "false",
+  });
 
-  return fetch(`${STORAGE_URL}?auto_sync=${autoSyncParam}`, {
+  return fetch(`${STORAGE_URL}?${query}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(document),
+    signal,
   });
 }
 

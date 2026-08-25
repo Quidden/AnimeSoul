@@ -421,6 +421,13 @@
   white-space: nowrap;
 }
 
+button.save-indicator {
+  border: 0;
+  padding: 0;
+  background: none;
+  text-align: left;
+}
+
 .save-indicator i {
   width: 6px;
   height: 6px;
@@ -474,6 +481,53 @@ header nav {
   gap: 20px;
 }
 
+.app-navigation .mobile-nav-only,
+.app-navigation .nav-icon {
+  display: none;
+}
+
+.app-navigation button.is-active {
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.navigation-settings-slot {
+  position: absolute;
+  top: 50%;
+  right: 5vw;
+  translate: 0 -50%;
+}
+
+.app-header > .header-actions {
+  margin-right: 50px;
+}
+
+.nav-icon {
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: currentColor;
+}
+
+.nav-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.header-search .nav-icon {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  margin: auto;
+  color: var(--accent);
+}
+
 .search-wrap {
   position: absolute!important;
   left: 50%;
@@ -519,12 +573,211 @@ header nav {
 }
 
 @media(max-width:800px){
-  .search-wrap {
-    left: 50%;
-    width: min(330px,44vw);
+  html:not([data-platform="android"]) {
+    --floating-header-offset: calc(68px + env(safe-area-inset-top));
   }
-  .header-statuses {
-    margin-left: auto;
+
+  html:not([data-platform="android"]) .app {
+    padding-bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+
+  html:not([data-platform="android"]) .app > .app-header {
+    position: fixed;
+    inset: 0 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0,1fr);
+    width: 100%;
+    height: var(--floating-header-offset);
+    padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    pointer-events: none;
+  }
+
+  /* The search is a real overlay on mobile: cinematic artwork can continue
+     behind it, while content-first screens reserve one deliberate clearance. */
+  html:not([data-platform="android"]) .app > .app-header + #catalog.catalog-page,
+  html:not([data-platform="android"]) .app > .app-header + .downloads-page,
+  html:not([data-platform="android"]) .app > .app-header + .statistics-page,
+  html:not([data-platform="android"]) .app > .app-header + .ratings-page {
+    padding-top: calc(var(--floating-header-offset) + 20px);
+  }
+
+  html:not([data-platform="android"]) .app > .app-header + .watch-shell {
+    padding-top: calc(var(--floating-header-offset) + 18px);
+  }
+
+  html:not([data-platform="android"]) .app > .app-header + .catalog-page > .section-head > .outline,
+  html:not([data-platform="android"]) .app > .app-header + .statistics-page > .section-head > .outline,
+  html:not([data-platform="android"]) .app > .app-header + .ratings-page > .section-head > .outline,
+  html:not([data-platform="android"]) .app > .app-header + .downloads-page .downloads-hero .downloads-back-button {
+    display: none;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .brand {
+    display: none;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .search-wrap {
+    position: static!important;
+    inset: auto!important;
+    width: min(520px,100%);
+    margin: 0 auto;
+    translate: none!important;
+    pointer-events: auto;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .header-search {
+    position: static!important;
+    inset: auto!important;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 3px 4px 3px 17px;
+    border: 1px solid #ffffff24;
+    border-radius: 999px;
+    background: color-mix(in srgb,var(--panel) 77%,transparent);
+    box-shadow: 0 10px 34px #0007,0 1px 0 #ffffff12 inset;
+    backdrop-filter: blur(22px) saturate(145%);
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .header-search input {
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .header-search button {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: color-mix(in srgb,var(--accent) 17%,transparent);
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .suggestions {
+    top: calc(100% + 8px);
+    border-radius: 16px;
+    background: color-mix(in srgb,var(--panel) 94%,transparent);
+    backdrop-filter: blur(22px);
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .header-actions,
+  html:not([data-platform="android"]) .app > .app-header .header-statuses {
+    display: contents;
+    margin: 0;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .header-statuses > .save-indicator,
+  html:not([data-platform="android"]) .app > .app-header .header-statuses > .changelog-trigger {
+    display: none;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .status-popover {
+    position: fixed;
+    z-index: 500;
+    top: calc(var(--floating-header-offset) + 6px);
+    left: 50%;
+    width: max-content;
+    max-width: calc(100vw - 24px);
+    translate: -50% 0;
+    pointer-events: auto;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation {
+    position: fixed;
+    z-index: 250;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid!important;
+    grid-template-columns: repeat(6,minmax(0,1fr));
+    gap: 0;
+    height: calc(62px + env(safe-area-inset-bottom));
+    padding: 3px 4px env(safe-area-inset-bottom);
+    border-top: 1px solid #ffffff18;
+    background: #0d0a11f2;
+    box-shadow: 0 -12px 35px #0008;
+    backdrop-filter: blur(18px);
+    pointer-events: auto;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation > button,
+  html:not([data-platform="android"]) .app > .app-header .settings-center-trigger {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    min-height: 56px;
+    gap: 2px;
+    padding: 3px 1px;
+    border: 0;
+    border-radius: 13px;
+    background: transparent;
+    color: #b8afc1;
+    box-shadow: none;
+    transition: color .18s ease,background .18s ease,transform .18s ease;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation .mobile-nav-only,
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation .nav-icon {
+    display: grid;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation .nav-label {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 0;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation .nav-label::after {
+    content: attr(data-mobile-label);
+    font-size: clamp(8px,2.25vw,10px);
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation > button.is-active,
+  html:not([data-platform="android"]) .app > .app-header .settings-center-trigger[aria-expanded="true"] {
+    color: #fff;
+    background: color-mix(in srgb,var(--accent) 13%,transparent);
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation > button.is-active .nav-icon {
+    color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .navigation-settings-slot {
+    position: static;
+    display: contents;
+    translate: none;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .settings-center-trigger {
+    width: auto;
+    height: auto;
+    font-size: 0;
+    pointer-events: auto;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .settings-center-trigger::before {
+    content: "";
+    width: 22px;
+    height: 22px;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M19.14 12.94a7.72 7.72 0 0 0 .05-.94 7.72 7.72 0 0 0-.05-.94l2.03-1.58-1.92-3.32-2.39.96a7.3 7.3 0 0 0-1.62-.94L14.88 3h-3.84l-.36 3.18c-.58.24-1.12.56-1.62.94l-2.39-.96-1.92 3.32 2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.04.7 1.62.94l.36 3.18h3.84l.36-3.18c.58-.24 1.12-.55 1.62-.94l2.39.96 1.92-3.32-2.03-1.58ZM12.96 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z'/%3E%3C/svg%3E") center/contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M19.14 12.94a7.72 7.72 0 0 0 .05-.94 7.72 7.72 0 0 0-.05-.94l2.03-1.58-1.92-3.32-2.39.96a7.3 7.3 0 0 0-1.62-.94L14.88 3h-3.84l-.36 3.18c-.58.24-1.12.56-1.62.94l-2.39-.96-1.92 3.32 2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.04.7 1.62.94l.36 3.18h3.84l.36-3.18c.58-.24 1.12-.55 1.62-.94l2.39.96 1.92-3.32-2.03-1.58ZM12.96 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z'/%3E%3C/svg%3E") center/contain no-repeat;
+  }
+
+  html:not([data-platform="android"]) .app > .app-header .settings-center-trigger::after {
+    content: "Настройки";
+    font-size: clamp(8px,2.25vw,10px);
+    line-height: 1;
   }
 }
 

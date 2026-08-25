@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 
 from ..config import settings
 from ..services.gdrive import get_gdrive_service
-from ..services.storage import JsonStorage
+from ..services.storage import JsonStorage, validate_storage_document
 
 
 router = APIRouter(tags=["Storage"])
@@ -30,20 +30,33 @@ async def read_storage() -> dict[str, Any]:
 async def write_storage(
     document: dict[str, Any],
     auto_sync: bool = True,
+    folder_mode: Literal["visible", "appdata"] = "visible",
+    prefer_watched: bool = True,
 ) -> dict[str, object]:
     """The frontend owns schema migration; backend guarantees atomic writes."""
 
-    if not isinstance(document.get("profiles"), list):
+    if not validate_storage_document(document):
         raise HTTPException(status_code=422, detail="Invalid storage document")
     await storage.write(document)
 
     # Coalesce rapid saves through the shared Drive service. A second service
     # instance would have a separate lock/queue and could upload stale data last.
-    if auto_sync and gdrive_service.load_tokens():
+    tokens = gdrive_service.load_tokens()
+    # The server is authoritative here: an old browser tab or an interval
+    # timer must not bypass the first-sync choice and replace cloud data.
+    choice_pending = bool(tokens.get("choice_pending")) if isinstance(tokens, dict) else False
+    if auto_sync and tokens and not choice_pending:
         gdrive_service.schedule_write(
             document,
+            mode=folder_mode,
+            prefer_watched=prefer_watched,
             local_reader=storage.read,
             local_writer=storage.write,
         )
 
-    return {"saved": True, "path": str(storage.file)}
+    return {
+        "saved": True,
+        "path": str(storage.file),
+        "cloud_sync_scheduled": bool(auto_sync and tokens and not choice_pending),
+        "cloud_sync_blocked": bool(auto_sync and choice_pending),
+    }

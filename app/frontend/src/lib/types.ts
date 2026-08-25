@@ -110,7 +110,12 @@ export type Video = {
     episodeId: string;
     quality: number;
     mediaUrl: string;
+    mediaType?: "video/mp4" | "application/vnd.apple.mpegurl";
     previewUrl?: string;
+    skips?: {
+      opening?: { time: number; length: number };
+      ending?: { time: number; length: number };
+    };
   };
 };
 
@@ -170,6 +175,8 @@ export type AnimeProgress = {
   seasonLabel?: string;
   originAnimeId?: number;
   originEpisode?: string;
+  /** Tombstone preventing an older cloud copy from resurrecting reset episodes. */
+  resetAt?: number;
 };
 
 /** Map of anime ID to its corresponding progress record. */
@@ -222,8 +229,12 @@ export type PlayerPrefs = {
   previewScale: number;
   /** Ordered global voice favourites used as the fallback preference list. */
   favoriteDubbings: string[];
-  /** Explicit default voice selected for individual anime titles. */
+  /** One global preferred voice, selected with the heart action. */
+  preferredDubbing: string;
+  /** Explicit manual voice overrides selected for individual anime titles. */
   titleDubbings: Record<string, string>;
+  /** Separates old per-title heart values from explicit manual overrides. */
+  dubbingPreferenceVersion: 2;
   /** Player/provider selected for individual anime titles. */
   titlePlayers: Record<string, string>;
   watchPartyEnabled: boolean;
@@ -281,6 +292,8 @@ export type CardMeta = {
   durationMin: number;
   durationMax: number;
   status: { label: string; kind: string };
+  /** Voice translations available in at least one member of the franchise. */
+  dubbings: string[];
 };
 
 /** Color theme definition. */
@@ -313,6 +326,8 @@ export type ConfigSnapshot = {
   watchingExpanded?: boolean;
   historyExpanded?: boolean;
   watchingHidden?: number[];
+  /** Per-field revisions used for safe multi-device cloud conflict resolution. */
+  fieldUpdatedAt?: Record<string, number>;
 };
 
 /** Storage profile container. */

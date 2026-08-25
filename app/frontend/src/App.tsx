@@ -67,6 +67,8 @@ import { hasUserRatings, setUserRating, type RatingTarget } from "./lib/ratings"
 import { RatingsPage } from "./pages/RatingsPage";
 import { useCommunityRatings } from "./features/ratings/useCommunityRatings";
 import { DownloadsPage } from "./features/downloads/DownloadsPage";
+import { IS_ANDROID_APP } from "./lib/platform";
+import { NATIVE_BACK_EVENT } from "./lib/modalAccessibility";
 
 export default function Home() {
     const catalogRef = useRef<Anime[]>([]);
@@ -105,6 +107,7 @@ export default function Home() {
         switchProfile,
         importConfig,
         saveFavorites: saveFav,
+        storageReady,
     } = useProfileStorage({
         getCatalog: () => catalogRef.current,
         resolveAnimeTitle: animeId =>
@@ -115,6 +118,7 @@ export default function Home() {
         active,
         catalog,
         error,
+        dubbingFilter,
         formatFilter,
         genre,
         groupFilter,
@@ -138,6 +142,7 @@ export default function Home() {
         loadMore,
         setActive,
         setCatalog,
+        setDubbingFilter,
         setFormatFilter,
         setGenre,
         setGroupFilter,
@@ -184,7 +189,7 @@ export default function Home() {
         useState<{ folder: Folder; index: number } | null>(null);
     const [partyHostDetails, setPartyHostDetails] = useState<Anime | null>(null);
     const partyPresence = useWatchPartyPresence({
-        enabled: view === "home" && playerPrefs.watchPartyEnabled,
+        enabled: !IS_ANDROID_APP && view === "home" && playerPrefs.watchPartyEnabled,
         server: playerPrefs.watchPartyServer
     });
     useApiActivity();
@@ -212,6 +217,7 @@ export default function Home() {
         } : item));
     };
     const deleteFolder = (folder: Folder) => {
+        if (!confirm(`Удалить папку «${folder.name}»? Её можно будет вернуть кнопкой отмены.`)) return;
         const deleted = {folder, index: Math.max(0, folders.findIndex(item => item.id === folder.id))};
         setLastDeletedFolder(deleted);
         write("animesoul:last-deleted-folder", deleted);
@@ -259,6 +265,7 @@ export default function Home() {
     }, [partyHostPlayback?.animeId, catalog.length]);
     const {
         cardMeta,
+        dubbings,
         franchises,
         genres,
         randomCandidates,
@@ -268,6 +275,7 @@ export default function Home() {
         active,
         catalog,
         formatFilter,
+        dubbingFilter,
         genre,
         groupFilter,
         query,
@@ -327,6 +335,7 @@ export default function Home() {
     }, [franchises, query]);
     const openAnime = (anime: Anime, resume = false) => {
         setResumeRequested(resume);
+        setNewEpisodeRequested(false);
         setActive(anime);
         window.scrollTo({top: 0});
     };
@@ -342,9 +351,10 @@ export default function Home() {
         setResumeRequested(false);
         setNewEpisodeRequested(false);
         setView("catalog");
-        setTimeout(() => {
-            document.getElementById("catalog")?.scrollIntoView({behavior: "smooth"});
-        }, 0);
+        // Catalog is rendered directly after the sticky header.  Scrolling its
+        // section box into the viewport aligns it underneath that header and
+        // hides the title; a screen transition should always start at page top.
+        window.scrollTo({top: 0});
     };
     const showRatings = () => {
         setActive(null);
@@ -386,9 +396,38 @@ export default function Home() {
         setResumeRequested(false);
         setNewEpisodeRequested(false);
     };
+    const goHome = () => {
+        setActive(null);
+        setResumeRequested(false);
+        setNewEpisodeRequested(false);
+        setView("home");
+        window.scrollTo({top: 0, behavior: "smooth"});
+    };
+
+    useEffect(() => {
+        const handleNativeBack = (event: Event) => {
+            // Dialog hooks close only the visually topmost modal. App-level
+            // navigation must wait for them instead of closing two layers.
+            if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+            if (active) {
+                event.preventDefault();
+                showCatalog();
+                return;
+            }
+            if (view !== "home") {
+                event.preventDefault();
+                goHome();
+            }
+        };
+        window.addEventListener(NATIVE_BACK_EVENT, handleNativeBack);
+        return () => window.removeEventListener(NATIVE_BACK_EVENT, handleNativeBack);
+    }, [active, view]);
+
     const sharedHeaderProps = {
         query,
         setQuery,
+        activeView: active ? "catalog" as const : view,
+        onHome: goHome,
         onLibrary: openLibrary,
         onRatings: showRatings,
         onDownloads: showDownloads,
@@ -427,6 +466,19 @@ export default function Home() {
             setTracked,
             saveTracked,
         });
+        const updateActiveProgress = (
+            ...args: Parameters<typeof activeWatchActions.updateProgress>
+        ) => {
+            activeWatchActions.updateProgress(...args);
+            if (
+                watchingHidden.includes(active.anime_id)
+                && Object.values(args[0].episodes).some(state => state.position > 0)
+            ) {
+                const nextHidden = watchingHidden.filter(id => id !== active.anime_id);
+                setWatchingHidden(nextHidden);
+                write(K.watchingHidden, nextHidden);
+            }
+        };
 
         return (
             <Watch
@@ -448,7 +500,7 @@ export default function Home() {
                 ratings={ratings[active.anime_id]}
                 communityRating={communityRatings[active.anime_id]}
                 onRatingChange={(target, value) => updateRating(active.anime_id, active.title, target, value)}
-                onProgress={activeWatchActions.updateProgress}
+                onProgress={updateActiveProgress}
                 onPlayerPrefsChange={setPlayerPrefs}
                 onFolders={() => setFolderPicker(active)}
                 tracker={activeTracker}
@@ -474,6 +526,7 @@ export default function Home() {
             anime: lastAnime,
             state: lastState,
             point: lastPoint,
+            hasStoredResume: Boolean(last),
             displayEpisode: lastDisplayEpisode,
             previewAnime: heroPreviewAnime,
             previewVideo: heroPreviewVideo,
@@ -496,6 +549,7 @@ export default function Home() {
         watchingExpanded,
         historyExpanded,
         historyEnabled,
+        storageReady,
     };
 
     const homePageActions: HomePageActions = {
@@ -583,10 +637,6 @@ export default function Home() {
         },
     };
 
-    const goHome = () => {
-        setView("home");
-        window.scrollTo({top: 0, behavior: "smooth"});
-    };
     const currentFolder = openedFolder
         ? folders.find(folder => folder.id === openedFolder.id) ?? openedFolder
         : null;
@@ -611,9 +661,7 @@ export default function Home() {
     };
     const confirmFolderDeletion = () => {
         if (!openedFolder) return;
-        if (confirm(`Удалить папку «${openedFolder.name}»?`)) {
-            deleteFolder(openedFolder);
-        }
+        deleteFolder(openedFolder);
     };
 
     return (
@@ -641,7 +689,7 @@ export default function Home() {
                 />
             )}
             {view === "downloads" && (
-                <DownloadsPage onHome={goHome} onOpen={openAnime} />
+                <DownloadsPage onCatalog={showCatalog} onOpen={openAnime} />
             )}
             {view === "catalog" && (
                 <CatalogPage
@@ -649,6 +697,8 @@ export default function Home() {
                     sort={sort}
                     groupFilter={groupFilter}
                     formatFilter={formatFilter}
+                    dubbingFilter={dubbingFilter}
+                    dubbings={dubbings}
                     yearFrom={yearFrom}
                     yearTo={yearTo}
                     genre={genre}
@@ -673,6 +723,7 @@ export default function Home() {
                     setSort={setSort}
                     setGroupFilter={setGroupFilter}
                     setFormatFilter={setFormatFilter}
+                    setDubbingFilter={setDubbingFilter}
                     setYearFrom={setYearFrom}
                     setYearTo={setYearTo}
                     setGenre={setGenre}
@@ -688,6 +739,7 @@ export default function Home() {
                     onFavorite={toggleFavorite}
                     onFolders={setFolderPicker}
                     onLoadMore={() => void loadMore()}
+                    onRetry={() => void load(0, false, query)}
                 />
             )}
 

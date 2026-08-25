@@ -810,6 +810,227 @@
   }
 }
 
+/* Player visual polish ----------------------------------------------------
+ * Keep the video as the focal point and treat metadata and controls as one
+ * restrained surface around it. Player behaviour remains unchanged. */
+.watch-shell {
+  --watch-control-radius: 12px;
+  --watch-surface-radius: 18px;
+}
+
+.watch-shell > .back {
+  min-height: 38px;
+  margin-bottom: 4px;
+  padding: 0 2px;
+  color: color-mix(in srgb, var(--muted) 88%, white 12%);
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.watch-shell > .back:hover {
+  color: var(--ink);
+  transform: translateX(-2px);
+}
+
+.watch-shell .watch-heading {
+  margin-bottom: 16px;
+}
+
+.watch-shell .watch-heading h1 {
+  max-width: 24ch;
+  margin-top: 5px;
+  font-size: calc(clamp(32px, 4.2vw, 58px) * var(--heading-font-scale, 1));
+  line-height: 1.02;
+  letter-spacing: -.035em;
+  text-wrap: balance;
+}
+
+.watch-shell > .watch-rating-panel {
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 52%),
+    color-mix(in srgb, var(--panel) 94%, transparent);
+  border-color: color-mix(in srgb, var(--line) 84%, white 4%);
+  border-radius: var(--watch-control-radius);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 10%);
+}
+
+.watch-shell > .watch-rating-panel > div {
+  min-width: 0;
+}
+
+.watch-shell > .watch-rating-panel .eyebrow {
+  margin-bottom: 7px;
+  font-size: 8px;
+}
+
+.watch-shell > .watch-rating-panel .rating-chip {
+  min-width: 72px;
+  padding: 6px 8px;
+  border-color: color-mix(in srgb, var(--line) 88%, white 3%);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel) 78%, black 8%);
+}
+
+.watch-shell .season-tabs {
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 2px 1px 4px;
+  scrollbar-width: none;
+}
+
+.watch-shell .season-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.watch-shell .season-tabs button {
+  min-height: 38px;
+  padding: 0 13px;
+  border-color: color-mix(in srgb, var(--line) 88%, white 3%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 91%, transparent);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.watch-shell .season-tabs button:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  transform: translateY(-1px);
+}
+
+.watch-shell .season-tabs button.active {
+  background: color-mix(in srgb, var(--accent) 88%, #20182c 12%);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.watch-shell .video-layout {
+  border-color: color-mix(in srgb, var(--line) 80%, white 5%);
+  border-radius: var(--watch-surface-radius);
+  box-shadow: 0 24px 72px rgb(0 0 0 / 42%);
+}
+
+.watch-shell .video-layout > .player-toolbar {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 2%), transparent),
+    color-mix(in srgb, var(--panel) 96%, black 4%);
+  border-color: color-mix(in srgb, var(--line) 82%, white 4%);
+}
+
+.watch-shell .video-layout > .player-toolbar .toolbar-select select,
+.watch-shell .video-layout > .player-toolbar .toolbar-skip,
+.watch-shell .video-layout > .player-toolbar .offline-download-menu summary,
+.watch-shell .video-layout > .player-toolbar .player-settings-trigger {
+  border-radius: var(--watch-control-radius);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.watch-shell .video-layout > .player-toolbar .toolbar-select select:focus-visible,
+.watch-shell .video-layout > .player-toolbar button:focus-visible,
+.watch-shell .video-layout > .player-toolbar summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 76%, white 24%);
+  outline-offset: 2px;
+}
+
+.watch-shell .season-load-notice {
+  border-radius: var(--watch-control-radius);
+}
+
+@media (max-width: 700px) {
+  .watch-shell {
+    padding-inline: 12px;
+    padding-top: 20px;
+  }
+
+  .watch-shell > .back {
+    margin-bottom: 2px;
+    font-size: 12px;
+  }
+
+  .watch-shell .watch-heading {
+    margin: 0 1px 12px;
+  }
+
+  .watch-shell .watch-heading h1 {
+    max-width: 100%;
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: calc(clamp(27px, 8vw, 38px) * var(--heading-font-scale, 1));
+    line-height: 1.04;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .watch-shell > .watch-rating-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .watch-shell > .watch-rating-panel .rating-board {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .watch-shell > .watch-rating-panel .rating-board::-webkit-scrollbar {
+    display: none;
+  }
+
+  .watch-shell > .watch-rating-panel .rating-chip {
+    flex: 0 0 auto;
+  }
+
+  .watch-shell > .watch-rating-panel > .score-picker {
+    align-items: flex-end;
+    gap: 5px;
+  }
+
+  .watch-shell > .watch-rating-panel > .score-picker > span {
+    font-size: 9px;
+  }
+
+  .watch-shell .season-tabs button {
+    min-height: 36px;
+    padding-inline: 12px;
+    font-size: 10px;
+  }
+
+  .watch-shell .video-layout {
+    border-radius: 14px;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 36%);
+  }
+
+  .watch-shell .video-layout > .player-toolbar {
+    border-top: 1px solid color-mix(in srgb, var(--line) 82%, white 4%);
+  }
+}
+
+@media (max-width: 420px) {
+  .watch-shell > .watch-rating-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .watch-shell > .watch-rating-panel > .score-picker {
+    align-items: center;
+    justify-content: space-between;
+    flex-direction: row;
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .watch-shell > .back,
+  .watch-shell .season-tabs button,
+  .watch-shell .video-layout > .player-toolbar select,
+  .watch-shell .video-layout > .player-toolbar button,
+  .watch-shell .video-layout > .player-toolbar summary {
+    transition: none;
+  }
+}
+
 /* On a phone the selected side panel is shown beneath the video. */
 @media (max-width: 720px) {
   .video-layout.toolbar-right,
@@ -1668,6 +1889,31 @@ body:has(.player-options[open]) .watch-party-panel {
   line-height: 1.45;
 }
 
+.season-load-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 9px 12px;
+  border: 1px solid #4b3d5c;
+  border-radius: 10px;
+  background: #17131b;
+  color: #dcc8e8;
+  font-size: 13px;
+}
+
+.season-load-notice button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb,var(--accent) 18%,#17131b);
+  padding: 6px 10px;
+  color: inherit;
+  cursor: pointer;
+}
+
 .watch-party-room-rule {
   display: flex;
   align-items: center;
@@ -2383,3 +2629,4 @@ html[data-color-scheme="light"] .watch-party-panel {
     bottom: calc(100% + 8px);
   }
 }
+.watch-rating-mobile { display: none; }
