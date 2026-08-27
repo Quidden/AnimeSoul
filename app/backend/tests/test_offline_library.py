@@ -17,6 +17,7 @@ from unittest import mock
 from backend.app.services.offline_library import (
     OfflineLibraryError,
     OfflineLibraryService,
+    CredentialVerificationUnavailable,
     _anime_folder_name,
     _dpapi_protect,
     _dpapi_unprotect,
@@ -56,6 +57,123 @@ def request_for(anime_id: int = 101, title: str = "Тестовое аниме")
 
 
 class OfflineLibraryTests(unittest.TestCase):
+    def test_kodik_credentials_are_reported_per_field_before_save(self) -> None:
+        async def scenario(root: Path) -> None:
+            service = OfflineLibraryService(root / "data")
+            await service.update_settings("downloads")
+
+            async def public_ok(public_key: str) -> dict[str, Any]:
+                self.assertEqual(public_key, "public-ok")
+                return {"results": [{"link": "//kodikplayer.com/seria/1/hash/720p"}]}
+
+            async def private_ok(public_key: str, private_key: str, _payload: dict[str, Any]) -> None:
+                self.assertEqual((public_key, private_key), ("public-ok", "private-ok"))
+
+            service.resolver.verify_public_key = public_ok  # type: ignore[method-assign]
+            service.resolver.verify_private_key = private_ok  # type: ignore[method-assign]
+            accepted = await service.verify_kodik_credentials("public-ok", "private-ok")
+            self.assertTrue(accepted["canSave"])
+            self.assertEqual(
+                [(item["field"], item["status"]) for item in accepted["checks"]],
+                [("kodikPublicKey", "valid"), ("kodikPrivateKey", "valid")],
+            )
+
+            async def private_unavailable(
+                _public_key: str,
+                _private_key: str,
+                _payload: dict[str, Any],
+            ) -> None:
+                raise CredentialVerificationUnavailable("Kodik временно недоступен")
+
+            service.resolver.verify_private_key = private_unavailable  # type: ignore[method-assign]
+            pending = await service.verify_kodik_credentials("public-ok", "private-busy")
+            self.assertFalse(pending["canSave"])
+            self.assertEqual(pending["checks"][1]["status"], "pending")
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory)))
+
+    def test_single_anime_lookup_skips_full_storage_scan(self) -> None:
+        async def scenario(root: Path) -> None:
+            service = OfflineLibraryService(root / "data")
+            await service.update_settings("downloads")
+            directory = await service._directory()
+            relative = str(Path("Local first [101]") / "episode-1.mp4")
+            media = service._path_within(directory, relative)
+            await asyncio.to_thread(media.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(media.write_bytes, b"video")
+            await service._save_index(directory, {
+                "version": 1,
+                "episodes": [{
+                    "id": "local-first",
+                    "animeId": 101,
+                    "title": "Local first",
+                    "season": 1,
+                    "episode": "1",
+                    "dubbing": "AniLibria",
+                    "quality": 720,
+                    "file": relative,
+                    "sizeBytes": 5,
+                    "downloadedAt": 1,
+                }],
+            })
+
+            with mock.patch(
+                "backend.app.services.offline_library.shutil.disk_usage",
+                side_effect=AssertionError("single-title lookup must not inspect disk usage"),
+            ):
+                anime = await service.anime(101)
+                missing = await service.anime(999)
+
+            self.assertEqual(anime["animeId"], 101)
+            self.assertEqual(anime["episodes"][0]["mediaUrl"], "/api/downloads/media/local-first")
+            self.assertIsNone(missing)
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory)))
+
+    def test_library_poll_reuses_cached_index_and_recorded_sizes(self) -> None:
+        async def scenario(root: Path) -> None:
+            service = OfflineLibraryService(root / "data")
+            await service.update_settings("downloads")
+            directory = await service._directory()
+            relative = str(Path("Cached anime [101]") / "episode-1.mp4")
+            media = service._path_within(directory, relative)
+            await asyncio.to_thread(media.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(media.write_bytes, b"video")
+            await service._save_index(directory, {
+                "version": 1,
+                "episodes": [{
+                    "id": "cached-episode",
+                    "animeId": 101,
+                    "title": "Cached anime",
+                    "season": 1,
+                    "episode": "1",
+                    "dubbing": "AniLibria",
+                    "quality": 720,
+                    "duration": 1440,
+                    "file": relative,
+                    "sizeBytes": 5,
+                    "downloadedAt": 1,
+                }],
+            })
+
+            with mock.patch.object(service, "_read_index", wraps=service._read_index) as read_index, \
+                    mock.patch.object(service, "_entry_storage_size", wraps=service._entry_storage_size) as measure:
+                first = await service.library()
+                service._jobs["visible-job"] = {
+                    "id": "visible-job", "status": "queued", "createdAt": 1,
+                }
+                second = await service.library()
+
+            self.assertEqual(read_index.await_count, 1)
+            self.assertEqual(measure.call_count, 0)
+            self.assertEqual(first["anime"][0]["episodes"][0]["sizeBytes"], 5)
+            self.assertEqual(second["jobs"][0]["id"], "visible-job")
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory)))
+
     def test_android_secret_uses_application_sandbox_format(self) -> None:
         with mock.patch.dict(os.environ, {"ANIMESOUL_MOBILE": "android"}):
             protected = _dpapi_protect("private-test-key")

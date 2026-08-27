@@ -116,6 +116,7 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchEntry[] = [
   { id: "player-next", tab: "player", kind: "setting", title: "Автосерия", description: "Автоматически открыть следующую серию", keywords: "следующая серия autoplay автовоспроизведение" },
   { id: "player-carousel", tab: "player", kind: "setting", title: "Карусель серий", description: "Предыдущая и следующая серии возле плеера", keywords: "переключение карточки сбоку" },
   { id: "player-thumbnails", tab: "player", kind: "setting", title: "Миниатюры при наведении", description: "Кадры серии над её карточкой", keywords: "превью скриншот hover мышь" },
+  { id: "player-compact-episodes", tab: "player", kind: "setting", title: "Компактный список серий", description: "Более плотные карточки серий под страницей аниме", keywords: "новый вид сетка список снизу компактно плотный" },
   { id: "player-toolbar", tab: "player", kind: "setting", title: "Панель управления", description: "Расположение элементов управления плеером", keywords: "сверху снизу слева справа озвучка источник" },
 
   { id: "appearance-palette", tab: "appearance", kind: "setting", title: "Собственная палитра", description: "Основной и акцентный цвета интерфейса", keywords: "цвет фон акцент оформление кастомизация" },

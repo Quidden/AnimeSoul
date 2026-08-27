@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   completeGDriveAuth,
   disconnectGDrive,
@@ -13,6 +13,11 @@ import {
   type GDriveSyncMode,
 } from "../../lib/gdrive";
 import { readLocal as read, writeLocal as write } from "../../lib/storage";
+import {
+  mergePolledClientId,
+  type CredentialCheck,
+  type CredentialSaveOutcome,
+} from "./credentialImport";
 
 type Options = {
   onStorageReload?: () => void;
@@ -43,12 +48,17 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
   const [showCredsInput, setShowCredsInput] = useState(false);
   const [clientIdInput, setClientIdInput] = useState("");
   const [clientSecretInput, setClientSecretInput] = useState("");
+  const credentialsDraftRevision = useRef(0);
+  const clientIdDraftDirty = useRef(false);
+  const statusRequestRevision = useRef(0);
   const [credentialsSaving, setCredentialsSaving] = useState(false);
   const [credentialsMessage, setCredentialsMessage] = useState("");
   const [credentialsTone, setCredentialsTone] = useState<"success" | "error">("success");
+  const [credentialsChecks, setCredentialsChecks] = useState<CredentialCheck[]>([]);
   const [initialChoiceModal, setInitialChoiceModal] = useState(false);
 
   const loadGDriveStatus = async () => {
+    const requestRevision = ++statusRequestRevision.current;
     try {
       let status = await fetchGDriveStatus();
       if (status.oauth_pending) {
@@ -59,6 +69,7 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
           setSyncMessage(`Google Drive подключён${completed.user_email ? `: ${completed.user_email}` : ""}.`);
         }
       }
+      if (requestRevision !== statusRequestRevision.current) return;
       setGDriveStatus(status);
       write("animesoul:gdrive-has-cloud-file", status.has_cloud_file ?? false);
       if (!status.has_credentials) {
@@ -76,8 +87,15 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
         }
       }
 
-      setClientIdInput(status.client_id || "");
+      // Status is polled while Settings is open. Never replace a draft the
+      // user is typing with the last saved Client ID from that poll.
+      setClientIdInput(current => mergePolledClientId(
+        status.client_id || "",
+        current,
+        clientIdDraftDirty.current,
+      ));
     } catch (error: unknown) {
+      if (requestRevision !== statusRequestRevision.current) return;
       setSyncMessage(error instanceof Error ? error.message : "Не удалось проверить Google Drive");
     }
   };
@@ -106,25 +124,81 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
     }
   };
 
-  const saveCredentials = async () => {
-    if (!clientIdInput.trim()) {
+  const updateClientIdInput = (value: string) => {
+    clientIdDraftDirty.current = true;
+    credentialsDraftRevision.current += 1;
+    setClientIdInput(value);
+  };
+
+  const updateClientSecretInput = (value: string) => {
+    credentialsDraftRevision.current += 1;
+    setClientSecretInput(value);
+  };
+
+  const saveCredentials = async (override?: { clientId?: string; clientSecret?: string }): Promise<CredentialSaveOutcome> => {
+    const clientId = (
+      override?.clientId
+      ?? (override ? gdriveStatus?.client_id : undefined)
+      ?? clientIdInput
+    ).trim();
+    const clientSecret = (override ? override.clientSecret ?? "" : clientSecretInput).trim();
+    const draftRevision = credentialsDraftRevision.current;
+    if (!clientId) {
+      const checks: CredentialCheck[] = [{
+        field: "googleClientId",
+        label: "Google Client ID",
+        status: "invalid",
+        detail: "Введите Client ID, чтобы проверить Google OAuth.",
+      }];
+      setCredentialsChecks(checks);
       setCredentialsTone("error");
       setCredentialsMessage("Введите Google OAuth Client ID.");
-      return;
+      return { saved: false, checks };
     }
     setCredentialsSaving(true);
     setCredentialsMessage("");
+    setCredentialsChecks([]);
     try {
-      await saveGDriveCredentials(clientIdInput.trim(), clientSecretInput.trim());
+      const outcome = await saveGDriveCredentials(clientId, clientSecret);
+      setCredentialsChecks(outcome.checks);
+      if (!outcome.saved) {
+        const failed = outcome.checks.find(check => check.status !== "valid");
+        setCredentialsTone("error");
+        setCredentialsMessage(failed?.detail || "Google OAuth не прошёл проверку и не был сохранён.");
+        return outcome;
+      }
+      // Clearing is safe only after an explicit save and only if the user did
+      // not continue editing while the request was in flight.
+      if (credentialsDraftRevision.current === draftRevision) {
+        clientIdDraftDirty.current = false;
+        setClientIdInput(clientId);
+        setClientSecretInput("");
+      }
       await loadGDriveStatus();
       setShowCredsInput(false);
-      setClientSecretInput("");
       setCredentialsTone("success");
       setCredentialsMessage("Google OAuth сохранён на этом устройстве. Теперь можно подключить аккаунт.");
       setSyncMessage("Google OAuth сохранён.");
+      return outcome;
     } catch (error: unknown) {
+      const checks: CredentialCheck[] = [
+        {
+          field: "googleClientId",
+          label: "Google Client ID",
+          status: "pending",
+          detail: error instanceof Error ? error.message : "Google OAuth временно недоступен.",
+        },
+        ...(clientSecret ? [{
+          field: "googleClientSecret" as const,
+          label: "Google Client Secret",
+          status: "pending" as const,
+          detail: "Secret не удалось проверить без ответа Google.",
+        }] : []),
+      ];
+      setCredentialsChecks(checks);
       setCredentialsTone("error");
       setCredentialsMessage(error instanceof Error ? error.message : "Ошибка сохранения Google OAuth.");
+      return { saved: false, checks };
     } finally {
       setCredentialsSaving(false);
     }
@@ -244,12 +318,13 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
     showCredsInput,
     setShowCredsInput,
     clientIdInput,
-    setClientIdInput,
+    setClientIdInput: updateClientIdInput,
     clientSecretInput,
-    setClientSecretInput,
+    setClientSecretInput: updateClientSecretInput,
     credentialsSaving,
     credentialsMessage,
     credentialsTone,
+    credentialsChecks,
     initialChoiceModal,
     setInitialChoiceModal,
     loadGDriveStatus,

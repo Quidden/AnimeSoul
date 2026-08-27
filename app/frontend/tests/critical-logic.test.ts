@@ -13,6 +13,7 @@ import {
   fetchFamily,
   latestResumePoint,
   matchesAnimeSearch,
+  resolveResumeAnime,
   toggleEpisodeWatched,
 } from "../src/lib/anime.ts";
 import {
@@ -61,6 +62,69 @@ import {
 } from "../src/lib/storageSafety.ts";
 import { searchSettings } from "../src/features/settings/settingsCatalog.ts";
 import { parseDebugStack, sanitizeDebugUrl } from "../src/lib/debugLog.ts";
+import {
+  CREDENTIAL_JSON_EXAMPLE,
+  CREDENTIAL_TEXT_EXAMPLE,
+  mergePolledClientId,
+  parseCredentialImport,
+} from "../src/features/settings/credentialImport.ts";
+import { videoSourceIssues } from "../src/lib/sourceDiagnostics.ts";
+
+test("credential import accepts flat JSON without exposing or renaming values", () => {
+  assert.deepEqual(parseCredentialImport(JSON.stringify({
+    yummyPublicToken: "yummy-value",
+    kodikPublicKey: "kodik-public",
+    kodikPrivateKey: "kodik-private",
+    googleClientId: "desktop.apps.googleusercontent.com",
+    googleClientSecret: "GOCSPX-secret",
+  })), {
+    yummyPublicToken: "yummy-value",
+    kodikPublicKey: "kodik-public",
+    kodikPrivateKey: "kodik-private",
+    googleClientId: "desktop.apps.googleusercontent.com",
+    googleClientSecret: "GOCSPX-secret",
+  });
+});
+
+test("credential examples shown in settings remain valid import files", () => {
+  const expected = {
+    yummyPublicToken: "ВАШ_YUMMY_PUBLIC_TOKEN",
+    kodikPublicKey: "ВАШ_KODIK_PUBLIC_KEY",
+    kodikPrivateKey: "ВАШ_KODIK_PRIVATE_KEY",
+    googleClientId: "ВАШ_GOOGLE_CLIENT_ID",
+    googleClientSecret: "ВАШ_GOOGLE_CLIENT_SECRET",
+  };
+  assert.deepEqual(parseCredentialImport(CREDENTIAL_JSON_EXAMPLE), expected);
+  assert.deepEqual(parseCredentialImport(CREDENTIAL_TEXT_EXAMPLE), expected);
+});
+
+test("credential import accepts TXT aliases and downloaded Google OAuth JSON", () => {
+  assert.deepEqual(parseCredentialImport([
+    "YUMMY_PUBLIC_TOKEN = yummy-value",
+    "KODIK_PUBLIC_KEY: kodik-public",
+    "KODIK_PRIVATE_KEY='kodik-private'",
+  ].join("\n")), {
+    yummyPublicToken: "yummy-value",
+    kodikPublicKey: "kodik-public",
+    kodikPrivateKey: "kodik-private",
+  });
+  assert.deepEqual(parseCredentialImport(JSON.stringify({
+    installed: {
+      client_id: "desktop.apps.googleusercontent.com",
+      client_secret: "GOCSPX-secret",
+      redirect_uris: ["http://localhost"],
+    },
+  })), {
+    googleClientId: "desktop.apps.googleusercontent.com",
+    googleClientSecret: "GOCSPX-secret",
+  });
+});
+
+test("Google status polling never overwrites a dirty OAuth draft", () => {
+  assert.equal(mergePolledClientId("saved-id", "", true), "");
+  assert.equal(mergePolledClientId("saved-id", "draft-id", true), "draft-id");
+  assert.equal(mergePolledClientId("saved-id", "stale-id", false), "saved-id");
+});
 
 test("global search finds settings by title, description and keywords", () => {
   assert.equal(searchSettings("автоскип опенинга")[0]?.id, "player-opening");
@@ -214,6 +278,30 @@ test("player flags a materially shorter Kodik dubbing without calling it censors
   ];
   assert.equal(dubbingDurationDeficit(videos, "Short", "6"), 321);
   assert.equal(dubbingDurationDeficit(videos, "Full", "6"), 0);
+  assert.equal(dubbingDurationDeficit([
+    ...videos,
+    {
+      number: "6",
+      duration: 1_100,
+      data: { dubbing: "Short", player: "Локальный файл · 720p" },
+      offline: { quality: 720 },
+    },
+  ], "Short", "6"), 0);
+});
+
+test("video source diagnostics say which provider and data failed", () => {
+  const issues = videoSourceIssues({
+    animeId: 77,
+    title: "Re:Zero",
+    seasonLabel: "Сезон 1",
+    sources: { yummy: "ok", kodik: "error" },
+    loadedVideos: 12,
+  });
+
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0]?.sourceLabel, "Kodik");
+  assert.match(issues[0]?.unavailableData ?? "", /озвучки/);
+  assert.match(issues[0]?.context ?? "", /Re:Zero/);
 });
 
 test("Kodik subtitle translations are separated from voice dubbings", () => {
@@ -824,4 +912,17 @@ test("continue watching resumes an unfinished rewatch", () => {
   assert.equal(episodeResumePosition(state), 92);
   assert.equal(point?.key, "2:2");
   assert.equal(point?.state.position, 92);
+});
+
+test("continue watching resolves a persisted local title before the remote catalog", () => {
+  const local = resolveResumeAnime([], 1248, "Локально сохранённое аниме");
+  assert.deepEqual(local, {
+    anime_id: 1248,
+    title: "Локально сохранённое аниме",
+  });
+  assert.equal(
+    resolveResumeAnime([{ anime_id: 1248, title: "Полная карточка" }], 1248, "Локальная")?.title,
+    "Полная карточка",
+  );
+  assert.equal(resolveResumeAnime([], 1248, undefined), undefined);
 });

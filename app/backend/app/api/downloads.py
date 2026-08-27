@@ -33,6 +33,11 @@ class DownloadNetworkPayload(BaseModel):
     type: str = Field(min_length=1, max_length=24)
 
 
+class KodikCredentialsPayload(BaseModel):
+    kodikPublicKey: str | None = Field(default=None, max_length=512)
+    kodikPrivateKey: str | None = Field(default=None, max_length=512)
+
+
 class DownloadEpisodePayload(BaseModel):
     videoId: int | str
     season: int = Field(ge=1, le=99)
@@ -90,6 +95,19 @@ async def set_offline_settings(payload: OfflineSettingsPayload) -> dict[str, str
 @router.get("/api/downloads/library")
 async def get_offline_library() -> dict[str, Any]:
     return await offline_library.library()
+
+
+@router.post("/api/downloads/credentials/validate")
+async def validate_kodik_credentials(payload: KodikCredentialsPayload) -> dict[str, Any]:
+    return await offline_library.verify_kodik_credentials(
+        payload.kodikPublicKey,
+        payload.kodikPrivateKey,
+    )
+
+
+@router.get("/api/downloads/anime/{anime_id}")
+async def get_downloaded_anime(anime_id: int) -> dict[str, Any]:
+    return {"anime": await offline_library.anime(anime_id)}
 
 
 @router.get("/api/downloads/jobs")

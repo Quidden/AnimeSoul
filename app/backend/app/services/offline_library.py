@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import ctypes
 from ctypes import wintypes
 from datetime import UTC, datetime, timedelta
@@ -50,6 +51,10 @@ def _is_hls_source(value: str) -> bool:
 
 class OfflineLibraryError(RuntimeError):
     """A user-facing offline-library error."""
+
+
+class CredentialVerificationUnavailable(OfflineLibraryError):
+    """A credential could not be confirmed because its provider is offline."""
 
 
 class DownloadCancelled(Exception):
@@ -136,6 +141,35 @@ def _kodik_player_candidates(raw_link: str | None, official_link: str | None) ->
 def _kodik_signature(link: str, ip: str, deadline: str, private_key: str) -> str:
     message = f"{link}:{ip}:{deadline}".encode("utf-8")
     return hmac.new(private_key.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def _first_kodik_player_link(value: object) -> str | None:
+    """Find a concrete player link in a Kodik catalogue response."""
+
+    candidates: list[str] = []
+
+    def collect(entry: object) -> None:
+        if isinstance(entry, str):
+            try:
+                candidates.append(_private_player_link(entry))
+            except OfflineLibraryError:
+                pass
+            return
+        if isinstance(entry, dict):
+            for nested in entry.values():
+                collect(nested)
+        elif isinstance(entry, list):
+            for nested in entry:
+                collect(nested)
+
+    collect(value)
+    return next(
+        (
+            link for link in candidates
+            if urlparse(_normalise_url(link)).path.casefold().startswith(("/seria/", "/video/", "/movie/"))
+        ),
+        candidates[0] if candidates else None,
+    )
 
 
 def _select_kodik_source(links: object, requested_quality: int) -> tuple[str, int]:
@@ -572,6 +606,98 @@ class KodikSourceResolver:
         self._public_ip: str | None = None
         self._public_ip_expires_at = 0.0
 
+    async def verify_public_key(self, public_key: str) -> dict[str, Any]:
+        """Confirm a public token against Kodik and return test material."""
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(15.0, read=25.0),
+                follow_redirects=True,
+                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+            ) as client:
+                response = await client.post(KODIK_SEARCH_ENDPOINT, params={
+                    "token": public_key,
+                    "title": "Naruto",
+                    "types": "anime,anime-serial",
+                    "limit": 1,
+                    "with_episodes_data": "true",
+                })
+        except httpx.HTTPError as error:
+            raise CredentialVerificationUnavailable(
+                "Kodik сейчас недоступен — Public key не удалось проверить."
+            ) from error
+        if not response.is_success:
+            raise OfflineLibraryError(
+                f"Kodik отклонил Public key (HTTP {response.status_code})."
+            )
+        try:
+            payload = response.json()
+        except json.JSONDecodeError as error:
+            raise CredentialVerificationUnavailable(
+                "Kodik вернул некорректный ответ при проверке Public key."
+            ) from error
+        if not isinstance(payload, dict):
+            raise CredentialVerificationUnavailable(
+                "Kodik вернул ответ неизвестного формата при проверке Public key."
+            )
+        if payload.get("error"):
+            raise OfflineLibraryError(f"Kodik отклонил Public key: {payload['error']}")
+        if not isinstance(payload.get("results"), list):
+            raise CredentialVerificationUnavailable(
+                "Kodik не подтвердил Public key ожидаемым ответом."
+            )
+        return payload
+
+    async def verify_private_key(
+        self,
+        public_key: str,
+        private_key: str,
+        public_payload: dict[str, Any],
+    ) -> None:
+        """Sign a harmless test video request to confirm the private key pair."""
+
+        link = _first_kodik_player_link(public_payload.get("results"))
+        if not link:
+            raise CredentialVerificationUnavailable(
+                "Public key работает, но Kodik не дал тестовую серию для проверки Private key."
+            )
+        try:
+            ip = await self._current_public_ipv4()
+        except OfflineLibraryError as error:
+            raise CredentialVerificationUnavailable(str(error)) from error
+        deadline = (datetime.now(UTC) + timedelta(hours=6)).strftime("%Y%m%d%H")
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(25.0, read=45.0),
+                follow_redirects=True,
+                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+            ) as client:
+                response = await client.get(KODIK_VIDEO_LINKS_ENDPOINT, params={
+                    "link": link,
+                    "p": public_key,
+                    "ip": ip,
+                    "d": deadline,
+                    "s": _kodik_signature(link, ip, deadline, private_key),
+                    "auto_proxy": "true",
+                    "skip_segments": "true",
+                })
+        except httpx.HTTPError as error:
+            raise CredentialVerificationUnavailable(
+                "Приватный API Kodik сейчас недоступен — Private key не удалось проверить."
+            ) from error
+        if not response.is_success:
+            raise OfflineLibraryError(self._rejection_message(response))
+        try:
+            payload = response.json()
+        except json.JSONDecodeError as error:
+            raise CredentialVerificationUnavailable(
+                "Приватный API Kodik вернул некорректный ответ."
+            ) from error
+        if not isinstance(payload, dict) or payload.get("error") or not payload.get("links"):
+            raise OfflineLibraryError(
+                "Kodik принял Public key, но не подтвердил Private key прямой ссылкой."
+            )
+
     async def resolve_private_api(
         self,
         embed_url: str,
@@ -871,6 +997,8 @@ class OfflineLibraryService:
         self._directory_cache: Path | None = None
         self._media_path_cache: dict[tuple[str, str], Path] = {}
         self._asset_directory_cache: dict[str, Path] = {}
+        self._library_cache: tuple[float, dict[str, Any]] | None = None
+        self._library_cache_lock = asyncio.Lock()
         self.resolver = KodikSourceResolver()
 
     async def settings(self) -> dict[str, str | bool]:
@@ -963,6 +1091,63 @@ class OfflineLibraryService:
         return {"type": network_type}
 
     async def library(self) -> dict[str, Any]:
+        now = time.monotonic()
+        cached = self._library_cache
+        if cached and now - cached[0] < 15:
+            return {**copy.deepcopy(cached[1]), "jobs": self.jobs()}
+
+        async with self._library_cache_lock:
+            cached = self._library_cache
+            if cached and time.monotonic() - cached[0] < 15:
+                return {**copy.deepcopy(cached[1]), "jobs": self.jobs()}
+            snapshot = await self._library_snapshot()
+            self._library_cache = (time.monotonic(), snapshot)
+            return {**copy.deepcopy(snapshot), "jobs": self.jobs()}
+
+    async def anime(self, anime_id: int) -> dict[str, Any] | None:
+        """Return one downloaded title without building the full library view.
+
+        Opening the watch page is latency-sensitive. It only needs to know
+        whether this title has local episodes, so avoid the recursive storage
+        accounting and disk-usage lookup used by the downloads screen.
+        """
+
+        cached = self._library_cache
+        if cached:
+            item = next(
+                (entry for entry in cached[1].get("anime", []) if entry.get("animeId") == anime_id),
+                None,
+            )
+            # Index writes invalidate the cache, so a cached miss is also an
+            # authoritative answer for the current process.
+            return copy.deepcopy(item) if item else None
+
+        directory = await self._directory()
+        index = await self._read_index(directory)
+        matching = [
+            entry for entry in index.get("episodes", [])
+            if entry.get("animeId") == anime_id
+        ]
+        sizes_changed = False
+        for entry in matching:
+            stored_size = entry.get("sizeBytes")
+            if isinstance(stored_size, (int, float)) and stored_size >= 0:
+                continue
+            entry["sizeBytes"] = await asyncio.to_thread(self._entry_storage_size, directory, entry)
+            sizes_changed = True
+        if sizes_changed:
+            await self._save_index(directory, index)
+        grouped = self._group_public_anime(matching)
+        return grouped[0] if grouped else None
+
+    async def _library_snapshot(self) -> dict[str, Any]:
+        """Build the filesystem-backed part of the offline library once.
+
+        Player and downloads screens poll job state frequently. File existence,
+        recursive HLS sizes and disk usage do not need to be recomputed for
+        every poll; index commits invalidate this snapshot immediately.
+        """
+
         directory = await self._directory()
         index = await self._read_index(directory)
         episodes = [item for item in index.get("episodes", []) if self._existing_episode(directory, item)]
@@ -971,13 +1156,131 @@ class OfflineLibraryService:
             await self._save_index(directory, index)
         sizes_changed = False
         for entry in episodes:
+            # Downloads persist their measured size at commit time. Trust that
+            # value during ordinary reads instead of recursively scanning all
+            # HLS assets every time the library screen/player opens. Legacy
+            # rows without a size are measured once and written back below.
+            stored_size = entry.get("sizeBytes")
+            if isinstance(stored_size, (int, float)) and stored_size >= 0:
+                continue
             measured = await asyncio.to_thread(self._entry_storage_size, directory, entry)
-            if int(entry.get("sizeBytes") or -1) != measured:
-                entry["sizeBytes"] = measured
-                sizes_changed = True
+            entry["sizeBytes"] = measured
+            sizes_changed = True
         if sizes_changed:
             index["episodes"] = episodes
             await self._save_index(directory, index)
+        public_anime = self._group_public_anime(episodes)
+        storage_path = self._storage_volume_path(directory, episodes)
+        storage = await asyncio.to_thread(shutil.disk_usage, storage_path)
+        return {
+            "directory": str(directory),
+            "storage": {
+                "totalBytes": storage.total,
+                "usedBytes": storage.used,
+                "freeBytes": storage.free,
+                "libraryBytes": sum(int(entry.get("sizeBytes") or 0) for entry in episodes),
+            },
+            "anime": public_anime,
+        }
+
+    async def verify_kodik_credentials(
+        self,
+        kodik_public_key: str | None = None,
+        kodik_private_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Verify submitted values and any stored partner needed by a pair."""
+
+        submitted_public = str(kodik_public_key or "").strip()
+        submitted_private = str(kodik_private_key or "").strip()
+        settings_payload = await self._settings_payload()
+        stored_public = str(settings_payload.get("kodikPublicKey") or "").strip()
+        active_public = submitted_public or stored_public
+        active_private = submitted_private
+        checks: list[dict[str, str]] = []
+
+        if submitted_public and not submitted_private and self.private_key_file.is_file():
+            try:
+                protected = await asyncio.to_thread(self.private_key_file.read_text, encoding="utf-8")
+                active_private = (await asyncio.to_thread(_dpapi_unprotect, protected.strip())).strip()
+            except (OSError, OfflineLibraryError) as error:
+                checks.append({
+                    "field": "kodikPrivateKey",
+                    "label": "Kodik Private key",
+                    "status": "pending",
+                    "detail": f"Сохранённый Private key не удалось прочитать: {error}",
+                })
+
+        if not active_public:
+            if submitted_private:
+                checks.append({
+                    "field": "kodikPrivateKey",
+                    "label": "Kodik Private key",
+                    "status": "pending",
+                    "detail": "Сначала укажите Public key: Private key проверяется только как часть пары.",
+                })
+            return {"canSave": False, "checks": checks}
+
+        public_payload: dict[str, Any] | None = None
+        try:
+            public_payload = await self.resolver.verify_public_key(active_public)
+            checks.append({
+                "field": "kodikPublicKey",
+                "label": "Kodik Public key",
+                "status": "valid",
+                "detail": (
+                    "Kodik API принял ключ и вернул каталог."
+                    if submitted_public
+                    else "Ранее сохранённый Public key работает и используется для проверки пары."
+                ),
+            })
+        except CredentialVerificationUnavailable as error:
+            checks.append({
+                "field": "kodikPublicKey", "label": "Kodik Public key",
+                "status": "pending", "detail": str(error),
+            })
+        except OfflineLibraryError as error:
+            checks.append({
+                "field": "kodikPublicKey", "label": "Kodik Public key",
+                "status": "invalid", "detail": str(error),
+            })
+
+        if active_private and public_payload is not None:
+            try:
+                await self.resolver.verify_private_key(active_public, active_private, public_payload)
+                checks.append({
+                    "field": "kodikPrivateKey",
+                    "label": "Kodik Private key",
+                    "status": "valid",
+                    "detail": (
+                        "Подпись принята, приватный API вернул прямую видеоссылку."
+                        if submitted_private
+                        else "Ранее сохранённый Private key образует рабочую пару с новым Public key."
+                    ),
+                })
+            except CredentialVerificationUnavailable as error:
+                checks.append({
+                    "field": "kodikPrivateKey", "label": "Kodik Private key",
+                    "status": "pending", "detail": str(error),
+                })
+            except OfflineLibraryError as error:
+                checks.append({
+                    "field": "kodikPrivateKey", "label": "Kodik Private key",
+                    "status": "invalid", "detail": str(error),
+                })
+        elif submitted_private and public_payload is None:
+            checks.append({
+                "field": "kodikPrivateKey",
+                "label": "Kodik Private key",
+                "status": "pending",
+                "detail": "Private key не проверен, потому что Public key не был подтверждён.",
+            })
+
+        return {
+            "canSave": bool(checks) and all(check["status"] == "valid" for check in checks),
+            "checks": checks,
+        }
+
+    def _group_public_anime(self, episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         anime: dict[int, dict[str, Any]] = {}
         for entry in episodes:
             anime_id = int(entry["animeId"])
@@ -994,19 +1297,7 @@ class OfflineLibraryService:
             if item.get("poster"):
                 item["posterUrl"] = f"/api/downloads/posters/{item['animeId']}"
             item["sizeBytes"] = sum(int(entry.get("sizeBytes") or 0) for entry in item["episodes"])
-        storage_path = self._storage_volume_path(directory, episodes)
-        storage = await asyncio.to_thread(shutil.disk_usage, storage_path)
-        return {
-            "directory": str(directory),
-            "storage": {
-                "totalBytes": storage.total,
-                "usedBytes": storage.used,
-                "freeBytes": storage.free,
-                "libraryBytes": sum(int(entry.get("sizeBytes") or 0) for entry in episodes),
-            },
-            "anime": sorted(anime.values(), key=lambda item: item["title"].casefold()),
-            "jobs": self.jobs(),
-        }
+        return sorted(anime.values(), key=lambda item: item["title"].casefold())
 
     def jobs(self) -> list[dict[str, Any]]:
         return sorted((dict(job) for job in self._jobs.values()), key=lambda item: item["createdAt"], reverse=True)
@@ -1825,6 +2116,7 @@ class OfflineLibraryService:
     def _invalidate_playback_path_cache(self) -> None:
         self._media_path_cache.clear()
         self._asset_directory_cache.clear()
+        self._library_cache = None
 
     async def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
         await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)

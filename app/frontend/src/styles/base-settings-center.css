@@ -450,6 +450,114 @@ html[data-color-scheme="light"] .settings-search input,html[data-color-scheme="l
 .credentials-google-grid { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
 .credentials-actions { display: flex; gap: 8px; }
 
+.credentials-import-card {
+  border-style: dashed!important;
+  border-color: color-mix(in srgb, var(--accent) 42%, #302a35)!important;
+  background: color-mix(in srgb, var(--accent) 5%, #17141a)!important;
+}
+
+.credentials-import-controls {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.credentials-import-hint {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #9c94a2!important;
+}
+
+.credentials-import-guide {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #ffffff12;
+  border-radius: 10px;
+  background: #0e0c1099;
+}
+
+.credentials-import-guide summary {
+  padding: 10px 12px;
+  color: #ddd4e2;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.credentials-import-guide-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+  color: #aaa1b0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.credentials-import-guide-body pre {
+  max-width: 100%;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #ffffff0f;
+  border-radius: 8px;
+  background: #08070a;
+  color: #cfc6d4;
+  font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.credentials-import-guide-body ul {
+  display: grid;
+  gap: 5px;
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
+.credentials-import-guide-body code { color: #e4bc79; }
+
+.credential-check-list {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+}
+
+.credential-check {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #0d0b0f99;
+}
+
+.credential-check > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-weight: 850;
+}
+
+.credential-check > div { min-width: 0; display: grid; gap: 2px; }
+.credential-check b { color: #e1d9e5; font-size: 11px; }
+.credential-check small { color: #9e95a4; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.credential-check em { font-size: 9px; font-style: normal; font-weight: 800; white-space: nowrap; }
+.credential-check.valid { border-color: #55c9864d; }
+.credential-check.valid > span { background: #173922; color: #83e3a7; }
+.credential-check.valid em { color: #83e3a7; }
+.credential-check.invalid { border-color: #df667052; }
+.credential-check.invalid > span { background: #41171e; color: #f0a2aa; }
+.credential-check.invalid em { color: #f0a2aa; }
+.credential-check.pending { border-color: #d5a45552; }
+.credential-check.pending > span { background: #3b2d14; color: #e9c37a; }
+.credential-check.pending em { color: #e9c37a; }
+
 .credentials-feedback {
   grid-column: 1 / -1;
   margin: 1px 0 0;
@@ -550,9 +658,12 @@ html[data-color-scheme="light"] .settings-search input,html[data-color-scheme="l
   }
   .credentials-card-controls,
   .credentials-kodik-grid,
-  .credentials-google-grid {
+  .credentials-google-grid,
+  .credentials-import-controls {
     grid-template-columns: 1fr;
   }
   .credentials-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .credentials-feedback { grid-column: 1; }
+  .credential-check { grid-template-columns: 24px minmax(0, 1fr); }
+  .credential-check em { grid-column: 2; }
 }

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import secrets
 from typing import Any, Literal
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -26,6 +28,116 @@ oauth_completion_lock = asyncio.Lock()
 class CredentialsRequest(BaseModel):
     client_id: str
     client_secret: str | None = None
+
+
+GOOGLE_CLIENT_ID_RE = re.compile(r"^[0-9]+-[a-z0-9_-]+\.apps\.googleusercontent\.com$", re.IGNORECASE)
+
+
+async def _verify_google_credentials(client_id: str, client_secret: str | None) -> list[dict[str, str]]:
+    """Probe Google's official OAuth endpoints without starting a user login."""
+
+    checks: list[dict[str, str]] = []
+    if not GOOGLE_CLIENT_ID_RE.fullmatch(client_id):
+        return [{
+            "field": "googleClientId",
+            "label": "Google Client ID",
+            "status": "invalid",
+            "detail": "Client ID должен иметь вид 123…-abc.apps.googleusercontent.com.",
+        }, *([{
+            "field": "googleClientSecret",
+            "label": "Google Client Secret",
+            "status": "pending",
+            "detail": "Secret нельзя проверить, пока Client ID имеет неверный формат.",
+        }] if client_secret else [])]
+
+    auth_params = {
+        "client_id": client_id,
+        "redirect_uri": "http://localhost",
+        "response_type": "code",
+        "scope": "openid email",
+        "state": secrets.token_urlsafe(12),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+            auth_response = await client.get(
+                "https://accounts.google.com/o/oauth2/v2/auth",
+                params=auth_params,
+            )
+            auth_hint = f"{auth_response.headers.get('location', '')} {auth_response.text[:4000]}".casefold()
+            id_rejected = auth_response.status_code in {400, 401, 403} or any(
+                marker in auth_hint for marker in ("invalid_client", "deleted_client", "oauth client was not found")
+            )
+            if id_rejected:
+                checks.append({
+                    "field": "googleClientId",
+                    "label": "Google Client ID",
+                    "status": "invalid",
+                    "detail": "Google не распознал Client ID или OAuth-клиент отключён.",
+                })
+                if client_secret:
+                    checks.append({
+                        "field": "googleClientSecret",
+                        "label": "Google Client Secret",
+                        "status": "pending",
+                        "detail": "Secret нельзя проверить с отклонённым Client ID.",
+                    })
+                return checks
+            checks.append({
+                "field": "googleClientId",
+                "label": "Google Client ID",
+                "status": "valid",
+                "detail": "Google распознал OAuth-клиент и принял параметры входа.",
+            })
+
+            if client_secret:
+                token_response = await client.post(
+                    "https://oauth2.googleapis.com/token",
+                    data={
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "code": f"animesoul-credential-check-{secrets.token_urlsafe(12)}",
+                        "grant_type": "authorization_code",
+                        "redirect_uri": "http://localhost",
+                    },
+                )
+                payload = token_response.json() if token_response.content else {}
+                oauth_error = str(payload.get("error") or "") if isinstance(payload, dict) else ""
+                if oauth_error == "invalid_grant":
+                    checks.append({
+                        "field": "googleClientSecret",
+                        "label": "Google Client Secret",
+                        "status": "valid",
+                        "detail": "Google принял пару Client ID/Secret; тестовый одноразовый код ожидаемо отклонён.",
+                    })
+                elif oauth_error in {"invalid_client", "unauthorized_client"}:
+                    checks.append({
+                        "field": "googleClientSecret",
+                        "label": "Google Client Secret",
+                        "status": "invalid",
+                        "detail": "Google отклонил пару Client ID/Secret. Проверьте Secret и тип OAuth-клиента.",
+                    })
+                else:
+                    checks.append({
+                        "field": "googleClientSecret",
+                        "label": "Google Client Secret",
+                        "status": "pending",
+                        "detail": f"Google не дал однозначного результата проверки Secret{f' ({oauth_error})' if oauth_error else ''}.",
+                    })
+    except (httpx.HTTPError, ValueError) as error:
+        detail = "Google OAuth сейчас недоступен — ключ не сохранён, повторите проверку позже."
+        checked_fields = {check["field"] for check in checks}
+        if "googleClientId" not in checked_fields:
+            checks.append({
+                "field": "googleClientId", "label": "Google Client ID",
+                "status": "pending", "detail": detail,
+            })
+        if client_secret and "googleClientSecret" not in checked_fields:
+            checks.append({
+                "field": "googleClientSecret", "label": "Google Client Secret",
+                "status": "pending", "detail": detail,
+            })
+        logger.info("Google credential verification unavailable: %s", type(error).__name__)
+    return checks
 
 
 class SyncRequest(BaseModel):
@@ -74,10 +186,15 @@ async def network_check() -> dict[str, Any]:
 
 @router.post("/credentials")
 async def set_credentials(payload: CredentialsRequest) -> dict[str, Any]:
-    """Save user-provided Google OAuth client credentials."""
+    """Verify and save user-provided Google OAuth client credentials."""
+
+    client_id = payload.client_id.strip()
     client_secret = payload.client_secret.strip() if payload.client_secret is not None else None
-    gdrive_service.save_client_credentials(payload.client_id.strip(), client_secret)
-    return {"saved": True}
+    checks = await _verify_google_credentials(client_id, client_secret)
+    saved = bool(checks) and all(check["status"] == "valid" for check in checks)
+    if saved:
+        gdrive_service.save_client_credentials(client_id, client_secret)
+    return {"saved": saved, "checks": checks}
 
 
 @router.get("/auth-url")

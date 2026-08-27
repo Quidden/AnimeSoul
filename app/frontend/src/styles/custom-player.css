@@ -128,7 +128,14 @@
   letter-spacing: .04em;
   text-transform: uppercase;
   backdrop-filter: blur(12px);
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: opacity .2s ease, transform .2s ease;
   pointer-events: none;
+}
+.animesoul-player.controls-visible:not(.is-loading) .animesoul-player-local-badge {
+  opacity: 1;
+  transform: translateY(0);
 }
 .animesoul-player-local-badge i {
   width: 7px;
@@ -723,7 +730,8 @@
   .animesoul-player-loader i { animation-duration: 1.5s; }
   .animesoul-player-controls,
   .animesoul-player-top-navigation,
-  .animesoul-player-context { transition: none; }
+  .animesoul-player-context,
+  .animesoul-player-local-badge { transition: none; }
 }
 
 .video-layout > .player-toolbar .toolbar-dubbing-action {

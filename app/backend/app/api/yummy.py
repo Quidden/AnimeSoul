@@ -46,7 +46,7 @@ async def yummy_credentials() -> dict[str, bool]:
 
 
 @router.post("/credentials")
-async def save_yummy_credentials(payload: YummyCredentialsRequest) -> dict[str, bool]:
+async def save_yummy_credentials(payload: YummyCredentialsRequest) -> dict[str, object]:
     """Validate and store a per-device YummyAnime public token."""
 
     token = payload.token.strip()
@@ -77,7 +77,16 @@ async def save_yummy_credentials(payload: YummyCredentialsRequest) -> dict[str, 
     await asyncio.to_thread(temporary.replace, credentials_file)
     gateway.token = token
     gateway._search_cache.clear()
-    return {"configured": True}
+    return {
+        "configured": True,
+        "saved": True,
+        "checks": [{
+            "field": "yummyPublicToken",
+            "label": "YummyAnime Public token",
+            "status": "valid",
+            "detail": "YummyAnime принял токен и вернул каталог.",
+        }],
+    }
 
 
 def _source_headers(sources: dict[str, str]) -> dict[str, str]:

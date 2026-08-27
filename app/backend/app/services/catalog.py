@@ -360,17 +360,36 @@ class HybridCatalogueService:
         return anime, sources
 
     async def videos(self, anime_id: int) -> tuple[dict[str, Any], SourceStates]:
-        yummy_details, yummy_videos = await asyncio.gather(
-            self.yummy.request(f"/anime/{anime_id}"),
-            self.yummy.request(f"/anime/{anime_id}/videos"),
-            return_exceptions=True,
-        )
-        context = yummy_details if isinstance(yummy_details, dict) else await self.registry.get(anime_id)
-        kodik_result = await asyncio.gather(
-            self.kodik.find_for_anime(context, anime_id=anime_id, with_episodes=True),
-            return_exceptions=True,
-        )
-        kodik_value = kodik_result[0]
+        # Catalogue/details calls persist enough identity metadata to start the
+        # Kodik lookup immediately. Previously it waited for both YummyAnime
+        # requests first, so the two upstream timeout windows accumulated and
+        # made an anime page appear frozen. Keep the sequential fallback only
+        # for a truly unknown id.
+        yummy_details_task = asyncio.create_task(self.yummy.request(f"/anime/{anime_id}"))
+        yummy_videos_task = asyncio.create_task(self.yummy.request(f"/anime/{anime_id}/videos"))
+        context = await self.registry.get(anime_id)
+        if context:
+            kodik_task = asyncio.create_task(
+                self.kodik.find_for_anime(context, anime_id=anime_id, with_episodes=True)
+            )
+            yummy_details, yummy_videos, kodik_value = await asyncio.gather(
+                yummy_details_task,
+                yummy_videos_task,
+                kodik_task,
+                return_exceptions=True,
+            )
+        else:
+            yummy_details, yummy_videos = await asyncio.gather(
+                yummy_details_task,
+                yummy_videos_task,
+                return_exceptions=True,
+            )
+            context = yummy_details if isinstance(yummy_details, dict) else None
+            kodik_result = await asyncio.gather(
+                self.kodik.find_for_anime(context, anime_id=anime_id, with_episodes=True),
+                return_exceptions=True,
+            )
+            kodik_value = kodik_result[0]
         sources = {
             "yummy": "error" if isinstance(yummy_details, BaseException) or isinstance(yummy_videos, BaseException) else "ok",
             "kodik": _source_state(kodik_value),

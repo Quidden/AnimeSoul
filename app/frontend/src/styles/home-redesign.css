@@ -389,6 +389,18 @@
   transform: translateY(-2px);
 }
 
+.home-dashboard-panel.collapsed {
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  transform: none;
+}
+
+.home-dashboard-panel.collapsed .home-panel-header {
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+}
+
 .home-panel-header {
   position: static;
   z-index: auto;
@@ -449,11 +461,41 @@
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+.home-panel-collapse-button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  padding: 0;
+  place-items: center;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+  border-radius: 10px;
+}
+
+.home-panel-collapse-button i {
+  font-size: 17px;
+  font-style: normal;
+  line-height: 1;
+  transform: rotate(180deg);
+  transition: transform 180ms ease;
+}
+
+.home-panel-collapse-button[aria-expanded="false"] i {
+  transform: rotate(0);
+}
+
+.home-panel-collapse-button:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 .home-panel-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
   padding-right: 5px;
   scrollbar-color: var(--accent) transparent;
   scrollbar-width: thin;

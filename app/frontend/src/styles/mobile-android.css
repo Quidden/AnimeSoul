@@ -1213,6 +1213,7 @@ html[data-platform="android"] .animesoul-player-settings-content > label:first-c
 html[data-platform="android"] .animesoul-player-dubbing-actions,
 html[data-platform="android"] .animesoul-player-duration-warning,
 html[data-platform="android"] .animesoul-player-settings-content > label:nth-of-type(4),
+html[data-platform="android"] .animesoul-player-fit-control,
 html[data-platform="android"] .animesoul-player-stream-state,
 html[data-platform="android"] .animesoul-player-toolbar-toggle,
 html[data-platform="android"] .animesoul-player-downloads,

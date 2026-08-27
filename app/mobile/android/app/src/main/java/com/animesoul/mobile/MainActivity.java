@@ -250,7 +250,7 @@ public final class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setSupportMultipleWindows(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " AnimeSoulAndroid/0.2.3");
+        settings.setUserAgentString(settings.getUserAgentString() + " AnimeSoulAndroid/0.2.4");
 
         // This deliberately exposes only two parameterless download lifecycle
         // signals. The native service reads all state from the trusted
@@ -588,7 +588,7 @@ public final class MainActivity extends Activity {
 
     private void startLocalRuntime() {
         try {
-            File frontend = new File(getFilesDir(), "frontend-0.2.3");
+            File frontend = new File(getFilesDir(), "frontend-0.2.4");
             copyAssetTree(getAssets(), "frontend", frontend);
 
             Python python = Python.getInstance();

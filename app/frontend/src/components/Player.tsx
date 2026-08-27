@@ -34,10 +34,13 @@ import {
 import {
   cancelDownload,
   enqueueDownload,
+  fetchOfflineAnime,
   fetchOfflineLibrary,
   fetchOfflineSettings,
+  hasOfflineAnimeLookup,
   hasKodikSecretAccess,
   KODIK_ACCESS_CHANGED_EVENT,
+  peekOfflineAnime,
   type DownloadJob,
   type OfflineAnime,
 } from "../lib/downloads";
@@ -47,42 +50,14 @@ import {
   recordPlaybackObservation,
   type PlaybackProgressTarget,
 } from "../lib/playerProgress";
+import {
+  CatalogVideoRequestError,
+  fetchAnimeDetails,
+  fetchAnimeVideoResult,
+} from "../features/catalog/api";
+import { videoSourceIssues, type VideoSourceIssue } from "../lib/sourceDiagnostics";
 
 const ANIMESOUL_PLAYER = "AnimeSoul";
-const VIDEO_REQUEST_TIMEOUT_MS = 12_000;
-
-async function waitForRetry(delay: number, signal: AbortSignal) {
-  if (signal.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
-  await new Promise<void>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, delay);
-    const abort = () => {
-      window.clearTimeout(timer);
-      signal.removeEventListener("abort", abort);
-      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
-    };
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
-
-async function fetchWithTimeout(url: string, signal: AbortSignal) {
-  if (signal.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
-  const attempt = new AbortController();
-  const abort = () => attempt.abort(signal.reason);
-  signal.addEventListener("abort", abort, { once: true });
-  const timeout = window.setTimeout(
-    () => attempt.abort(new DOMException("Request timed out", "TimeoutError")),
-    VIDEO_REQUEST_TIMEOUT_MS,
-  );
-  try {
-    return await fetch(url, { signal: attempt.signal });
-  } finally {
-    window.clearTimeout(timeout);
-    signal.removeEventListener("abort", abort);
-  }
-}
 
 function isSubtitleVideo(video: Video) {
   return isSubtitleTranslation(video.data.dubbing, video.data.translation_type);
@@ -135,9 +110,13 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const resumeDubbing = storedResumePoint?.state.dub ?? saved?.dub ?? "";
   const [dub, setDub] = useState(saved?.dub ?? ""), [episode, setEpisode] = useState(resumeEpisode), [player, setPlayer] = useState(""), [autoNext, setAutoNextState] = useState(initialPrefs.autoNext), [autoSkip, setAutoSkipState] = useState(initialPrefs.autoSkipOpening), [autoSkipEnding, setAutoSkipEndingState] = useState(initialPrefs.autoSkipEnding), [autoPlayResume, setAutoPlayResumeState] = useState(initialPrefs.autoPlayResume), [autoScrollPlayer, setAutoScrollPlayerState] = useState(initialPrefs.autoScrollPlayer), [episodeCarousel, setEpisodeCarousel] = useState(initialPrefs.playerEpisodeCarousel), [status, setStatus] = useState("Загружаем серии…"), [position, setPosition] = useState<ToolbarPosition>(read(K.toolbar, "bottom")), [autoPlay, setAutoPlay] = useState(false), [seasons, setSeasons] = useState<SeasonGroup[]>([{ number: 1, entries: [anime] }]), [selectedSeason, setSelectedSeason] = useState(resumeSeason), [seasonVideos, setSeasonVideos] = useState<Record<number, Video[]>>({}), [schedule, setSchedule] = useState<Record<number, ScheduleEntry>>({}), [showUpcoming, setShowUpcoming] = useState(false), [carouselMotion, setCarouselMotion] = useState<"" | "previous" | "next">("");
   const [episodeHoverPreview, setEpisodeHoverPreview] = useState(initialPrefs.episodeHoverPreview);
-  const [offlineAnime, setOfflineAnime] = useState<OfflineAnime | null>(null);
+  const [offlineAnime, setOfflineAnime] = useState<OfflineAnime | null>(() => peekOfflineAnime(anime.anime_id));
+  const [offlineLookupReady, setOfflineLookupReady] = useState(() => hasOfflineAnimeLookup(anime.anime_id));
+  const [localPlaybackReady, setLocalPlaybackReady] = useState(false);
   const [kodikAccessReady, setKodikAccessReady] = useState(false);
   const [seasonLoadNotice, setSeasonLoadNotice] = useState("");
+  const [sourceLoadIssues, setSourceLoadIssues] = useState<VideoSourceIssue[]>([]);
+  const [showSourceLoadIssues, setShowSourceLoadIssues] = useState(false);
   const [downloadQuality, setDownloadQuality] = useState<number>(read("animesoul:download-quality", 720));
   const [downloadJob, setDownloadJob] = useState<DownloadJob | null>(null);
   const [isSubmittingDownload, setIsSubmittingDownload] = useState(false);
@@ -179,7 +158,6 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const autoNextTransitionKey = useRef("");
   const savedRef = useRef(saved), pendingProgress = useRef<{ value: AnimeProgress; originEpisodeKey?: string } | null>(null), progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null), lastProgressCommit = useRef(0);
   const onProgressRef = useRef(onProgress);
-  const videoFetchController = useRef<AbortController | null>(null);
   const pendingResumeSeek = useRef<{ episodeKey: string; target: number; expiresAt: number; lastAttemptAt: number } | null>(null);
   // Keep the navigation target immutable while the iframe is starting. Some
   // players emit a 0-second update before `load`, which must not erase the
@@ -280,12 +258,18 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const base = familyRoot;
   useEffect(() => {
     videoLoadId.current += 1;
-    setOfflineAnime(null);
+    const cachedOfflineAnime = peekOfflineAnime(anime.anime_id);
+    const cachedLookupReady = hasOfflineAnimeLookup(anime.anime_id);
+    setOfflineAnime(cachedOfflineAnime);
+    setOfflineLookupReady(cachedLookupReady);
+    setLocalPlaybackReady(false);
     setDownloadJob(null);
     setRemoteSourcesUnavailable(false);
     setDirectStreamInfo(null);
     setSeasonVideos({});
     setSeasons([{ number: 1, entries: [anime] }]);
+    setSourceLoadIssues([]);
+    setShowSourceLoadIssues(false);
     initialResumeSelectionPending.current = true;
     initialResumeTarget.current = {
       episodeKey: `${resumeSeason}:${resumeEpisode}`,
@@ -299,25 +283,39 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     setEpisode(resumeEpisode);
     setDub(resumeDubbing);
     setPlayer("");
-    setStatus("Загружаем серии…");
+    setStatus(cachedOfflineAnime ? "" : cachedLookupReady ? "Загружаем серии…" : "Проверяем скачанные серии…");
   }, [anime.anime_id]);
   useEffect(() => {
     let stopped = false;
+    fetchOfflineAnime(anime.anime_id)
+      .then(item => {
+        if (!stopped) setOfflineAnime(item);
+      })
+      .catch(() => {
+        // A failed local lookup must not discard a previously cached title.
+      })
+      .finally(() => {
+        if (!stopped) setOfflineLookupReady(true);
+      });
+    return () => {
+      stopped = true;
+    };
+  }, [anime.anime_id]);
+  useEffect(() => {
+    const downloadIsActive = downloadJob?.status === "queued"
+      || downloadJob?.status === "downloading"
+      || downloadJob?.status === "paused";
+    if (!downloadIsActive) return;
+    let stopped = false;
     const refresh = () => {
-      fetchOfflineLibrary()
-        .then(library => {
-          if (!stopped) {
-            setOfflineAnime(library.anime.find(item => item.animeId === anime.anime_id) ?? null);
-            setDownloadJob(current => current ? library.jobs.find(job => job.id === current.id) ?? current : null);
-          }
-        })
-        .catch(() => {
-          if (!stopped) setOfflineAnime(null);
-        });
+      void fetchOfflineLibrary().then(library => {
+        if (stopped) return;
+        setOfflineAnime(library.anime.find(item => item.animeId === anime.anime_id) ?? null);
+        setDownloadJob(current => current ? library.jobs.find(job => job.id === current.id) ?? current : null);
+      }).catch(() => undefined);
     };
     refresh();
-    const downloadIsActive = downloadJob?.status === "queued" || downloadJob?.status === "downloading";
-    const timer = window.setInterval(refresh, downloadIsActive ? 750 : 2000);
+    const timer = window.setInterval(refresh, 750);
     return () => {
       stopped = true;
       window.clearInterval(timer);
@@ -420,6 +418,13 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     if (Number.isFinite(firstOfflineSeason)) setSelectedSeason(firstOfflineSeason);
   }, [offlineVideosKey, selectedSeason, seasonVideos, offlineVideosBySeason]);
   useEffect(() => {
+    if (!offlineVideosKey || localPlaybackReady) return;
+    // A damaged or externally removed file must not prevent online fallback
+    // forever. Healthy local MP4/HLS files report metadata long before this.
+    const timer = window.setTimeout(() => setLocalPlaybackReady(true), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [offlineVideosKey, localPlaybackReady]);
+  useEffect(() => {
     const prefsChanged = (prefs: PlayerPrefs) => {
       setAutoNextState(prefs.autoNext);
       setAutoSkipState(prefs.autoSkipOpening);
@@ -438,6 +443,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     };
   }, []);
   useEffect(() => {
+    if (!offlineLookupReady || (offlineAnime && !localPlaybackReady)) return;
     const controller = new AbortController();
     void fetchFamily(anime, familyRoot, controller.signal).then(found => {
       if (controller.signal.aborted) return;
@@ -494,38 +500,31 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       if (!controller.signal.aborted) setSeasonLoadNotice("Не удалось обновить состав франшизы. Показан выбранный тайтл.");
     });
     return () => controller.abort();
-  }, [anime.anime_id, familyRoot]);
+  }, [anime.anime_id, familyRoot, offlineLookupReady, offlineAnime?.animeId, localPlaybackReady]);
   const previewAnimeIds = useMemo(() => [...new Set(seasons.flatMap(group => group.entries.map(entry => entry.anime_id)))], [seasons]);
   useEffect(() => {
-    if (!previewAnimeIds.length) return;
+    if (!previewAnimeIds.length || !offlineLookupReady || (offlineAnime && !localPlaybackReady)) return;
     let cancelled = false;
-    Promise.all(Array.from({ length: 3 }, () =>
-      fetch(`/api/yummy?mode=details&ids=${previewAnimeIds.join(",")}`).then(response => response.json()),
-    ))
-      .then(payloads => {
+    fetchAnimeDetails(previewAnimeIds)
+      .then(entries => {
         if (cancelled) return;
         const merged = new Map<number, Anime>();
-        for (const payload of payloads) {
-          for (const entry of (payload.anime ?? []) as Anime[]) {
-            const previous = merged.get(entry.anime_id);
-            const screenshots = [...(previous?.random_screenshots ?? []), ...(entry.random_screenshots ?? [])];
-            const uniqueScreenshots = [...new Map(screenshots.map(screenshot => [
-              screenshot.id ?? `${screenshot.episode}:${screenshot.time}:${screenshot.sizes?.full ?? screenshot.sizes?.small}`,
-              screenshot,
-            ])).values()];
-            merged.set(entry.anime_id, { ...(previous ?? {}), ...entry, random_screenshots: uniqueScreenshots });
-          }
+        for (const entry of entries) {
+          merged.set(entry.anime_id, entry);
         }
         setPreviewAnimeById(Object.fromEntries(merged));
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [previewAnimeIds.join(",")]);
-  useEffect(() => { fetch("/api/yummy?mode=schedule").then(r => r.json()).then(p => setSchedule(Object.fromEntries(((p.schedule ?? []) as ScheduleEntry[]).map(item => [item.anime_id, item])))).catch(() => { }) ;}, []);
-  const fetchVideos = async () => {
-    videoFetchController.current?.abort();
-    const controller = new AbortController();
-    videoFetchController.current = controller;
+  }, [previewAnimeIds.join(","), offlineLookupReady, offlineAnime?.animeId, localPlaybackReady]);
+  useEffect(() => {
+    if (!offlineLookupReady || (offlineAnime && !localPlaybackReady)) return;
+    fetch("/api/yummy?mode=schedule")
+      .then(r => r.json())
+      .then(p => setSchedule(Object.fromEntries(((p.schedule ?? []) as ScheduleEntry[]).map(item => [item.anime_id, item]))))
+      .catch(() => { });
+  }, [anime.anime_id, offlineLookupReady, offlineAnime?.animeId, localPlaybackReady]);
+  const fetchVideos = async (refresh = false) => {
     const loadId = ++videoLoadId.current;
     const localVideos = () => mergeOfflineVideos({});
     const hasOfflineEpisodes = Object.values(offlineVideosBySeason).some(list => list.length > 0);
@@ -534,8 +533,18 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       setRemoteSourcesUnavailable(hasOfflineEpisodes);
       setSeasonVideos(localVideos());
       setStatus(hasOfflineEpisodes ? "" : "Нет интернета и скачанных серий");
-      setSeasonLoadNotice("");
-      if (videoFetchController.current === controller) videoFetchController.current = null;
+      const issues = videoSourceIssues({
+        animeId: anime.anime_id,
+        title: anime.title,
+        seasonLabel: "Онлайн-источники",
+        sources: {},
+        loadedVideos: 0,
+        requestError: "устройство сейчас без подключения к интернету",
+      });
+      setSourceLoadIssues(issues);
+      setSeasonLoadNotice(hasOfflineEpisodes
+        ? "Онлайн-источники недоступны. Открыты скачанные серии."
+        : "Онлайн-источники недоступны, а скачанных серий нет.");
       return;
     }
 
@@ -544,33 +553,54 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       // seasons are enrichment and must never cover or restart that video.
       setSeasonVideos(current => mergeOfflineVideos(current));
       setStatus("");
+      // Let the browser open the local file and read its metadata before any
+      // provider requests compete for CPU/network or alter source selection.
+      if (!refresh && !localPlaybackReady) return;
     } else {
       setStatus("Загружаем сезоны…");
     }
     setSeasonLoadNotice("");
+    setSourceLoadIssues([]);
+    setShowSourceLoadIssues(false);
     try {
       const remote: Record<number, Video[]> = {};
-      let failedEntries = 0;
       let completedGroups = 0;
 
       const loaded = await Promise.all(seasons.map(async group => {
         const ordered = [...group.entries].sort(byViewingOrder);
         const payloads = await Promise.all(ordered.map(async entry => {
-          for (let attempt = 0; attempt < 3; attempt += 1) {
-            try {
-              const response = await fetchWithTimeout(`/api/yummy?mode=videos&id=${entry.anime_id}`, controller.signal);
-              const payload = await response.json().catch(() => ({}));
-              if (response.ok) {
-                return { entry, list: Array.isArray(payload.videos) ? payload.videos as Video[] : [], failed: false };
-              }
-            } catch (error) {
-              if (controller.signal.aborted) throw error;
-            }
-            if (attempt < 2) await waitForRetry(700 * (attempt + 1), controller.signal);
+          try {
+            const result = await fetchAnimeVideoResult(entry.anime_id, { refresh });
+            return {
+              entry,
+              list: result.videos,
+              issues: videoSourceIssues({
+                animeId: entry.anime_id,
+                title: entry.title,
+                seasonLabel: group.label ?? `Сезон ${group.number}`,
+                sources: result.sources,
+                loadedVideos: result.videos.length,
+              }),
+            };
+          } catch (error) {
+            const requestError = error instanceof Error
+              ? error.message
+              : "не удалось выполнить запрос серий";
+            const sources = error instanceof CatalogVideoRequestError ? error.sources : {};
+            return {
+              entry,
+              list: [] as Video[],
+              issues: videoSourceIssues({
+                animeId: entry.anime_id,
+                title: entry.title,
+                seasonLabel: group.label ?? `Сезон ${group.number}`,
+                sources,
+                loadedVideos: 0,
+                requestError,
+              }),
+            };
           }
-          return { entry, list: [] as Video[], failed: true };
         }));
-        failedEntries += payloads.filter(payload => payload.failed).length;
         let offset = 0;
         const normalized = payloads.flatMap(({ entry, list }) => {
           const kind: Video["contentKind"] = group.kind === "movie"
@@ -596,16 +626,17 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
         const unique = [...new Map(normalized.map(video => [video.video_id, video])).values()];
         remote[group.number] = unique;
         completedGroups += 1;
-        if (loadId === videoLoadId.current && !controller.signal.aborted) {
+        if (loadId === videoLoadId.current) {
           const partial = mergeOfflineVideos(remote);
           setSeasonVideos(partial);
           if (hasOfflineEpisodes || (partial[selectedSeason] ?? []).length > 0) setStatus("");
           else setStatus(`Загружаем сезоны… ${completedGroups} из ${seasons.length}`);
         }
-        return [group.number, unique] as const;
+        return { number: group.number, videos: unique, issues: payloads.flatMap(payload => payload.issues) };
       }));
-      if (loadId !== videoLoadId.current || controller.signal.aborted) return;
-      Object.assign(remote, Object.fromEntries(loaded));
+      if (loadId !== videoLoadId.current) return;
+      Object.assign(remote, Object.fromEntries(loaded.map(group => [group.number, group.videos])));
+      const issues = loaded.flatMap(group => group.issues);
       const hasRemoteEpisodes = Object.values(remote).some((list: Video[]) => list.length > 0);
       setRemoteSourcesUnavailable(!hasRemoteEpisodes && hasOfflineEpisodes);
       const next = hasRemoteEpisodes ? mergeOfflineVideos(remote) : localVideos();
@@ -615,27 +646,34 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
         : Object.values(next).some((list: Video[]) => list.length)
           ? "Этот сезон временно не загрузился. Выберите доступный сезон или повторите."
           : "Видео временно не загрузились");
-      if (failedEntries > 0 && hasRemoteEpisodes) {
-        setSeasonLoadNotice(`Часть источников не ответила (${failedEntries}). Доступные серии уже можно смотреть.`);
-      } else if (failedEntries > 0) {
+      setSourceLoadIssues(issues);
+      if (issues.length > 0 && hasRemoteEpisodes) {
+        setSeasonLoadNotice(`Часть данных не загрузилась (${issues.length}). Доступные серии уже можно смотреть.`);
+      } else if (issues.length > 0) {
         setSeasonLoadNotice("Источники видео временно не ответили. Можно повторить загрузку.");
       }
     } catch (error) {
-      if (loadId !== videoLoadId.current || controller.signal.aborted) return;
+      if (loadId !== videoLoadId.current) return;
       setRemoteSourcesUnavailable(hasOfflineEpisodes);
       setSeasonVideos(localVideos());
       setStatus(hasOfflineEpisodes ? "" : "Не удалось загрузить серии");
+      setSourceLoadIssues(videoSourceIssues({
+        animeId: anime.anime_id,
+        title: anime.title,
+        seasonLabel: "Все сезоны",
+        sources: {},
+        loadedVideos: 0,
+        requestError: error instanceof Error ? error.message : "не удалось загрузить серии",
+      }));
       setSeasonLoadNotice(hasOfflineEpisodes
         ? "Онлайн-источники недоступны. Открыты скачанные серии."
         : "Не удалось загрузить серии. Проверьте соединение и повторите попытку.");
-    } finally {
-      if (videoFetchController.current === controller) videoFetchController.current = null;
     }
   };
   useEffect(() => {
+    if (!offlineLookupReady) return;
     void fetchVideos();
-    return () => videoFetchController.current?.abort();
-  }, [seasons.map(s => s.entries.map(e => e.anime_id).join(",")).join("|"), offlineVideosKey]);
+  }, [seasons.map(s => s.entries.map(e => e.anime_id).join(",")).join("|"), offlineVideosKey, offlineLookupReady, localPlaybackReady]);
   const displaySeasons = remoteSourcesUnavailable
     ? seasons.filter(group => (seasonVideos[group.number] ?? []).some(video => video.offline))
     : seasons;
@@ -1510,6 +1548,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     };
   }, [episode, dub, autoNext, autoSkip, autoSkipEnding, openingEnd, endingStart, endingEnd, current?.video_id, carouselIndex, carouselItems.length, initialPrefs.watchPartyEnabled]);
   const loaded = () => {
+    if (current?.offline) setLocalPlaybackReady(true);
     const synchronized = pendingPartyPlayback.current;
     const start = synchronized?.position ?? resumePositionFor(episodeKey);
     pendingResumeSeek.current = start > 5 ? { episodeKey, target: start, expiresAt: Date.now() + 10 * 60_000, lastAttemptAt: 0 } : null;
@@ -1751,8 +1790,31 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       <div className="season-tabs">{displaySeasons.map(s => <button className={`${s.number === selectedSeason ? "active " : ""}${s.kind === "special" ? "extra" : ""}`.trim()} key={s.number} onClick={() => chooseSeason(s.number)}>{s.label ?? `Сезон ${s.number}`}</button>)}</div>
       {seasonLoadNotice && (
         <div className="season-load-notice" role="status" aria-live="polite">
-          <span>{seasonLoadNotice}</span>
-          <button type="button" onClick={() => void fetchVideos()}>Повторить</button>
+          <div className="season-load-notice-copy">
+            <span>{seasonLoadNotice}</span>
+            {showSourceLoadIssues && sourceLoadIssues.length > 0 && (
+              <ul className="season-source-details" aria-label="Подробности загрузки источников">
+                {sourceLoadIssues.map(issue => (
+                  <li key={issue.key}>
+                    <strong>{issue.context}</strong>
+                    <span>{issue.sourceLabel}: не загрузились {issue.unavailableData} — {issue.reason}.</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="season-load-notice-actions">
+            {sourceLoadIssues.length > 0 && (
+              <button
+                type="button"
+                aria-expanded={showSourceLoadIssues}
+                onClick={() => setShowSourceLoadIssues(value => !value)}
+              >
+                {showSourceLoadIssues ? "Скрыть" : "Подробности"}
+              </button>
+            )}
+            <button type="button" onClick={() => void fetchVideos(true)}>Повторить</button>
+          </div>
         </div>
       )}
       <div ref={playerShell} className={`episode-carousel ${episodeCarousel ? "enabled" : "disabled"} ${carouselMotion ? `shift-${carouselMotion}` : ""}`}>{episodeCarousel && previousCarouselItem ? <EpisodeSlideshow className="carousel-side carousel-previous" images={episodePreviewImages(previousCarouselItem.entry, previousCarouselItem.video?.originNumber ?? previousCarouselItem.number)} fallback={previousCarouselItem.entry?.poster?.fullsize ?? previousCarouselItem.entry?.poster?.big} label={previousCarouselItem.group.label ?? `Сезон ${previousCarouselItem.season}`} sublabel={`${previousCarouselItem.video?.contentKind ?? "Серия"} ${previousCarouselItem.number}`} onClick={() => activateCarouselItem(previousCarouselItem, "previous")} /> : episodeCarousel ? <span className="carousel-space" /> : null}
@@ -1769,8 +1831,9 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
         ) : (
           <>
             {useAnimeSoulPlayer && playerStreamRequest ? (
+              // Keep this instance mounted while its request changes: the
+              // shell owns fullscreen and the player swaps media in place.
               <AnimeSoulPlayer
-                key={`episode:${anime.anime_id}:${selectedSeason}:${episode}`}
                 ref={localVideo}
                 request={playerStreamRequest}
                 title={base}
@@ -1841,7 +1904,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
             {status && !current && (
               <div className="player-status">
                 <span>{status}</span>
-                {!current && !status.includes("Загружаем") && <button onClick={() => void fetchVideos()}>Повторить загрузку</button>}
+                {!current && !status.includes("Загружаем") && !status.includes("Проверяем") && <button onClick={() => void fetchVideos(true)}>Повторить загрузку</button>}
               </div>
             )}
           </>
@@ -2001,6 +2064,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
         selectedEpisode={episode}
         previewAnimeById={previewAnimeById}
         episodeHoverPreview={episodeHoverPreview}
+        compactEpisodeList={initialPrefs.compactEpisodeList}
         newEpisodeKeys={newEpisodeKeys}
         onToggleSeason={toggleSeason}
         onToggleSeasonWatched={toggleSeasonWatched}

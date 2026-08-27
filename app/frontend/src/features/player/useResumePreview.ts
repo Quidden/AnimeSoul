@@ -8,6 +8,7 @@ import {
 import {
     episodeResumePosition,
     latestResumePoint,
+    resolveResumeAnime,
 } from "../../lib/anime";
 import type {
     Anime,
@@ -50,10 +51,8 @@ export function useResumePreview({
             )[0],
         [progress],
     );
-    const lastAnime = last
-        ? catalog.find(anime => anime.anime_id === Number(last.animeId))
-        : undefined;
     const lastAnimeId = last ? Number(last.animeId) : undefined;
+    const lastAnime = resolveResumeAnime(catalog, lastAnimeId, last?.item.title);
     const lastState = last?.item;
     const lastPoint = useMemo(
         () => latestResumePoint(lastState),

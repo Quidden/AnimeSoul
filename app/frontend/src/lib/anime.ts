@@ -226,6 +226,20 @@ export function latestResumePoint(progress?: AnimeProgress): ResumePoint | null 
     state: latest[1],
   };
 }
+
+/** Resolve local progress before remote catalogue metadata becomes available. */
+export function resolveResumeAnime(
+  catalog: Anime[],
+  animeId: number | undefined,
+  storedTitle: string | undefined,
+): Anime | undefined {
+  if (!animeId) return undefined;
+  return catalog.find(anime => anime.anime_id === animeId)
+    ?? (storedTitle?.trim()
+      ? { anime_id: animeId, title: storedTitle.trim() }
+      : undefined);
+}
+
 export function toggleEpisodeWatched(state: EpisodeState | undefined, duration: number, updatedAt = Date.now()) {
   const resolvedDuration = Math.max(0, duration || state?.duration || 0);
   if (isEpisodeWatched(state)) {

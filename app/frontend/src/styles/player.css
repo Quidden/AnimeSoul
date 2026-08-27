@@ -1891,7 +1891,7 @@ body:has(.player-options[open]) .watch-party-panel {
 
 .season-load-notice {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin: 10px 0;
@@ -1903,6 +1903,35 @@ body:has(.player-options[open]) .watch-party-panel {
   font-size: 13px;
 }
 
+.season-load-notice-copy {
+  min-width: 0;
+}
+
+.season-load-notice-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.season-source-details {
+  display: grid;
+  gap: 8px;
+  margin: 9px 0 1px;
+  padding: 0;
+  list-style: none;
+}
+
+.season-source-details li {
+  display: grid;
+  gap: 2px;
+  border-left: 2px solid color-mix(in srgb,var(--accent) 55%,#4b3d5c);
+  padding-left: 9px;
+  line-height: 1.4;
+}
+
+.season-source-details strong { color: #f5edf8; }
+.season-source-details span { color: #bdaec7; }
+
 .season-load-notice button {
   flex: 0 0 auto;
   min-height: 36px;
@@ -1912,6 +1941,16 @@ body:has(.player-options[open]) .watch-party-panel {
   padding: 6px 10px;
   color: inherit;
   cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .season-load-notice,
+  .season-load-notice-actions {
+    align-items: stretch;
+  }
+
+  .season-load-notice { flex-direction: column; }
+  .season-load-notice-actions button { flex: 1 1 0; }
 }
 
 .watch-party-room-rule {

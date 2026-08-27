@@ -1233,6 +1233,88 @@ html[data-color-scheme="light"] .season-summary b {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Optional dense episode layout. The DOM and every action stay identical to
+ * the classic cards, so switching the preference only changes presentation. */
+.all-seasons.compact-episodes {
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.all-seasons.compact-episodes .season-panel {
+  padding: 14px 16px;
+}
+
+.all-seasons.compact-episodes .season-summary h2 {
+  font-size: 19px;
+}
+
+.all-seasons.compact-episodes .season-progress {
+  margin: 9px 0 11px;
+}
+
+.all-seasons.compact-episodes .episode-grid {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+}
+
+.all-seasons.compact-episodes .episode-card-shell > .episode-entry {
+  min-height: 50px;
+  padding: 6px 88px 6px 7px;
+  gap: 6px;
+  border-radius: 8px;
+}
+
+.all-seasons.compact-episodes .episode-entry > b {
+  width: 27px;
+  height: 27px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.all-seasons.compact-episodes .episode-entry > span {
+  min-width: 0;
+  font-size: 0;
+}
+
+.all-seasons.compact-episodes .episode-entry > span > em {
+  font-size: 7px;
+}
+
+.all-seasons.compact-episodes .episode-entry small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  margin-top: 0;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.all-seasons.compact-episodes .episode-card-shell > .episode-score-picker {
+  right: 28px;
+}
+
+.all-seasons.compact-episodes .episode-score-picker select {
+  width: 53px;
+  min-width: 53px;
+  padding: 4px 17px 4px 6px;
+  font-size: 9px;
+}
+
+@media (max-width: 600px) {
+  .all-seasons.compact-episodes .season-panel {
+    padding: 12px;
+  }
+
+  .all-seasons.compact-episodes .episode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .all-seasons.compact-episodes .episode-card-shell > .episode-entry {
+    padding-right: 82px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .availability-check > i {
     animation-duration: 1.8s;

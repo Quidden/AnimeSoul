@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import asyncio
 import tempfile
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
+import httpx
 from fastapi import HTTPException
 
 from backend.app.services.gdrive import (
@@ -13,9 +15,36 @@ from backend.app.services.gdrive import (
     merge_storage_documents,
     merge_snapshot,
 )
+from backend.app.api.gdrive import _verify_google_credentials
 
 
 class GDriveMergeTests(unittest.TestCase):
+    def test_google_credentials_report_id_and_secret_separately(self) -> None:
+        async def scenario() -> None:
+            client = AsyncMock()
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = False
+            client.get.return_value = httpx.Response(
+                302,
+                headers={"location": "https://accounts.google.com/v3/signin/identifier"},
+            )
+            client.post.return_value = httpx.Response(400, json={"error": "invalid_grant"})
+            with patch("backend.app.api.gdrive.httpx.AsyncClient", return_value=client):
+                checks = await _verify_google_credentials(
+                    "123456789-abc.apps.googleusercontent.com",
+                    "GOCSPX-secret",
+                )
+            self.assertEqual(
+                [(item["field"], item["status"]) for item in checks],
+                [("googleClientId", "valid"), ("googleClientSecret", "valid")],
+            )
+
+            malformed = await _verify_google_credentials("not-a-google-client", "secret")
+            self.assertEqual(malformed[0]["status"], "invalid")
+            self.assertEqual(malformed[1]["status"], "pending")
+
+        asyncio.run(scenario())
+
     def test_merge_ratings_keeps_latest_edit_per_anime(self) -> None:
         local = {
             "ratings": {

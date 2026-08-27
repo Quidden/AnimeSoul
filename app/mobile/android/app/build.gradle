@@ -55,8 +55,8 @@ android {
         applicationId 'com.animesoul.mobile'
         minSdk 24
         targetSdk 35
-        versionCode 2030001
-        versionName '0.2.3'
+        versionCode 2040001
+        versionName '0.2.4'
 
         ndk {
             // The installable test build targets current physical Android phones.

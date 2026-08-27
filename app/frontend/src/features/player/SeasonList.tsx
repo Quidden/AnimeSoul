@@ -24,6 +24,7 @@ interface SeasonListProps {
   selectedEpisode: string;
   previewAnimeById: Record<number, Anime>;
   episodeHoverPreview: boolean;
+  compactEpisodeList: boolean;
   newEpisodeKeys: Set<string>;
   onToggleSeason: (season: number) => void;
   onToggleSeasonWatched: (season: number, episodes: string[], videos: Video[]) => void;
@@ -51,6 +52,7 @@ export function SeasonList({
   selectedEpisode,
   previewAnimeById,
   episodeHoverPreview,
+  compactEpisodeList,
   newEpisodeKeys,
   onToggleSeason,
   onToggleSeasonWatched,
@@ -60,7 +62,7 @@ export function SeasonList({
   onEpisodeRatingChange,
 }: SeasonListProps) {
   return (
-    <div className="all-seasons">
+    <div className={`all-seasons${compactEpisodeList ? " compact-episodes" : ""}`}>
       {seasons.map((group) => {
         const videos = seasonVideos[group.number] ?? [];
         const episodeNumbers = Array.from(new Set(videos.map((video) => video.number))).sort(

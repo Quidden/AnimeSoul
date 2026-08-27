@@ -33,6 +33,7 @@ export function CloudSettings({ state }: Props) {
     credentialsSaving,
     credentialsMessage,
     credentialsTone,
+    credentialsChecks,
     connect,
     disconnect,
     saveCredentials,
@@ -204,6 +205,7 @@ export function CloudSettings({ state }: Props) {
         saving={credentialsSaving}
         message={credentialsMessage}
         messageTone={credentialsTone}
+        checks={credentialsChecks}
       />
     </section>
   );

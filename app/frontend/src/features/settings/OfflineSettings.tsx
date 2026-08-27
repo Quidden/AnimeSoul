@@ -6,9 +6,12 @@ import {
   hasKodikSecretAccess,
   KODIK_ACCESS_CHANGED_EVENT,
   updateOfflineSettings,
+  validateKodikCredentials,
 } from "../../lib/downloads";
 import { IS_ANDROID_APP } from "../../lib/platform";
 import { Toggle } from "../../components/Toggle";
+import { CredentialCheckList } from "./CredentialCheckList";
+import type { CredentialCheck } from "./credentialImport";
 
 export function OfflineSettings() {
   const [directory, setDirectory] = useState("");
@@ -22,6 +25,7 @@ export function OfflineSettings() {
   const [status, setStatus] = useState<"loading" | "ready" | "saving" | "error">("loading");
   const [message, setMessage] = useState("");
   const [networkMessage, setNetworkMessage] = useState("");
+  const [kodikChecks, setKodikChecks] = useState<CredentialCheck[]>([]);
 
   const applyKodikStatus = (
     settings: { kodikPublicKeyConfigured: boolean; kodikPrivateKeyConfigured: boolean },
@@ -73,7 +77,21 @@ export function OfflineSettings() {
     if (!kodikPublicKey.trim() && !kodikPrivateKey.trim()) return;
     setStatus("saving");
     setMessage("");
+    setKodikChecks([]);
     try {
+      const validation = await validateKodikCredentials({
+        ...(kodikPublicKey.trim() ? { kodikPublicKey: kodikPublicKey.trim() } : {}),
+        ...(kodikPrivateKey.trim() ? { kodikPrivateKey: kodikPrivateKey.trim() } : {}),
+      });
+      setKodikChecks(validation.checks);
+      if (!validation.canSave) {
+        setStatus("error");
+        setMessage(
+          validation.checks.find(check => check.status !== "valid")?.detail
+          || "Ключи Kodik не прошли проверку и не были сохранены.",
+        );
+        return;
+      }
       const result = await updateOfflineSettings({
         directory,
         ...(kodikPublicKey.trim() ? { kodikPublicKey: kodikPublicKey.trim() } : {}),
@@ -215,7 +233,7 @@ export function OfflineSettings() {
           />
           <div className="offline-kodik-actions">
             <button className="primary" disabled={(!kodikPublicKey.trim() && !kodikPrivateKey.trim()) || status === "saving"} onClick={() => void saveKodikKeys()}>
-              {status === "saving" ? "Сохраняем…" : "Сохранить ключи"}
+              {status === "saving" ? "Проверяем…" : "Проверить и сохранить"}
             </button>
             {(kodikPublicKeyConfigured || kodikPrivateKeyConfigured) && (
               <button className="ghost" disabled={status === "saving"} onClick={() => void clearKodikKeys()}>
@@ -223,6 +241,7 @@ export function OfflineSettings() {
               </button>
             )}
           </div>
+          <CredentialCheckList checks={kodikChecks} />
           {message && (
             <p className={`offline-settings-message ${status === "error" ? "error" : "success"}`} role="status" aria-live="polite">
               {status === "error" ? "! " : "✓ "}{message}

@@ -1,5 +1,9 @@
+import type { CredentialCheck } from "../features/settings/credentialImport";
+
 export type YummyCredentialsStatus = {
   configured: boolean;
+  saved?: boolean;
+  checks?: CredentialCheck[];
 };
 
 async function responseError(response: Response, fallback: string) {

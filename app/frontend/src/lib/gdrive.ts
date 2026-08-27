@@ -1,3 +1,5 @@
+import type { CredentialSaveOutcome } from "../features/settings/credentialImport";
+
 /**
  * Google Drive Connection & Sync Status object returned from /api/gdrive/status.
  */
@@ -92,7 +94,7 @@ export async function completeGDriveAuth(): Promise<{ pending: boolean; connecte
 /**
  * Saves custom Google OAuth Client ID and Secret to backend credentials storage.
  */
-export async function saveGDriveCredentials(clientId: string, clientSecret?: string): Promise<void> {
+export async function saveGDriveCredentials(clientId: string, clientSecret?: string): Promise<CredentialSaveOutcome> {
   const res = await fetch("/api/gdrive/credentials", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -101,7 +103,12 @@ export async function saveGDriveCredentials(clientId: string, clientSecret?: str
       client_secret: clientSecret?.trim() || null,
     }),
   });
-  if (!res.ok) throw new Error("Failed to save Google OAuth credentials");
+  const payload = await res.json().catch(() => ({})) as Partial<CredentialSaveOutcome> & { detail?: string };
+  if (!res.ok) throw new Error(payload.detail || "Не удалось проверить Google OAuth credentials");
+  return {
+    saved: Boolean(payload.saved),
+    checks: Array.isArray(payload.checks) ? payload.checks : [],
+  };
 }
 
 /**

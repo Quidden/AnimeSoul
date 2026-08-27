@@ -334,6 +334,13 @@ export default function Home() {
             .slice(0, 6);
     }, [franchises, query]);
     const openAnime = (anime: Anime, resume = false) => {
+        // Offline-library cards are valid Anime records even when the remote
+        // catalogue is unavailable. Keep the selected record in memory so a
+        // local playback update can immediately become the home-page
+        // "Продолжить" item without waiting for a details request.
+        setCatalog(current => current.some(item => item.anime_id === anime.anime_id)
+            ? current
+            : [...current, anime]);
         setResumeRequested(resume);
         setNewEpisodeRequested(false);
         setActive(anime);

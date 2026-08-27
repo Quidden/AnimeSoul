@@ -88,6 +88,7 @@ type DurationVideo = {
   number: string;
   duration?: number;
   data: { dubbing: string; player?: string };
+  offline?: unknown;
 };
 
 function representativeDubbingDuration(videos: ReadonlyArray<DurationVideo>) {
@@ -104,6 +105,11 @@ export function dubbingDurationDeficit(
   minimumDifference = 45,
 ) {
   const episodeVideos = videos.filter(video => video.number === episode);
+  // A downloaded file is the complete media selected by the user and its
+  // actual duration is read by the local player. Provider catalogue metadata
+  // can describe another cut (or even the whole release) and must not label a
+  // verified local copy as being dozens of minutes shorter.
+  if (episodeVideos.some(video => video.data.dubbing === dubbing && video.offline)) return 0;
   const dubbings = Array.from(new Set(episodeVideos.map(video => video.data.dubbing)));
   const reference = Math.max(0, ...dubbings.map(name => representativeDubbingDuration(
     episodeVideos.filter(video => video.data.dubbing === name),

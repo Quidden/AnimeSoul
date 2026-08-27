@@ -162,7 +162,13 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const nativePlaybackUpdatedAt = useRef(0);
   const nativePlaybackPlaying = useRef(false);
   const nativePlaybackActive = useRef(false);
-  const teardownCallback = useRef(onBeforeTeardown);
+  // Keep the progress callback paired with the media request which is
+  // currently mounted. Parent callbacks close over an immutable episode
+  // target, so replacing this ref during render would attribute the old
+  // video's final timestamp to the newly selected episode.
+  const latestTeardownCallback = useRef(onBeforeTeardown);
+  const activeTeardownCallback = useRef(onBeforeTeardown);
+  const activeTeardownRequestKey = useRef(requestKey);
   const teardownReported = useRef(false);
   const [stream, setStream] = useState<KodikStreamInfo | null>(null);
   const [hlsSubtitles, setHlsSubtitles] = useState<HlsSubtitleOption[]>([]);
@@ -196,7 +202,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const [nativePictureInPicture, setNativePictureInPicture] = useState(false);
   const [gestureFeedback, setGestureFeedback] = useState<{ side: "left" | "center" | "right"; text: string } | null>(null);
 
-  teardownCallback.current = onBeforeTeardown;
+  latestTeardownCallback.current = onBeforeTeardown;
 
   const reportTeardown = useCallback((video: HTMLVideoElement | null) => {
     if (!video || teardownReported.current) return;
@@ -204,7 +210,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     if (time <= 0) return;
     teardownReported.current = true;
-    teardownCallback.current?.(time, duration);
+    activeTeardownCallback.current?.(time, duration);
   }, []);
 
   const attachVideoRef = useCallback((value: HTMLVideoElement | null) => {
@@ -465,6 +471,15 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   };
 
   useEffect(() => {
+    if (activeTeardownRequestKey.current !== requestKey) {
+      // The component intentionally stays mounted so Android keeps the same
+      // fullscreen owner. Flush the old media before clearing its src, then
+      // bind teardown reporting to the new episode target.
+      reportTeardown(videoRef.current);
+      teardownReported.current = false;
+      activeTeardownRequestKey.current = requestKey;
+    }
+    activeTeardownCallback.current = latestTeardownCallback.current;
     const controller = new AbortController();
     const requestToken = ++streamRequestToken.current;
     const nextEpisodeIdentity = kodikStreamEpisodeKey(request);
@@ -1056,7 +1071,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
             {menu.sources.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <label>
+        <label className="animesoul-player-fit-control">
           <span>Полноэкранный масштаб</span>
           <select
             value={videoFit}
@@ -1087,7 +1102,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   return (
     <div
       ref={shell}
-      className={`animesoul-player${localPlayback ? " is-local" : ""}${loading && !stream ? " is-preparing" : ""}${controlsVisible || !playing || settingsOpen || quickPickerOpen ? " controls-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
+      className={`animesoul-player${localPlayback ? " is-local" : ""}${loading ? " is-loading" : ""}${loading && (!stream || localPlayback) ? " is-preparing" : ""}${controlsVisible || !playing || settingsOpen || quickPickerOpen ? " controls-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
       tabIndex={0}
       onKeyDown={keyboard}
       onMouseMove={() => showControls()}
@@ -1259,7 +1274,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           </label>
         </div>
       )}
-      {loading && !error && <div className={`animesoul-player-loader${stream ? " compact" : ""}`} aria-label="Буферизация"><i /><span>{localPlayback ? "Читаем локальный файл…" : stream ? "Буферизация без сброса таймкода" : "Подготавливаем поток"}</span></div>}
+      {loading && !error && <div className={`animesoul-player-loader${stream && !localPlayback ? " compact" : ""}`} aria-label="Буферизация"><i /><span>{localPlayback ? "Читаем локальный файл…" : stream ? "Буферизация без сброса таймкода" : "Подготавливаем поток"}</span></div>}
       {(audioSwitching || audioSwitchError) && (
         <div className={`animesoul-player-audio-status${audioSwitchError ? " error" : ""}`} role="status">
           {audioSwitchError || "Подключаем озвучку без смены кадра…"}

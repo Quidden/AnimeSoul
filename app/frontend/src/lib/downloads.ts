@@ -1,3 +1,5 @@
+import type { CredentialCheck } from "../features/settings/credentialImport";
+
 export type OfflineEpisode = {
   id: string;
   animeId: number;
@@ -72,6 +74,11 @@ export type OfflineSettingsUpdate = {
   allowMobileDownloads?: boolean;
 };
 
+export type KodikCredentialValidation = {
+  canSave: boolean;
+  checks: CredentialCheck[];
+};
+
 type AndroidDownloadBridge = {
   prepareNotificationPermission?: () => void;
   startForegroundMonitoring?: () => void;
@@ -79,6 +86,7 @@ type AndroidDownloadBridge = {
 };
 
 let lastNativeMonitorRequest = 0;
+const offlineAnimeCache = new Map<number, OfflineAnime | null>();
 
 function androidDownloadBridge() {
   if (typeof window === "undefined") return undefined;
@@ -150,8 +158,19 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export const peekOfflineAnime = (animeId: number) => offlineAnimeCache.get(animeId) ?? null;
+export const hasOfflineAnimeLookup = (animeId: number) => offlineAnimeCache.has(animeId);
+
+export const fetchOfflineAnime = async (animeId: number) => {
+  const result = await api<{ anime: OfflineAnime | null }>(`/api/downloads/anime/${animeId}`, { cache: "no-store" });
+  offlineAnimeCache.set(animeId, result.anime);
+  return result.anime;
+};
+
 export const fetchOfflineLibrary = async () => {
   const library = await api<OfflineLibrary>("/api/downloads/library", { cache: "no-store" });
+  for (const animeId of offlineAnimeCache.keys()) offlineAnimeCache.set(animeId, null);
+  for (const item of library.anime) offlineAnimeCache.set(item.animeId, item);
   const hasActiveJobs = library.jobs.some(job => ["queued", "downloading", "paused"].includes(job.status));
   if (hasActiveJobs) {
     startNativeDownloadMonitoring();
@@ -161,6 +180,12 @@ export const fetchOfflineLibrary = async () => {
   return library;
 };
 export const fetchOfflineSettings = () => api<OfflineSettings>("/api/downloads/settings", { cache: "no-store" });
+export const validateKodikCredentials = (payload: Pick<OfflineSettingsUpdate, "kodikPublicKey" | "kodikPrivateKey">) =>
+  api<KodikCredentialValidation>("/api/downloads/credentials/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 export const updateOfflineSettings = (payload: OfflineSettingsUpdate) => api<OfflineSettings>("/api/downloads/settings", {
   method: "PUT",
   headers: { "Content-Type": "application/json" },
@@ -185,5 +210,13 @@ export const enqueueDownload = async (payload: DownloadJobRequest) => {
   return job;
 };
 export const cancelDownload = (jobId: string) => api<{ cancelled: boolean }>(`/api/downloads/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" });
-export const deleteOfflineEpisode = (episodeId: string) => api<{ deleted: boolean }>(`/api/downloads/episodes/${encodeURIComponent(episodeId)}`, { method: "DELETE" });
-export const deleteOfflineAnime = (animeId: number) => api<{ deleted: number }>(`/api/downloads/anime/${animeId}`, { method: "DELETE" });
+export const deleteOfflineEpisode = async (episodeId: string) => {
+  const result = await api<{ deleted: boolean }>(`/api/downloads/episodes/${encodeURIComponent(episodeId)}`, { method: "DELETE" });
+  offlineAnimeCache.clear();
+  return result;
+};
+export const deleteOfflineAnime = async (animeId: number) => {
+  const result = await api<{ deleted: number }>(`/api/downloads/anime/${animeId}`, { method: "DELETE" });
+  offlineAnimeCache.set(animeId, null);
+  return result;
+};

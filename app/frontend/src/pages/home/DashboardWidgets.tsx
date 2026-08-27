@@ -1,16 +1,46 @@
-import type { MouseEvent, ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 
 import type { CollectionOverviewKind } from "../../components/CollectionOverview";
 import { ReleaseMark } from "../../components/ReleaseMark";
 import type { Folder, Tracker } from "../../lib/types";
+import { readLocal, writeLocal } from "../../lib/storage";
 import type { HomePageActions, HomePageModel, HomePageProps } from "./types";
+
+const TRACKING_PANEL_EXPANDED_KEY = "animesoul:home-tracking-expanded";
+const FOLDERS_PANEL_EXPANDED_KEY = "animesoul:home-folders-expanded";
 
 /** Two equal panels directly below the cinematic hero. */
 export function HomeDashboardPanels({ model, actions }: HomePageProps) {
+  const [trackingExpanded, setTrackingExpanded] = useState(() =>
+    readLocal(TRACKING_PANEL_EXPANDED_KEY, true),
+  );
+  const [foldersExpanded, setFoldersExpanded] = useState(() =>
+    readLocal(FOLDERS_PANEL_EXPANDED_KEY, true),
+  );
+
+  const changeTrackingExpanded = (expanded: boolean) => {
+    setTrackingExpanded(expanded);
+    writeLocal(TRACKING_PANEL_EXPANDED_KEY, expanded);
+  };
+  const changeFoldersExpanded = (expanded: boolean) => {
+    setFoldersExpanded(expanded);
+    writeLocal(FOLDERS_PANEL_EXPANDED_KEY, expanded);
+  };
+
   return (
     <section className="home-dashboard-panels" aria-label="Библиотека и отслеживания">
-      <TrackingPanel model={model} actions={actions} />
-      <LibraryPanel model={model} actions={actions} />
+      <TrackingPanel
+        model={model}
+        actions={actions}
+        expanded={trackingExpanded}
+        onExpandedChange={changeTrackingExpanded}
+      />
+      <LibraryPanel
+        model={model}
+        actions={actions}
+        expanded={foldersExpanded}
+        onExpandedChange={changeFoldersExpanded}
+      />
     </section>
   );
 }
@@ -18,15 +48,28 @@ export function HomeDashboardPanels({ model, actions }: HomePageProps) {
 /** Kept as an alias for extensions importing the old component name. */
 export const DashboardWidgets = HomeDashboardPanels;
 
-function TrackingPanel({ model, actions }: HomePageProps) {
+function TrackingPanel({
+  model,
+  actions,
+  expanded,
+  onExpandedChange,
+}: HomePageProps & { expanded: boolean; onExpandedChange: (expanded: boolean) => void }) {
   return (
-    <Panel id="home-tracking-panel" kind="tracking" actions={actions} className="home-tracking-panel">
+    <Panel id="home-tracking-panel" kind="tracking" actions={actions} className="home-tracking-panel" expanded={expanded}>
       <PanelHeader
         title="Отслеживаю"
         count={model.tracked.length}
         badge={model.totalNewEpisodes > 0 ? `+${model.totalNewEpisodes}` : undefined}
+        expanded={expanded}
+        controls="home-tracking-list"
+        onExpandedChange={onExpandedChange}
       />
-      <div className="home-panel-scroll home-tracking-list">
+      <div
+        id="home-tracking-list"
+        className="home-panel-scroll home-tracking-list"
+        hidden={!expanded}
+        inert={!expanded}
+      >
         {model.sortedTracked.map(tracker => (
           <TrackingRow
             key={tracker.animeId}
@@ -43,10 +86,21 @@ function TrackingPanel({ model, actions }: HomePageProps) {
   );
 }
 
-function LibraryPanel({ model, actions }: HomePageProps) {
+function LibraryPanel({
+  model,
+  actions,
+  expanded,
+  onExpandedChange,
+}: HomePageProps & { expanded: boolean; onExpandedChange: (expanded: boolean) => void }) {
   return (
-    <Panel kind="folders" actions={actions} className="home-library-panel">
-      <PanelHeader title="Папки и избранное" count={model.folders.length + 1}>
+    <Panel kind="folders" actions={actions} className="home-library-panel" expanded={expanded}>
+      <PanelHeader
+        title="Папки и избранное"
+        count={model.folders.length + 1}
+        expanded={expanded}
+        controls="home-library-groups"
+        onExpandedChange={onExpandedChange}
+      >
         {model.lastDeletedFolder && (
           <button
             type="button"
@@ -67,7 +121,12 @@ function LibraryPanel({ model, actions }: HomePageProps) {
         </button>
       </PanelHeader>
 
-      <div className="home-panel-scroll home-library-groups">
+      <div
+        id="home-library-groups"
+        className="home-panel-scroll home-library-groups"
+        hidden={!expanded}
+        inert={!expanded}
+      >
         <FavoritesGroup model={model} actions={actions} />
         <div className="home-folder-list">
           {model.folders.map(folder => (
@@ -200,12 +259,14 @@ function Panel({
   kind,
   actions,
   className,
+  expanded,
   children,
 }: {
   id?: string;
   kind: CollectionOverviewKind;
   actions: HomePageActions;
   className: string;
+  expanded: boolean;
   children: ReactNode;
 }) {
   const openPanel = (event: MouseEvent<HTMLElement>) => {
@@ -214,18 +275,32 @@ function Panel({
     actions.openCollection(kind);
   };
 
-  return <article id={id} className={`home-dashboard-panel ${className}`} onClick={openPanel}>{children}</article>;
+  return (
+    <article
+      id={id}
+      className={`home-dashboard-panel ${className}${expanded ? "" : " collapsed"}`}
+      onClick={openPanel}
+    >
+      {children}
+    </article>
+  );
 }
 
 function PanelHeader({
   title,
   count,
   badge,
+  expanded,
+  controls,
+  onExpandedChange,
   children,
 }: {
   title: string;
   count: number;
   badge?: string;
+  expanded: boolean;
+  controls: string;
+  onExpandedChange: (expanded: boolean) => void;
   children?: ReactNode;
 }) {
   return (
@@ -235,6 +310,17 @@ function PanelHeader({
         {badge && <em className="home-panel-badge">{badge}</em>}
         <span>{count}</span>
         {children}
+        <button
+          type="button"
+          className="home-panel-collapse-button"
+          aria-expanded={expanded}
+          aria-controls={controls}
+          aria-label={expanded ? `Свернуть «${title}»` : `Развернуть «${title}»`}
+          title={expanded ? "Свернуть панель" : "Развернуть панель"}
+          onClick={() => onExpandedChange(!expanded)}
+        >
+          <i aria-hidden="true">⌄</i>
+        </button>
       </div>
     </header>
   );

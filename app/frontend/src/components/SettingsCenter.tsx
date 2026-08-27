@@ -458,6 +458,17 @@ export function SettingsCenter(props: Props) {
                     />
                   </Setting>
                   <Setting
+                    title="Компактный список серий"
+                    description="Включает более плотный новый вид серий под плеером. Выбор серии, прогресс, отметка просмотра, оценки и сворачивание сезонов остаются доступны."
+                    example="Удобно на телефоне и для длинных сезонов: на экране помещается больше серий."
+                  >
+                    <Toggle
+                      label="Новый вид"
+                      value={props.playerPrefs.compactEpisodeList}
+                      onChange={(value) => setPrefs({ compactEpisodeList: value })}
+                    />
+                  </Setting>
+                  <Setting
                     title="Панель управления"
                     description="Определяет, с какой стороны плеера располагаются озвучка, серия, источник и настройки."
                     example="На широком мониторе удобно расположение справа."

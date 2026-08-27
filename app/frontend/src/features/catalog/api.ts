@@ -1,7 +1,13 @@
 import type {Anime, HeroTrailer, ScheduleEntry, Video} from "../../lib/types";
 
 type AnimePayload = {anime?: Anime[]; error?: string};
-type VideoPayload = {videos?: Video[]; error?: string};
+type VideoPayload = {
+    anime?: Anime;
+    videos?: Video[];
+    error?: string;
+    detail?: string;
+    _sources?: Record<string, string>;
+};
 type SchedulePayload = {schedule?: ScheduleEntry[]; error?: string};
 type TrailerPayload = {trailers?: unknown; error?: string};
 
@@ -20,7 +26,25 @@ const CATALOG_SEARCH_CACHE_TTL = 5 * 60_000;
 const CATALOG_SEARCH_CACHE_LIMIT = 40;
 const catalogSearchCache = new Map<string, CatalogCacheEntry>();
 const VIDEO_CACHE_TTL = 10 * 60_000;
-const videoCache = new Map<number, { expiresAt: number; request: Promise<Video[]> }>();
+export type AnimeVideoResult = {
+    anime?: Anime;
+    videos: Video[];
+    sources: Record<string, string>;
+};
+
+export class CatalogVideoRequestError extends Error {
+    readonly sources: Record<string, string>;
+    readonly status: number;
+
+    constructor(message: string, status: number, sources: Record<string, string>) {
+        super(message);
+        this.name = "CatalogVideoRequestError";
+        this.status = status;
+        this.sources = sources;
+    }
+}
+
+const videoCache = new Map<number, { expiresAt: number; request: Promise<AnimeVideoResult> }>();
 
 async function requestJson<T extends {error?: string}>(url: string): Promise<T> {
     const response = await fetch(url);
@@ -101,18 +125,75 @@ export async function fetchAnimeDetails(ids: number[]): Promise<Anime[]> {
 
 /** Load all player variants and episodes exposed for one API anime record. */
 export async function fetchAnimeVideos(animeId: number): Promise<Video[]> {
+    return (await fetchAnimeVideoResult(animeId)).videos;
+}
+
+/**
+ * Load videos together with per-provider status information.
+ *
+ * The in-flight cache is important on the watch page: discovering the full
+ * franchise can request the already selected title a second time. Reusing the
+ * first request keeps that enrichment from restarting local or online loading.
+ */
+export async function fetchAnimeVideoResult(
+    animeId: number,
+    options: { refresh?: boolean } = {},
+): Promise<AnimeVideoResult> {
     const now = Date.now();
     const cached = videoCache.get(animeId);
-    if (cached && cached.expiresAt > now) return cached.request;
+    if (!options.refresh && cached && cached.expiresAt > now) return cached.request;
     if (cached) videoCache.delete(animeId);
-    const request = requestJson<VideoPayload>(`/api/yummy?mode=videos&id=${animeId}`)
-        .then(payload => payload.videos ?? [])
+    const request = requestAnimeVideos(animeId)
         .catch(error => {
             videoCache.delete(animeId);
             throw error;
         });
     videoCache.set(animeId, { expiresAt: now + VIDEO_CACHE_TTL, request });
     return request;
+}
+
+async function requestAnimeVideos(animeId: number): Promise<AnimeVideoResult> {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+        () => controller.abort(new DOMException("Request timed out", "TimeoutError")),
+        15_000,
+    );
+    try {
+        const response = await fetch(`/api/yummy?mode=videos&id=${animeId}`, {
+            signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => ({})) as VideoPayload;
+        const sources = payload._sources ?? sourceStatesFromHeaders(response.headers);
+        if (!response.ok) {
+            throw new CatalogVideoRequestError(
+                payload.detail || payload.error || `API request failed with status ${response.status}`,
+                response.status,
+                sources,
+            );
+        }
+        return {
+            anime: payload.anime,
+            videos: Array.isArray(payload.videos) ? payload.videos : [],
+            sources,
+        };
+    } catch (error) {
+        if (error instanceof CatalogVideoRequestError) throw error;
+        const message = error instanceof DOMException && error.name === "TimeoutError"
+            ? "Источники не ответили за 15 секунд."
+            : error instanceof Error ? error.message : "Не удалось загрузить серии.";
+        throw new CatalogVideoRequestError(message, 0, {});
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function sourceStatesFromHeaders(headers: Headers): Record<string, string> {
+    const sources: Record<string, string> = {};
+    const yummy = headers.get("X-AnimeSoul-Yummy-Status");
+    const kodik = headers.get("X-AnimeSoul-Kodik-Status");
+    if (yummy) sources.yummy = yummy;
+    if (kodik) sources.kodik = kodik;
+    return sources;
 }
 
 /** Load and normalize trailer sources exposed by YummyAnime for one title. */
