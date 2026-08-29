@@ -9,7 +9,6 @@ import {
   type ForwardedRef,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { IS_ANDROID_APP } from "../../lib/platform";
@@ -29,6 +28,7 @@ type SkipSegment = { time: number; length: number };
 type HlsSubtitleOption = { index: number; label: string; language: string };
 type PlayerMenuOption = { value: string; label: string; disabled?: boolean; warning?: string };
 type BurnedSubtitleOption = { value: string; label: string; request: KodikStreamRequest };
+type VideoFit = "contain" | "cover" | "ambient";
 type PlayerMenu = {
   dubbings: PlayerMenuOption[];
   dubbing: string;
@@ -49,7 +49,6 @@ type PlayerMenu = {
   subtitles: BurnedSubtitleOption[];
   externalToolbarVisible: boolean;
   onExternalToolbarVisibleChange: (value: boolean) => void;
-  downloadControls?: ReactNode;
 };
 
 type AnimeSoulPlayerProps = {
@@ -135,6 +134,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   onFallback,
 }, forwardedRef) {
   const shell = useRef<HTMLDivElement>(null);
+  const ambientCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ambientRequestKey = useRef("");
   const requestKey = kodikStreamRequestKey(request);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const burnedSubtitleVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -170,6 +171,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const activeTeardownCallback = useRef(onBeforeTeardown);
   const activeTeardownRequestKey = useRef(requestKey);
   const teardownReported = useRef(false);
+  const activeMediaRequestKey = useRef("");
+  const endedMediaRequestKey = useRef("");
   const [stream, setStream] = useState<KodikStreamInfo | null>(null);
   const [hlsSubtitles, setHlsSubtitles] = useState<HlsSubtitleOption[]>([]);
   const [quality, setQuality] = useState(0);
@@ -185,10 +188,10 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [rate, setRate] = useState(1);
-  const [videoFit, setVideoFit] = useState<"contain" | "cover">(() => {
+  const [videoFit, setVideoFit] = useState<VideoFit>(() => {
     if (typeof window === "undefined") return "contain";
     const stored = window.localStorage.getItem("animesoul:video-fit");
-    if (stored === "contain" || stored === "cover") return stored;
+    if (stored === "contain" || stored === "cover" || stored === "ambient") return stored;
     return IS_ANDROID_APP ? "cover" : "contain";
   });
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -470,6 +473,79 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     else void subtitles.play().catch(() => undefined);
   };
 
+  const paintAmbientFrame = useCallback(() => {
+    if (videoFit !== "ambient" || nativePictureInPicture || document.visibilityState === "hidden") return;
+    const video = videoRef.current;
+    const canvas = ambientCanvasRef.current;
+    if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) return;
+
+    // Only the two outer pixel columns are needed: CSS stretches the left
+    // edge into the left field and the right edge into the right field. This
+    // keeps the original picture out of the backdrop altogether.
+    const width = 96;
+    const height = 96;
+    const halfWidth = width / 2;
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) return;
+    try {
+      context.drawImage(video, 0, 0, 1, video.videoHeight, 0, 0, halfWidth, height);
+      context.drawImage(video, video.videoWidth - 1, 0, 1, video.videoHeight, halfWidth, 0, halfWidth, height);
+    } catch {
+      // A provider may temporarily protect a frame while changing streams.
+      // Playback must keep working even when that frame cannot light the UI.
+    }
+  }, [videoFit, nativePictureInPicture]);
+
+  useEffect(() => {
+    const canvas = ambientCanvasRef.current;
+    if (ambientRequestKey.current !== requestKey) {
+      ambientRequestKey.current = requestKey;
+      canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    if (videoFit !== "ambient" || nativePictureInPicture) return;
+    const video = videoRef.current;
+    if (!video || !canvas) return;
+
+    let stopped = false;
+    let videoFrame = 0;
+    let animationFrame = 0;
+    const refresh = () => paintAmbientFrame();
+    const schedule = () => {
+      if (stopped || video.paused || video.ended || videoFrame || animationFrame) return;
+      if (typeof video.requestVideoFrameCallback === "function") {
+        videoFrame = video.requestVideoFrameCallback(() => {
+          videoFrame = 0;
+          refresh();
+          schedule();
+        });
+      } else {
+        animationFrame = window.requestAnimationFrame(() => {
+          animationFrame = 0;
+          refresh();
+          schedule();
+        });
+      }
+    };
+    const start = () => {
+      refresh();
+      schedule();
+    };
+    start();
+    video.addEventListener("loadeddata", start);
+    video.addEventListener("seeked", start);
+    video.addEventListener("play", start);
+    return () => {
+      stopped = true;
+      video.removeEventListener("loadeddata", start);
+      video.removeEventListener("seeked", start);
+      video.removeEventListener("play", start);
+      if (videoFrame) video.cancelVideoFrameCallback(videoFrame);
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+    };
+  }, [paintAmbientFrame, playing, requestKey, videoFit, nativePictureInPicture]);
+
   useEffect(() => {
     if (activeTeardownRequestKey.current !== requestKey) {
       // The component intentionally stays mounted so Android keeps the same
@@ -495,6 +571,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       && isSameEpisodeDubbingSwitch(previousRequest.current, request);
     previousRequest.current = request;
     if (audioOnlySwitch) {
+      activeMediaRequestKey.current = requestKey;
       rememberContinuity();
       cancelAudioFade();
       applyAudioOutput(muted, volume);
@@ -513,6 +590,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       return () => controller.abort();
     }
 
+    activeMediaRequestKey.current = "";
+    endedMediaRequestKey.current = "";
     resetAudioCarriers();
     if (episodeIdentity.current === nextEpisodeIdentity) {
       rememberContinuity();
@@ -574,6 +653,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !selectedSource) return;
+    activeMediaRequestKey.current = requestKey;
+    endedMediaRequestKey.current = "";
     let disposed = false;
     let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
     let networkRecoveries = 0;
@@ -1072,17 +1153,20 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           </select>
         </label>
         <label className="animesoul-player-fit-control">
-          <span>Полноэкранный масштаб</span>
+          <span>Отображение видео</span>
           <select
             value={videoFit}
             onChange={event => {
-              const next = event.target.value === "cover" ? "cover" : "contain";
+              const next: VideoFit = event.target.value === "cover"
+                ? "cover"
+                : event.target.value === "ambient" ? "ambient" : "contain";
               setVideoFit(next);
               window.localStorage.setItem("animesoul:video-fit", next);
             }}
           >
             <option value="cover">Заполнить экран</option>
             <option value="contain">Показывать целиком</option>
+            <option value="ambient">Погружение · динамический фон</option>
           </select>
         </label>
         <div className="animesoul-player-stream-state">
@@ -1093,7 +1177,6 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           <input type="checkbox" checked={menu.externalToolbarVisible} onChange={event => menu.onExternalToolbarVisibleChange(event.target.checked)} />
           <span>Показывать внешнюю панель</span>
         </label>
-        {menu.downloadControls && <div className="animesoul-player-downloads">{menu.downloadControls}</div>}
         {onFallback && <button type="button" className="animesoul-player-kodik-fallback" onClick={onFallback}>Открыть обычный плеер Kodik</button>}
       </div>
     </aside>
@@ -1102,13 +1185,22 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   return (
     <div
       ref={shell}
-      className={`animesoul-player${localPlayback ? " is-local" : ""}${loading ? " is-loading" : ""}${loading && (!stream || localPlayback) ? " is-preparing" : ""}${controlsVisible || !playing || settingsOpen || quickPickerOpen ? " controls-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
+      className={`animesoul-player${localPlayback ? " is-local" : ""}${loading ? " is-loading" : ""}${loading && (!stream || localPlayback) ? " is-preparing" : ""}${controlsVisible || !playing || settingsOpen || quickPickerOpen ? " controls-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${videoFit === "ambient" && !nativePictureInPicture ? " ambient-light" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
       tabIndex={0}
       onKeyDown={keyboard}
       onMouseMove={() => showControls()}
       onMouseLeave={() => playing && !settingsOpen && !quickPickerOpen && setControlsVisible(false)}
       aria-label={`Плеер AnimeSoul: ${title}${localPlayback ? ", локальное видео" : ""}`}
     >
+      {videoFit === "ambient" && !nativePictureInPicture && (
+        <canvas
+          ref={ambientCanvasRef}
+          className="animesoul-player-ambient"
+          width={96}
+          height={96}
+          aria-hidden="true"
+        />
+      )}
       <video
         className="animesoul-player-video"
         ref={attachVideoRef}
@@ -1121,6 +1213,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         onPointerCancel={finishLongPress}
         onPointerLeave={finishLongPress}
         onLoadedMetadata={() => {
+          if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video) return;
           if (continuity.current.time > 0) video.currentTime = Math.min(continuity.current.time, Math.max(0, video.duration - .25));
@@ -1151,6 +1244,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           setLoading(false);
         }}
         onTimeUpdate={() => {
+          if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video) return;
           const resolvedDuration = Number.isFinite(video.duration) ? video.duration : 0;
@@ -1170,9 +1264,19 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           if (!video?.buffered.length) { setBuffered(0); return; }
           setBuffered(video.buffered.end(video.buffered.length - 1));
         }}
-        onPlay={() => { setPlaying(true); showControls(true); syncBurnedSubtitle(true); syncActiveAudio(true); onPlay?.(); }}
+        onPlay={() => {
+          if (activeMediaRequestKey.current !== requestKey) return;
+          endedMediaRequestKey.current = "";
+          setPlaying(true);
+          showControls(true);
+          syncBurnedSubtitle(true);
+          syncActiveAudio(true);
+          onPlay?.();
+        }}
         onPause={() => { burnedSubtitleVideoRef.current?.pause(); audioCarrierRefs.current.forEach(carrier => carrier?.pause()); setPlaying(false); setControlsVisible(true); onPause?.(); }}
         onEnded={() => {
+          if (activeMediaRequestKey.current !== requestKey || endedMediaRequestKey.current === requestKey) return;
+          endedMediaRequestKey.current = requestKey;
           const resolvedDuration = Number.isFinite(videoRef.current?.duration) ? Number(videoRef.current?.duration) : duration;
           audioCarrierRefs.current.forEach(carrier => carrier?.pause());
           setPlaying(false);

@@ -21,7 +21,7 @@
 | `app/launcher.py` | WebView-лаунчер установленной сборки; JS bridge `LauncherApi`, безопасная остановка только собственного runtime |
 | `app/runtime_instance.py` | атомарный `animesoul.runtime.json`, поиск свободного порта и проверка instance ID |
 | `app/animesoul.python.example.json` | пример машинной конфигурации без рабочих токенов |
-| `app/Start AnimeSoul.bat` | venv, Python dependencies, npm dependencies, frontend build, затем `run.py` |
+| `app/Start AnimeSoul.bat` | venv, changed-only prepare, затем `run.py` |
 | `app/Start AnimeSoul in Browser.bat` | добавляет `--mode browser` |
 | `app/Start AnimeSoul Desktop.bat` | добавляет `--mode desktop` |
 | `app/Configure AnimeSoul.bat` | добавляет `--configure` |
@@ -58,6 +58,7 @@
 | Путь | Назначение / ключевые функции |
 | --- | --- |
 | `services/yummy.py` | `YummyAnimeGateway`, варианты поискового запроса, cache/in-flight dedup, URL normalization |
+| `services/response_cache.py` | SQLite + memory cache публичных upstream-ответов, TTL и stale-if-error |
 | `services/storage.py` | `JsonStorage.read/write`, temp-файл и atomic replace, первый импорт legacy |
 | `services/watch_party.py` | `WatchPartyService`, `Room`, `Participant`, REST-authoritative state и WS broadcast |
 | `services/gdrive.py` | `GoogleDriveService`: credentials/tokens, OAuth, Drive folder/file I/O, coalesced autosave |
@@ -206,6 +207,7 @@
 | Путь | Назначение |
 | --- | --- |
 | `app/tools/transfer_saves.py` | проверяемый двусторонний перенос полного сохранения с backup |
+| `app/tools/prepare_runtime.py` | hash-based install/build только при изменении входов source runtime |
 | `app/tools/split-base-css.mjs` | механическое разбиение исторического base CSS |
 | `app/tools/format-css.mjs` | форматирование CSS через frontend script `format:css` |
 | `app/frontend/tests/critical-logic.test.ts` | регрессии чистой клиентской логики |

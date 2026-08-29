@@ -14,6 +14,7 @@ import {
   latestResumePoint,
   matchesAnimeSearch,
   resolveResumeAnime,
+  shikimoriAnimeUrl,
   toggleEpisodeWatched,
 } from "../src/lib/anime.ts";
 import {
@@ -53,6 +54,7 @@ import {
 import { hasKodikSecretAccess } from "../src/lib/downloads.ts";
 import {
   createPlaybackProgressTarget,
+  nextEpisodeInSeason,
   recordPlaybackObservation,
 } from "../src/lib/playerProgress.ts";
 import {
@@ -69,6 +71,21 @@ import {
   parseCredentialImport,
 } from "../src/features/settings/credentialImport.ts";
 import { videoSourceIssues } from "../src/lib/sourceDiagnostics.ts";
+
+test("Shikimori links prefer a remote id and keep a title-search fallback", () => {
+  assert.equal(
+    shikimoriAnimeUrl({ anime_id: 10, title: "Тест", remote_ids: { shikimori_id: "51105" } }),
+    "https://shikimori.one/animes/51105",
+  );
+  assert.equal(
+    shikimoriAnimeUrl({ anime_id: -18229, title: "Гатчамен" }),
+    "https://shikimori.one/animes/18229",
+  );
+  assert.equal(
+    shikimoriAnimeUrl({ anime_id: 10, title: "Re:Zero / Жизнь с нуля" }),
+    "https://shikimori.one/animes?search=Re%3AZero%20%2F%20%D0%96%D0%B8%D0%B7%D0%BD%D1%8C%20%D1%81%20%D0%BD%D1%83%D0%BB%D1%8F",
+  );
+});
 
 test("credential import accepts flat JSON without exposing or renaming values", () => {
   assert.deepEqual(parseCredentialImport(JSON.stringify({
@@ -524,6 +541,17 @@ test("late media updates stay attached to their immutable episode", () => {
   assert.equal(afterLateFirstEvent.episodes["1:1"].position, 43);
   assert.equal(afterLateFirstEvent.episodes["1:1"].duration, 1_400);
   assert.equal(afterLateFirstEvent.episodes["1:2"].position, 12);
+});
+
+test("auto-next stays inside the active season and never enters an alternate cut", () => {
+  const episodes = [
+    { season: 1, number: "24" },
+    { season: 1, number: "25" },
+    { season: 8, number: "1" },
+  ];
+  assert.deepEqual(nextEpisodeInSeason(episodes, 1, "24"), episodes[1]);
+  assert.equal(nextEpisodeInSeason(episodes, 1, "25"), undefined);
+  assert.equal(nextEpisodeInSeason(episodes, 7, "25"), undefined);
 });
 
 test("obsolete franchise discovery is aborted instead of retrying in the background", async () => {

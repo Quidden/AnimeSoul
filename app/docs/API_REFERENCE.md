@@ -1,6 +1,6 @@
 # API AnimeSoul и используемые внешние поля
 
-Справочник описывает фактические контракты версии 0.2.4. Все внутренние URL
+Справочник описывает фактические контракты версии 0.2.5. Все внутренние URL
 относительные: в production их обслуживает тот же FastAPI origin, в разработке
 Vite проксирует их на `http://127.0.0.1:8000`.
 
@@ -58,7 +58,7 @@ Vite проксирует их на `http://127.0.0.1:8000`.
 {
   "ok": true,
   "stack": "FastAPI + React",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "runtimeInstanceId": "optional-instance-id"
 }
 ```
@@ -125,6 +125,7 @@ Frontend выставляет `auto_sync=true` только если локал�
 | `limit` | integer | `24`, 1–48 | catalog/search |
 | `offset` | integer | `0`, не меньше 0 | catalog/search |
 | `q` | string | `""` | поисковая строка |
+| `refresh` | boolean | `false` | пропустить fresh cache; stale остаётся аварийным резервом |
 
 Неизвестный `mode` попадает в поведение `catalog`.
 
@@ -137,6 +138,13 @@ Upstream с `q`: `YummyAnimeGateway.search` строит до четырёх в�
 выполняет их параллельно и возвращает первую непустую страницу. Backend cache —
 5 минут/до 128 записей с объединением одинаковых in-flight запросов; frontend
 cache первой страницы поиска — 5 минут/до 40 записей.
+
+Все публичные ответы провайдеров дополнительно проходят через общий SQLite
+cache `animesoul-response-cache.sqlite3`. Детали и трейлеры живут 12 часов,
+каталог/поиск — 5–10 минут, серии — 20 минут, расписание — 5 минут. После fresh
+TTL запись ещё доступна как stale-if-error: краткий сбой YummyAnime или Kodik
+не превращает уже известный каталог/плеер в пустой ответ. Ключ провайдера входит
+в cache key только как SHA-256 fingerprint.
 
 Ответ:
 
@@ -157,8 +165,9 @@ cache первой страницы поиска — 5 минут/до 40 зап
 
 #### `mode=videos`
 
-Требует `id`, иначе `400`. Параллельно выполняет `GET /anime/{id}` и
-`GET /anime/{id}/videos`.
+Требует `id`, иначе `400`. Параллельно выполняет `GET /anime/{id}`,
+`GET /anime/{id}/videos` и Kodik lookup с `with_episodes_data`; одинаковые
+in-flight запросы объединяются.
 
 ```json
 {"anime": {}, "videos": []}

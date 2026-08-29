@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
+from pathlib import Path
 import re
 import time
 import unicodedata
 from typing import Any
 
 import httpx
+
+from .response_cache import CacheRecord, PersistentJsonCache, response_cache_path
 
 
 _ENGLISH_KEYS = "`qwertyuiop[]asdfghjkl;'zxcvbnm,."
@@ -121,7 +126,7 @@ class YummyAnimeGateway:
 
     base_url = "https://api.yani.tv"
 
-    def __init__(self, token: str) -> None:
+    def __init__(self, token: str, data_dir: Path | None = None) -> None:
         self.token = token
         self._search_cache: dict[
             tuple[str, int, int], tuple[float, list[dict[str, Any]]]
@@ -129,16 +134,109 @@ class YummyAnimeGateway:
         self._search_inflight: dict[
             tuple[str, int, int], asyncio.Task[list[dict[str, Any]]]
         ] = {}
+        self._request_inflight: dict[str, asyncio.Task[Any]] = {}
+        self._request_slots = asyncio.Semaphore(8)
+        self._response_cache = PersistentJsonCache(
+            response_cache_path(data_dir),
+            "yummy",
+        )
+        self._client: httpx.AsyncClient | None = None
+        self._client_lock = asyncio.Lock()
 
     @property
     def headers(self) -> dict[str, str]:
         return {"X-Application": self.token, "Lang": "ru", "Accept": "application/json"}
 
-    async def request(self, path: str, params: dict[str, Any] | None = None) -> Any:
+    async def request(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        refresh: bool = False,
+    ) -> Any:
         if not self.token:
             raise RuntimeError("YummyAnime token is not configured")
-        async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
-            return await self._request(client, path, params)
+        key = self._cache_key(path, params)
+        cached = await self._response_cache.get(key)
+        if cached and cached.fresh and not refresh:
+            return cached.value
+
+        existing = self._request_inflight.get(key)
+        if existing:
+            return await asyncio.shield(existing)
+
+        task = asyncio.create_task(self._request_and_cache(key, path, params, cached))
+        self._request_inflight[key] = task
+
+        def release(completed: asyncio.Task[Any]) -> None:
+            if self._request_inflight.get(key) is completed:
+                self._request_inflight.pop(key, None)
+
+        task.add_done_callback(release)
+        return await asyncio.shield(task)
+
+    async def _request_and_cache(
+        self,
+        key: str,
+        path: str,
+        params: dict[str, Any] | None,
+        cached: CacheRecord | None,
+    ) -> Any:
+        try:
+            async with self._request_slots:
+                value = await self._request(await self._http_client(), path, params)
+        except Exception:
+            # A stale public response is a better reserve than an empty player
+            # while both upstreams are experiencing a short outage.
+            if cached is not None:
+                return cached.value
+            raise
+        ttl, stale_ttl = self._cache_policy(path)
+        await self._response_cache.set(key, value, ttl=ttl, stale_ttl=stale_ttl)
+        return value
+
+    async def _http_client(self) -> httpx.AsyncClient:
+        if self._client is not None:
+            return self._client
+        async with self._client_lock:
+            if self._client is None:
+                self._client = httpx.AsyncClient(
+                    timeout=httpx.Timeout(10.0, read=20.0),
+                    follow_redirects=True,
+                    headers={"Accept": "application/json"},
+                    limits=httpx.Limits(
+                        max_connections=12,
+                        max_keepalive_connections=8,
+                        keepalive_expiry=30.0,
+                    ),
+                )
+        return self._client
+
+    async def close(self) -> None:
+        client, self._client = self._client, None
+        if client is not None:
+            await client.aclose()
+
+    async def clear_cache(self) -> None:
+        self._search_cache.clear()
+        await self._response_cache.clear()
+
+    def _cache_key(self, path: str, params: dict[str, Any] | None = None) -> str:
+        token_key = hashlib.sha256(self.token.encode("utf-8")).hexdigest()[:12]
+        encoded = json.dumps(params or {}, ensure_ascii=False, sort_keys=True, default=str)
+        return f"{token_key}:{path}:{encoded}"
+
+    @staticmethod
+    def _cache_policy(path: str) -> tuple[float, float]:
+        if path.endswith("/videos"):
+            return 20 * 60, 24 * 60 * 60
+        if path == "/anime/schedule":
+            return 5 * 60, 6 * 60 * 60
+        if path.endswith("/trailers"):
+            return 12 * 60 * 60, 7 * 24 * 60 * 60
+        if re.fullmatch(r"/anime/[^/]+", path):
+            return 12 * 60 * 60, 7 * 24 * 60 * 60
+        return 5 * 60, 24 * 60 * 60
 
     async def _request(
         self,
@@ -150,14 +248,31 @@ class YummyAnimeGateway:
         response.raise_for_status()
         return self._normalize(response.json().get("response"))
 
-    async def search(self, query: str, limit: int, offset: int = 0) -> list[dict[str, Any]]:
+    async def search(
+        self,
+        query: str,
+        limit: int,
+        offset: int = 0,
+        *,
+        refresh: bool = False,
+    ) -> list[dict[str, Any]]:
         """Search API aliases, layout corrections and community title variants."""
 
         key = (normalize_search_text(query), limit, offset)
         now = time.monotonic()
         cached = self._search_cache.get(key)
-        if cached and cached[0] > now:
+        if cached and cached[0] > now and not refresh:
             return cached[1]
+
+        persistent_key = self._cache_key(
+            "/anime/expanded-search",
+            {"q": key[0], "limit": limit, "offset": offset},
+        )
+        persistent = await self._response_cache.get(persistent_key)
+        if persistent and persistent.fresh and not refresh:
+            anime = [item for item in persistent.value if isinstance(item, dict)]
+            self._search_cache[key] = (now + 5 * 60, anime)
+            return anime
 
         existing = self._search_inflight.get(key)
         if existing:
@@ -166,8 +281,19 @@ class YummyAnimeGateway:
         task = asyncio.create_task(self._search_uncached(query, limit, offset))
         self._search_inflight[key] = task
         try:
-            anime = await task
+            try:
+                anime = await asyncio.shield(task)
+            except Exception:
+                if persistent is None:
+                    raise
+                anime = [item for item in persistent.value if isinstance(item, dict)]
             self._search_cache[key] = (now + 5 * 60, anime)
+            await self._response_cache.set(
+                persistent_key,
+                anime,
+                ttl=5 * 60,
+                stale_ttl=24 * 60 * 60,
+            )
             self._trim_search_cache(now)
             return anime
         finally:
@@ -183,29 +309,29 @@ class YummyAnimeGateway:
 
         queries = anime_search_queries(query)
         first_error: BaseException | None = None
-        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
-            tasks = [
-                asyncio.create_task(self._request(
-                    client,
-                    "/anime",
-                    {"limit": limit, "offset": offset, "q": item},
-                ))
-                for item in queries
-            ]
-            try:
-                for completed in asyncio.as_completed(tasks):
-                    try:
-                        page = await completed
-                    except Exception as error:  # Keep trying independent variants.
-                        first_error = first_error or error
-                        continue
-                    if isinstance(page, list) and page:
-                        return [anime for anime in page if isinstance(anime, dict)][:limit]
-            finally:
-                for task in tasks:
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
+        client = await self._http_client()
+        tasks = [
+            asyncio.create_task(self._request(
+                client,
+                "/anime",
+                {"limit": limit, "offset": offset, "q": item},
+            ))
+            for item in queries
+        ]
+        try:
+            for completed in asyncio.as_completed(tasks):
+                try:
+                    page = await completed
+                except Exception as error:  # Keep trying independent variants.
+                    first_error = first_error or error
+                    continue
+                if isinstance(page, list) and page:
+                    return [anime for anime in page if isinstance(anime, dict)][:limit]
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
         if first_error:
             raise first_error

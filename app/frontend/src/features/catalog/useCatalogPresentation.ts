@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
     animeSearchScore,
@@ -65,6 +65,7 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         yearTo,
     } = options;
     const [cardMeta, setCardMeta] = useState<Record<number, CardMeta>>({});
+    const requestedMetadata = useRef(new Set<number>());
 
     const genres = useMemo(
         () => [
@@ -150,7 +151,7 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         if (active) return;
 
         const allowed = view === "catalog"
-            ? franchises
+            ? dubbingFilter === "all" ? [] : franchises
             : franchises.filter(anime => storedIds.includes(anime.anime_id));
         const targets = allowed.filter(anime => !cardMeta[anime.anime_id]);
         if (!targets.length) return;
@@ -167,10 +168,24 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         };
     }, [
         active,
+        dubbingFilter,
         franchises.map(anime => anime.anime_id).join(","),
         storedIds.join(","),
         view,
     ]);
+
+    const requestCardMeta = useCallback((anime: Anime) => {
+        if (cardMeta[anime.anime_id] || requestedMetadata.current.has(anime.anime_id)) return;
+        requestedMetadata.current.add(anime.anime_id);
+        void scheduleCardMetadata(anime)
+            .then(metadata => {
+                setCardMeta(current => ({ ...current, ...metadata }));
+            })
+            .catch(() => undefined)
+            .finally(() => {
+                requestedMetadata.current.delete(anime.anime_id);
+            });
+    }, [cardMeta]);
 
     return {
         cardMeta,
@@ -179,6 +194,7 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         genres,
         randomCandidates,
         ratingSources,
+        requestCardMeta,
         visible,
     };
 }
@@ -268,13 +284,49 @@ async function loadMissingCardMetadata(
 ) {
     for (const anime of animeList) {
         try {
-            const metadata = await loadCardMetadata(anime);
+            const metadata = await scheduleCardMetadata(anime);
             update(metadata);
         } catch {
             // A single incomplete API entry must not stop the remaining cards.
         }
 
         await new Promise(resolve => setTimeout(resolve, 120));
+    }
+}
+
+const CARD_METADATA_CONCURRENCY = 2;
+let activeMetadataRequests = 0;
+const metadataQueue: Array<{
+    anime: Anime;
+    resolve: (metadata: Record<number, CardMeta>) => void;
+    reject: (error: unknown) => void;
+}> = [];
+const metadataInflight = new Map<number, Promise<Record<number, CardMeta>>>();
+
+function scheduleCardMetadata(anime: Anime) {
+    const existing = metadataInflight.get(anime.anime_id);
+    if (existing) return existing;
+    const request = new Promise<Record<number, CardMeta>>((resolve, reject) => {
+        metadataQueue.push({ anime, resolve, reject });
+        pumpMetadataQueue();
+    }).finally(() => {
+        metadataInflight.delete(anime.anime_id);
+    });
+    metadataInflight.set(anime.anime_id, request);
+    return request;
+}
+
+function pumpMetadataQueue() {
+    while (activeMetadataRequests < CARD_METADATA_CONCURRENCY && metadataQueue.length) {
+        const item = metadataQueue.shift();
+        if (!item) return;
+        activeMetadataRequests += 1;
+        void loadCardMetadata(item.anime)
+            .then(item.resolve, item.reject)
+            .finally(() => {
+                activeMetadataRequests -= 1;
+                pumpMetadataQueue();
+            });
     }
 }
 

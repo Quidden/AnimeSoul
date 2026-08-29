@@ -714,6 +714,7 @@ html[data-color-scheme="light"] .filter-panel input,
 html[data-color-scheme="light"] .genre-row button,
 html[data-color-scheme="light"] .tags button,
 html[data-color-scheme="light"] .facts span,
+html[data-color-scheme="light"] .watch-info-shikimori-link,
 html[data-color-scheme="light"] .config-tools select,
 html[data-color-scheme="light"] .player-toolbar select {
   background: #f1edf4;

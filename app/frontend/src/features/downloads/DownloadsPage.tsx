@@ -1,23 +1,30 @@
 import { useEffect, useRef, useState } from "react";
-import type { Anime } from "../../lib/types";
+import type { Anime, AnimeProgress } from "../../lib/types";
+import { isEpisodeWatched } from "../../lib/anime";
+import { fetchAnimeDetails } from "../catalog/api";
 import { readLocal, writeLocal } from "../../lib/storage";
 import {
   cancelDownload,
   deleteOfflineAnime,
+  deleteOfflineEpisodes,
   fetchOfflineLibrary,
+  scanOfflineLibrary,
   type OfflineLibrary,
 } from "../../lib/downloads";
 import { useModalAccessibility } from "../../lib/modalAccessibility";
+import { IS_ANDROID_APP } from "../../lib/platform";
 
 type DownloadsPageProps = {
   onCatalog: () => void;
   onOpen: (anime: Anime) => void;
+  progress: Record<number, AnimeProgress>;
 };
 
 type PendingDeletion = {
   id: number;
   title: string;
   detail: string;
+  episodeIds?: string[];
 };
 
 const DELETE_CONFIRMATION_KEY = "animesoul:offline-delete-without-confirmation";
@@ -61,20 +68,39 @@ function compactEpisodeNumbers(values: string[]) {
   return [...ranges, ...customValues].join(", ");
 }
 
-function downloadedSeasonDetails(episodes: { season: number; episode: string; sizeBytes: number; dubbing: string; quality: number }[]) {
+function downloadedSeasonDetails(
+  episodes: { id: string; season: number; seasonLabel?: string; episode: string; originAnimeId?: number; sizeBytes: number; dubbing: string; quality: number }[],
+  saved?: AnimeProgress,
+  originTitles: Record<number, string> = {},
+) {
   const grouped = new Map<number, typeof episodes>();
   for (const episode of episodes) {
     grouped.set(episode.season, [...(grouped.get(episode.season) ?? []), episode]);
   }
   return [...grouped.entries()]
     .sort(([left], [right]) => left - right)
-    .map(([season, seasonEpisodes]) => ({
-      season,
-      count: new Set(seasonEpisodes.map(item => item.episode)).size,
-      episodes: compactEpisodeNumbers(seasonEpisodes.map(item => item.episode)),
-      sizeBytes: seasonEpisodes.reduce((total, item) => total + (item.sizeBytes || 0), 0),
-      items: [...seasonEpisodes].sort((left, right) => left.episode.localeCompare(right.episode, "ru", { numeric: true })),
-    }));
+    .map(([season, seasonEpisodes]) => {
+      const persistedLabel = seasonEpisodes.find(item => item.seasonLabel?.trim())?.seasonLabel?.trim();
+      const progressLabel = saved?.season === season ? saved.seasonLabel?.trim() : "";
+      const recoveredTitles = [...new Set(
+        seasonEpisodes
+          .map(item => originTitles[item.originAnimeId ?? 0]?.trim())
+          .filter((value): value is string => Boolean(value)),
+      )];
+      return {
+        season,
+        label: persistedLabel || progressLabel || recoveredTitles.join(" / ") || `Сезон ${season}`,
+        count: new Set(seasonEpisodes.map(item => item.episode)).size,
+        watchedCount: new Set(
+          seasonEpisodes
+            .filter(item => isEpisodeWatched(saved?.episodes[`${season}:${item.episode}`]))
+            .map(item => item.episode),
+        ).size,
+        episodes: compactEpisodeNumbers(seasonEpisodes.map(item => item.episode)),
+        sizeBytes: seasonEpisodes.reduce((total, item) => total + (item.sizeBytes || 0), 0),
+        items: [...seasonEpisodes].sort((left, right) => left.episode.localeCompare(right.episode, "ru", { numeric: true })),
+      };
+    });
 }
 
 function formatBytes(value: number) {
@@ -115,11 +141,33 @@ function jobStateLabel(status: string) {
   return "Скачивается";
 }
 
-export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
+function jobSelectionLabel(items: { season: number; seasonLabel?: string; episode: string }[] | undefined) {
+  if (!items?.length) return "";
+  const grouped = new Map<number, { label: string; episodes: string[] }>();
+  for (const item of items) {
+    const current = grouped.get(item.season) ?? {
+      label: item.seasonLabel || `Сезон ${item.season}`,
+      episodes: [],
+    };
+    current.episodes.push(item.episode);
+    grouped.set(item.season, current);
+  }
+  return [...grouped.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, group]) => `${group.label}: ${compactEpisodeNumbers(group.episodes)}`)
+    .join(" · ");
+}
+
+export function DownloadsPage({ onCatalog, onOpen, progress }: DownloadsPageProps) {
   const [library, setLibrary] = useState<OfflineLibrary | null>(null);
   const [error, setError] = useState("");
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
   const [skipDeletionConfirmation, setSkipDeletionConfirmation] = useState(() => readLocal(DELETE_CONFIRMATION_KEY, false));
+  const [selectingAnimeId, setSelectingAnimeId] = useState<number | null>(null);
+  const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<Set<string>>(new Set());
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanNotice, setScanNotice] = useState("");
+  const [legacyOriginTitles, setLegacyOriginTitles] = useState<Record<number, string>>({});
   const deletionDialogRef = useRef<HTMLElement>(null);
 
   useModalAccessibility(
@@ -151,9 +199,35 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
     };
   }, []);
 
-  const removeAnime = async (animeId: number) => {
+  const legacyOriginIds = [...new Set(
+    (library?.anime ?? []).flatMap(item => item.episodes
+      .filter(episode => !episode.seasonLabel?.trim() && episode.originAnimeId)
+      .map(episode => Number(episode.originAnimeId))),
+  )].sort((left, right) => left - right);
+  const legacyOriginKey = legacyOriginIds.join(",");
+
+  useEffect(() => {
+    if (!legacyOriginKey) return;
+    let stopped = false;
+    void fetchAnimeDetails(legacyOriginIds)
+      .then(items => {
+        if (!stopped) {
+          setLegacyOriginTitles(Object.fromEntries(items.map(item => [
+            item.anime_id,
+            item.title_ru || item.title,
+          ])));
+        }
+      })
+      .catch(() => undefined);
+    return () => { stopped = true; };
+  }, [legacyOriginKey]);
+
+  const removeDownload = async (deletion: PendingDeletion) => {
     try {
-      await deleteOfflineAnime(animeId);
+      if (deletion.episodeIds?.length) await deleteOfflineEpisodes(deletion.episodeIds);
+      else await deleteOfflineAnime(deletion.id);
+      setSelectingAnimeId(null);
+      setSelectedEpisodeIds(new Set());
       setLibrary(await fetchOfflineLibrary());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось удалить аниме.");
@@ -162,7 +236,7 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
 
   const requestDeletion = (deletion: PendingDeletion) => {
     if (skipDeletionConfirmation) {
-      void removeAnime(deletion.id);
+      void removeDownload(deletion);
       return;
     }
     setPendingDeletion(deletion);
@@ -176,8 +250,43 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
       setSkipDeletionConfirmation(true);
     }
     setPendingDeletion(null);
-    await removeAnime(deletion.id);
+    await removeDownload(deletion);
   };
+
+  const scan = async () => {
+    if (isScanning) return;
+    try {
+      setIsScanning(true);
+      setScanNotice("Проверяем Movies/AnimeSoul…");
+      const result = await scanOfflineLibrary();
+      setLibrary(await fetchOfflineLibrary());
+      setScanNotice(result.imported
+        ? `Восстановлено: ${episodeCountLabel(result.imported)}.`
+        : result.scanned
+          ? "Все найденные серии уже есть в библиотеке."
+          : "В папке Movies/AnimeSoul подходящих видео не найдено.");
+    } catch (reason) {
+      setScanNotice(reason instanceof Error ? reason.message : "Не удалось просканировать скачанные видео.");
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const toggleEpisodeSelection = (episodeId: string) => setSelectedEpisodeIds(current => {
+    const next = new Set(current);
+    if (next.has(episodeId)) next.delete(episodeId);
+    else next.add(episodeId);
+    return next;
+  });
+
+  const setEpisodeSelection = (episodeIds: string[], enabled: boolean) => setSelectedEpisodeIds(current => {
+    const next = new Set(current);
+    for (const episodeId of episodeIds) {
+      if (enabled) next.add(episodeId);
+      else next.delete(episodeId);
+    }
+    return next;
+  });
 
   const cancel = async (jobId: string) => {
     try {
@@ -188,7 +297,12 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
     }
   };
 
-  const activeJobs = library?.jobs.filter((job) => ["queued", "downloading", "paused"].includes(job.status)) ?? [];
+  const activeJobs = (library?.jobs.filter((job) => ["queued", "downloading", "paused"].includes(job.status)) ?? [])
+    .sort((left, right) => {
+      const leftRank = left.status === "downloading" || left.status === "paused" ? 0 : 1;
+      const rightRank = right.status === "downloading" || right.status === "paused" ? 0 : 1;
+      return leftRank - rightRank || (left.queuePosition ?? 999) - (right.queuePosition ?? 999);
+    });
   const failedJobs = library?.jobs.filter((job) => job.status === "error") ?? [];
   const downloadedAnime = library?.anime ?? [];
   const downloadedEpisodes = downloadedAnime.reduce((total, item) => total + item.episodes.length, 0);
@@ -217,11 +331,17 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
               <strong>{library ? formatBytes(library.storage.freeBytes) : "—"}</strong>
             </div>
           </div>
+          {IS_ANDROID_APP && (
+            <button className="downloads-scan-button" type="button" disabled={isScanning} onClick={() => void scan()}>
+              {isScanning ? "Сканируем…" : "Найти на устройстве"}
+            </button>
+          )}
           <button className="downloads-back-button" type="button" onClick={onCatalog}>← В каталог</button>
         </div>
       </section>
 
       {error && <p className="downloads-error" role="alert">{error}</p>}
+      {scanNotice && <p className="downloads-scan-notice" role="status">{scanNotice}</p>}
 
       {activeJobs.length > 0 && (
         <section className="download-jobs" aria-label="Текущие загрузки">
@@ -242,10 +362,11 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
                 </div>
               </div>
               <p>{job.status === "queued"
-                ? `Ожидает начала · ${job.quality}p · ${episodeCountLabel(job.total)}`
+                ? `Ожидает начала${job.queuePosition ? ` · №${job.queuePosition} в очереди` : ""} · ${job.quality}p · ${episodeCountLabel(job.total)}`
                 : job.status === "paused"
                   ? "Приостановлено: мобильная сеть запрещена. Подключите Wi‑Fi или измените настройку."
                   : job.current || `Качество ${job.quality}p`}</p>
+              {job.items?.length ? <p className="download-job-selection">{jobSelectionLabel(job.items)}</p> : null}
               <div
                 className="download-progress"
                 role="progressbar"
@@ -305,6 +426,11 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
             <button className="downloads-primary-action" type="button" onClick={onCatalog}>
               Открыть каталог <span aria-hidden="true">→</span>
             </button>
+            {IS_ANDROID_APP && (
+              <button className="downloads-secondary-action" type="button" disabled={isScanning} onClick={() => void scan()}>
+                {isScanning ? "Проверяем папку…" : "Восстановить скачанные файлы"}
+              </button>
+            )}
           </div>
           <ol className="downloads-empty-steps">
             <li><b>1</b><span>Выберите аниме</span></li>
@@ -326,7 +452,8 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
           <div className="downloaded-anime-list">
         {downloadedAnime.map((item) => {
           const episodeCount = item.episodes.length;
-          const seasonDetails = downloadedSeasonDetails(item.episodes);
+          const saved = progress[item.animeId];
+          const seasonDetails = downloadedSeasonDetails(item.episodes, saved, legacyOriginTitles);
           const dubbings = [...new Set(item.episodes.map(episode => episode.dubbing).filter(Boolean))]
             .sort((left, right) => left.localeCompare(right, "ru"));
           const qualities = [...new Set(item.episodes.map(episode => episode.quality).filter(Boolean))]
@@ -344,6 +471,8 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
             year: item.year,
             poster: posterArtwork ? { big: posterArtwork, fullsize: posterArtwork } : undefined,
           };
+          const selectionActive = selectingAnimeId === item.animeId;
+          const selectedInAnime = item.episodes.filter(episode => selectedEpisodeIds.has(episode.id));
           return (
             <article className="downloaded-anime-card" key={item.animeId}>
               <div className="downloaded-anime-cover" aria-hidden="true">
@@ -366,7 +495,13 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
                     <dt>Серии</dt>
                     <dd>
                       {seasonDetails.map(season => (
-                        <span key={season.season}>Сезон {season.season}: {season.episodes} <small>({episodeCountLabel(season.count)} · {formatBytes(season.sizeBytes)})</small></span>
+                        <span key={season.season}>
+                          {season.label}: {season.episodes}{" "}
+                          <small>
+                            ({episodeCountLabel(season.count)} · {formatBytes(season.sizeBytes)}
+                            {season.watchedCount ? ` · ✓ просмотрено ${season.watchedCount}` : ""})
+                          </small>
+                        </span>
                       ))}
                     </dd>
                   </div>
@@ -375,14 +510,41 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
                     <dd>
                       {seasonDetails.map(season => (
                         <details key={season.season}>
-                          <summary>Сезон {season.season}<span>{formatBytes(season.sizeBytes)}</span></summary>
+                          <summary>{season.label}<span>{formatBytes(season.sizeBytes)}</span></summary>
                           <div>
-                            {season.items.map(episode => (
-                              <p key={`${episode.episode}:${episode.dubbing}:${episode.quality}`}>
-                                <span>Серия {episode.episode} · {episode.dubbing} · {episode.quality}p</span>
+                            {selectionActive && (
+                              <label className="downloaded-season-select-all">
+                                <input
+                                  type="checkbox"
+                                  checked={season.items.every(episode => selectedEpisodeIds.has(episode.id))}
+                                  ref={input => {
+                                    if (input) {
+                                      const count = season.items.filter(episode => selectedEpisodeIds.has(episode.id)).length;
+                                      input.indeterminate = count > 0 && count < season.items.length;
+                                    }
+                                  }}
+                                  onChange={event => setEpisodeSelection(season.items.map(episode => episode.id), event.target.checked)}
+                                />
+                                Выбрать весь сезон
+                              </label>
+                            )}
+                            {season.items.map(episode => {
+                              const watched = isEpisodeWatched(saved?.episodes[`${season.season}:${episode.episode}`]);
+                              return (
+                              <p className={`${selectionActive ? "is-selecting " : ""}${watched ? "is-watched" : ""}`.trim() || undefined} key={episode.id}>
+                                {selectionActive && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedEpisodeIds.has(episode.id)}
+                                    aria-label={`Выбрать серию ${episode.episode}, ${season.label}`}
+                                    onChange={() => toggleEpisodeSelection(episode.id)}
+                                  />
+                                )}
+                                <span>{watched && <i aria-hidden="true">✓</i>} Серия {episode.episode} · {episode.dubbing} · {episode.quality}p</span>
                                 <b>{formatBytes(episode.sizeBytes)}</b>
                               </p>
-                            ))}
+                              );
+                            })}
                           </div>
                         </details>
                       ))}
@@ -408,6 +570,30 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
                   <span>{latestDownload > 0 ? `Обновлено ${formatDownloadedAt(latestDownload)}` : "Доступно без интернета"}</span>
                   <div className="downloaded-anime-actions">
                     <button
+                      className="downloaded-anime-select"
+                      type="button"
+                      onClick={() => {
+                        setSelectingAnimeId(selectionActive ? null : item.animeId);
+                        setSelectedEpisodeIds(new Set());
+                      }}
+                    >
+                      {selectionActive ? "Готово" : "Выбрать серии"}
+                    </button>
+                    {selectionActive && selectedInAnime.length > 0 && (
+                      <button
+                        className="downloaded-anime-delete-selected"
+                        type="button"
+                        onClick={() => requestDeletion({
+                          id: item.animeId,
+                          title: item.title,
+                          detail: `Будут удалены выбранные серии (${episodeCountLabel(selectedInAnime.length)}).`,
+                          episodeIds: selectedInAnime.map(episode => episode.id),
+                        })}
+                      >
+                        <TrashIcon /> Удалить выбранные ({selectedInAnime.length})
+                      </button>
+                    )}
+                    <button
                       className="downloaded-anime-delete"
                       type="button"
                       title="Удалить скачанные серии"
@@ -418,7 +604,7 @@ export function DownloadsPage({ onCatalog, onOpen }: DownloadsPageProps) {
                         detail: `Будут удалены все скачанные серии (${episodeCountLabel(episodeCount)}).`,
                       })}
                     >
-                      <TrashIcon /> <span>Удалить</span>
+                      <TrashIcon /> <span>Удалить всё</span>
                     </button>
                     <button className="downloaded-anime-open" type="button" onClick={() => onOpen(anime)} aria-label={`Смотреть ${item.title}`}>
                       <span aria-hidden="true">▶</span> Смотреть

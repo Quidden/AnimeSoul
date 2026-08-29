@@ -73,6 +73,86 @@ def _anime_folder_name(request: dict[str, Any]) -> str:
     return _safe_name(f"{title} [{anime_id}]", f"anime-{anime_id or 'unknown'}")
 
 
+def _download_episode_key(
+    anime_id: int,
+    episode: dict[str, Any],
+    quality: int,
+) -> str:
+    """Return a stable identity used to keep queued selections duplicate-free."""
+
+    return "|".join((
+        str(anime_id),
+        str(int(episode.get("season") or 1)),
+        str(episode.get("episode") or "").strip(),
+        str(episode.get("dubbing") or "").strip().casefold(),
+        str(int(quality)),
+    ))
+
+
+def _android_video_record(item: dict[str, Any]) -> dict[str, Any] | None:
+    """Rebuild one library row from AnimeSoul's public MediaStore layout."""
+
+    relative_path = str(item.get("relativePath") or "").replace("\\", "/").strip("/")
+    display_name = str(item.get("displayName") or "").strip()
+    external_path = str(item.get("path") or "").strip()
+    content_uri = str(item.get("uri") or "").strip()
+    parts = [part for part in relative_path.split("/") if part]
+    try:
+        root_index = next(index for index, part in enumerate(parts) if part.casefold() == "animesoul")
+        anime_folder = parts[root_index + 1]
+        season_folder = parts[root_index + 2]
+    except (StopIteration, IndexError):
+        return None
+
+    anime_match = re.fullmatch(r"(.+?) \[(\d+)]", anime_folder)
+    season_match = re.fullmatch(r"Сезон\s+(\d+)", season_folder, re.IGNORECASE)
+    prefix = f"{anime_folder} — "
+    if not anime_match or not season_match or not display_name.startswith(prefix):
+        return None
+    try:
+        number, dubbing, quality_label = display_name[len(prefix):].rsplit(" — ", 2)
+    except ValueError:
+        return None
+    quality_match = re.fullmatch(r"(\d+)p\.mp4", quality_label, re.IGNORECASE)
+    if not quality_match or not number.strip() or not dubbing.strip() or not external_path or not content_uri:
+        return None
+
+    anime_id = int(anime_match.group(2))
+    season = int(season_match.group(1))
+    quality = int(quality_match.group(1))
+    number = number.strip()
+    dubbing = dubbing.strip()
+    episode_id = hashlib.sha256(
+        f"{anime_id}|{season}|{number}|{dubbing}|{quality}".encode()
+    ).hexdigest()[:24]
+    downloaded_at = int(item.get("dateModified") or 0) * 1000
+    return {
+        "id": episode_id,
+        "animeId": anime_id,
+        "title": anime_match.group(1).strip(),
+        "year": None,
+        "season": season,
+        "seasonLabel": f"Сезон {season}",
+        "episode": number,
+        "originAnimeId": anime_id,
+        "originEpisode": number,
+        "dubbing": dubbing,
+        "translationId": None,
+        "quality": quality,
+        "duration": None,
+        "file": str(Path(anime_folder) / season_folder / display_name),
+        "poster": None,
+        "preview": None,
+        "mediaType": "video/mp4",
+        "skips": {},
+        "downloadedAt": downloaded_at or int(time.time() * 1000),
+        "contentUri": content_uri,
+        "externalPath": external_path,
+        "sizeBytes": max(0, int(item.get("sizeBytes") or 0)),
+        "recovered": True,
+    }
+
+
 def _normalise_url(value: str) -> str:
     return f"https:{value}" if value.startswith("//") else value
 
@@ -371,6 +451,28 @@ def _normalise_kodik_skips(payload: dict[str, Any]) -> dict[str, dict[str, float
             return
         result[target] = {"time": start_number, "length": length_number}
 
+    def implicit_kind(value: object, fallback: str) -> str:
+        """Classify Kodik's unlabelled single range by its position.
+
+        Kodik returns a generic ``skip`` array for some releases. With two
+        ranges their order is unambiguous, but with one range the old parser
+        always called it an opening. That turns end credits into an opening
+        button and routes Android auto-next through an unreliable seek-to-end.
+        Openings in ordinary episodes occur well before ten minutes; a lone
+        range after that point is therefore the ending.
+        """
+
+        start: object = None
+        if isinstance(value, (list, tuple)) and value:
+            start = value[0]
+        elif isinstance(value, dict):
+            lowered = {str(key).casefold().replace("_", ""): item for key, item in value.items()}
+            start = lowered.get("start", lowered.get("time", lowered.get("from")))
+        try:
+            return "ending" if float(start) >= 600 else fallback
+        except (TypeError, ValueError):
+            return fallback
+
     if isinstance(raw, dict):
         for key, value in raw.items():
             segment(key, value)
@@ -385,9 +487,9 @@ def _normalise_kodik_skips(payload: dict[str, Any]) -> dict[str, dict[str, float
                 if isinstance(first, dict):
                     lowered = {str(key).casefold(): item for key, item in first.items()}
                     explicit = lowered.get("type", lowered.get("kind", lowered.get("name")))
-                    segment(explicit or "opening", first)
+                    segment(explicit or implicit_kind(first, "opening"), first)
                 else:
-                    segment("opening", first)
+                    segment(implicit_kind(first, "opening"), first)
             if len(ranges) > 1:
                 last = ranges[-1]
                 if isinstance(last, dict):
@@ -402,6 +504,47 @@ def _normalise_kodik_skips(payload: dict[str, Any]) -> dict[str, dict[str, float
                 continue
             lowered = {str(key).casefold(): item_value for key, item_value in item.items()}
             segment(lowered.get("type", lowered.get("kind", lowered.get("name"))), item)
+    return result
+
+
+def _sanitize_skip_segments(
+    value: object,
+    duration: object = None,
+) -> dict[str, dict[str, float]]:
+    """Validate persisted skip markers and repair legacy lone endings.
+
+    Builds before this repair stored an unlabelled late Kodik range under the
+    ``opening`` key. Keep existing downloads usable without redownloading them
+    by correcting that shape as it is written or exposed by the library API.
+    """
+
+    if not isinstance(value, dict):
+        return {}
+    try:
+        media_duration = max(0.0, float(duration or 0))
+    except (TypeError, ValueError):
+        media_duration = 0.0
+    result: dict[str, dict[str, float]] = {}
+    for kind in ("opening", "ending"):
+        raw = value.get(kind)
+        if not isinstance(raw, dict):
+            continue
+        try:
+            start = float(raw.get("time"))
+            length = float(raw.get("length"))
+        except (TypeError, ValueError):
+            continue
+        if start < 0 or length <= 0 or (media_duration > 0 and start >= media_duration):
+            continue
+        if media_duration > 0:
+            length = min(length, media_duration - start)
+        if length > 0:
+            result[kind] = {"time": start, "length": length}
+
+    opening = result.get("opening")
+    late_threshold = media_duration * 0.6 if media_duration > 0 else 600.0
+    if opening and "ending" not in result and opening["time"] >= late_threshold:
+        result["ending"] = result.pop("opening")
     return result
 
 
@@ -1300,14 +1443,111 @@ class OfflineLibraryService:
         return sorted(anime.values(), key=lambda item: item["title"].casefold())
 
     def jobs(self) -> list[dict[str, Any]]:
-        return sorted((dict(job) for job in self._jobs.values()), key=lambda item: item["createdAt"], reverse=True)
+        jobs = sorted(
+            (copy.deepcopy(job) for job in self._jobs.values()),
+            key=lambda item: item["createdAt"],
+            reverse=True,
+        )
+        queued = sorted(
+            (job for job in jobs if job.get("status") == "queued"),
+            key=lambda item: item["createdAt"],
+        )
+        positions = {str(job["id"]): index for index, job in enumerate(queued, start=1)}
+        for job in jobs:
+            job["queuePosition"] = positions.get(str(job["id"]))
+            job.pop("episodeKeys", None)
+        return jobs
+
+    async def download_availability(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Check every selected episode without silently lowering quality.
+
+        A queue used to accept e.g. 1080p and later choose the nearest lower
+        rendition.  The picker needs an exact, per-episode answer instead, so
+        this preflight returns all problems in one response before downloading.
+        """
+
+        public_key, private_key = await self._kodik_private_credentials()
+        episodes = request.get("episodes")
+        if not isinstance(episodes, list) or not episodes:
+            raise OfflineLibraryError("Не выбраны серии для проверки.")
+        quality = max(144, min(int(request.get("quality") or 720), 2160))
+        request_slots = asyncio.Semaphore(4)
+
+        async def inspect(episode: object) -> dict[str, Any] | None:
+            if not isinstance(episode, dict):
+                return {
+                    "season": 1,
+                    "episode": "?",
+                    "dubbing": "",
+                    "kind": "source",
+                    "availableQualities": [],
+                    "message": "Серия описана неверно.",
+                }
+            season = int(episode.get("season") or 1)
+            number = str(episode.get("episode") or "?")
+            dubbing = str(episode.get("dubbing") or "Неизвестная озвучка")
+            group_label = str(episode.get("seasonLabel") or f"Сезон {season}").strip()
+            label = f"{group_label}, серия {number}"
+            if not _is_kodik_url(str(episode.get("iframeUrl") or "")):
+                return {
+                    "season": season,
+                    "episode": number,
+                    "dubbing": dubbing,
+                    "kind": "dubbing",
+                    "availableQualities": [],
+                    "message": f"{label}: озвучка «{dubbing}» недоступна в Kodik.",
+                }
+            try:
+                async with request_slots:
+                    result = await self.resolver.resolve_playback_api(
+                        str(episode.get("iframeUrl") or ""),
+                        public_key,
+                        private_key,
+                        source_id=episode.get("sourceId"),
+                        source_id_type=episode.get("sourceIdType"),
+                        season=season,
+                        episode=episode.get("originEpisode") or number,
+                        translation_id=episode.get("translationId"),
+                        dubbing=dubbing,
+                        source_title=episode.get("sourceTitle") or request.get("title"),
+                        source_original_title=episode.get("sourceOriginalTitle"),
+                    )
+            except OfflineLibraryError as error:
+                return {
+                    "season": season,
+                    "episode": number,
+                    "dubbing": dubbing,
+                    "kind": "dubbing",
+                    "availableQualities": [],
+                    "message": f"{label}: озвучка «{dubbing}» недоступна — {error}",
+                }
+            available = sorted({
+                int(source.get("quality") or 0)
+                for source in result.get("sources", [])
+                if isinstance(source, dict) and int(source.get("quality") or 0) > 0
+            })
+            if quality in available:
+                return None
+            alternatives = ", ".join(f"{value}p" for value in available) or "других качеств нет"
+            return {
+                "season": season,
+                "episode": number,
+                "dubbing": dubbing,
+                "kind": "quality",
+                "requestedQuality": quality,
+                "availableQualities": available,
+                "message": f"{label}: нет {quality}p в озвучке «{dubbing}» (есть: {alternatives}).",
+            }
+
+        issues = [
+            issue
+            for issue in await asyncio.gather(*(inspect(episode) for episode in episodes))
+            if issue is not None
+        ]
+        return {"available": not issues, "issues": issues}
 
     async def enqueue(self, request: dict[str, Any]) -> dict[str, Any]:
         directory = await self._directory()
-        if await self._mobile_downloads_blocked():
-            raise OfflineLibraryError(
-                "Скачивание через мобильную сеть отключено. Включите его в Настройки → Офлайн-библиотека."
-            )
         # Fail before creating a visible queue item when the official Kodik
         # credentials are missing or cannot be read on this Windows account.
         await self._kodik_private_credentials()
@@ -1317,26 +1557,64 @@ class OfflineLibraryService:
         invalid = [episode for episode in episodes if not isinstance(episode, dict) or not _is_kodik_url(str(episode.get("iframeUrl") or ""))]
         if invalid:
             raise OfflineLibraryError("Для загрузки доступны только серии с источником Kodik.")
+        anime_id = int(request.get("animeId") or 0)
+        quality = int(request.get("quality") or 720)
+        index = await self._read_index(directory)
+        occupied = {
+            _download_episode_key(int(entry.get("animeId") or 0), entry, int(entry.get("quality") or 0))
+            for entry in index.get("episodes", [])
+            if isinstance(entry, dict) and self._existing_episode(directory, entry)
+        }
+        for active_job in self._jobs.values():
+            if active_job.get("status") in {"queued", "downloading", "paused"}:
+                occupied.update(str(key) for key in active_job.get("episodeKeys", []))
+        unique_episodes: list[dict[str, Any]] = []
+        episode_keys: list[str] = []
+        for episode in episodes:
+            key = _download_episode_key(anime_id, episode, quality)
+            if key in occupied:
+                continue
+            occupied.add(key)
+            episode_keys.append(key)
+            unique_episodes.append(episode)
+        if not unique_episodes:
+            raise OfflineLibraryError("Все выбранные серии уже скачаны или добавлены в очередь в этом качестве.")
+        request = {**request, "episodes": unique_episodes}
         job_id = uuid.uuid4().hex
         job = {
             "id": job_id,
+            "animeId": anime_id,
             "status": "queued",
             "title": str(request.get("title") or "Аниме"),
-            "quality": int(request.get("quality") or 720),
-            "total": len(episodes),
+            "quality": quality,
+            "total": len(unique_episodes),
             "completed": 0,
             "progress": 0,
             "current": "",
             "error": "",
             "pauseReason": "",
             "createdAt": int(time.time() * 1000),
+            "items": [
+                {
+                    "season": int(episode.get("season") or 1),
+                    "episode": str(episode.get("episode") or ""),
+                    "dubbing": str(episode.get("dubbing") or ""),
+                    **(
+                        {"seasonLabel": str(episode["seasonLabel"])}
+                        if episode.get("seasonLabel")
+                        else {}
+                    ),
+                }
+                for episode in unique_episodes
+            ],
+            "episodeKeys": episode_keys,
         }
         self._jobs[job_id] = job
         async with self._queue_lock:
             await self._queue.put({"jobId": job_id, "directory": directory, "request": request})
             if self._worker is None or self._worker.done():
                 self._worker = asyncio.create_task(self._work_queue())
-        return dict(job)
+        return next(item for item in self.jobs() if item["id"] == job_id)
 
     async def cancel(self, job_id: str) -> None:
         if job_id not in self._jobs:
@@ -1355,15 +1633,73 @@ class OfflineLibraryService:
             active.cancel()
 
     async def delete_episode(self, episode_id: str) -> None:
+        await self.delete_episodes([episode_id])
+
+    async def delete_episodes(self, episode_ids: list[str]) -> int:
         directory = await self._directory()
         index = await self._read_index(directory)
-        episode = next((item for item in index["episodes"] if item.get("id") == episode_id), None)
-        if episode is None:
-            raise KeyError(episode_id)
-        await self._remove_entry_files(directory, episode)
-        index["episodes"] = [item for item in index["episodes"] if item.get("id") != episode_id]
-        await self._remove_orphaned_posters(directory, [episode], index["episodes"])
+        selected_ids = {str(value) for value in episode_ids if str(value).strip()}
+        selected = [item for item in index["episodes"] if str(item.get("id")) in selected_ids]
+        if not selected:
+            raise KeyError(next(iter(selected_ids), ""))
+        for episode in selected:
+            await self._remove_entry_files(directory, episode)
+        index["episodes"] = [item for item in index["episodes"] if str(item.get("id")) not in selected_ids]
+        await self._remove_orphaned_posters(directory, selected, index["episodes"])
         await self._save_index(directory, index)
+        return len(selected)
+
+    async def scan_existing(self) -> dict[str, int]:
+        """Restore Android MediaStore videos into a fresh private index."""
+
+        if not _is_android_runtime():
+            raise OfflineLibraryError("Сканирование общей папки доступно только в Android-приложении.")
+        try:
+            from java import jclass  # type: ignore[import-not-found]
+
+            native = jclass("com.animesoul.mobile.NativeDownloadSupport")
+            raw = await asyncio.to_thread(native.scanPublishedVideos)
+            discovered = json.loads(str(raw or "[]"))
+        except Exception as error:
+            message = str(error).casefold()
+            if "permission" in message or "securityexception" in message:
+                raise OfflineLibraryError(
+                    "Разрешите AnimeSoul доступ к видео и повторите сканирование."
+                ) from error
+            raise OfflineLibraryError("Не удалось просканировать Movies/AnimeSoul.") from error
+        if not isinstance(discovered, list):
+            raise OfflineLibraryError("Android вернул некорректный список видео.")
+
+        directory = await self._directory()
+        index = await self._read_index(directory)
+        existing = {str(item.get("id")) for item in index.get("episodes", [])}
+        recovered: list[dict[str, Any]] = []
+        ignored = 0
+        for item in discovered:
+            record = _android_video_record(item) if isinstance(item, dict) else None
+            if record is None:
+                ignored += 1
+                continue
+            try:
+                path = self._validated_android_external_path(str(record["externalPath"]))
+            except OfflineLibraryError:
+                ignored += 1
+                continue
+            if not path.is_file():
+                ignored += 1
+                continue
+            if str(record["id"]) not in existing:
+                recovered.append(record)
+                existing.add(str(record["id"]))
+        if recovered:
+            index["episodes"] = [*index.get("episodes", []), *recovered]
+            await self._save_index(directory, index)
+        return {
+            "scanned": len(discovered),
+            "imported": len(recovered),
+            "existing": len(discovered) - len(recovered) - ignored,
+            "ignored": ignored,
+        }
 
     async def delete_anime(self, anime_id: int) -> int:
         directory = await self._directory()
@@ -1494,7 +1830,8 @@ class OfflineLibraryService:
                 raise DownloadCancelled
             if not isinstance(episode, dict):
                 raise OfflineLibraryError("Очередь содержит неверно описанную серию.")
-            label = f"Серия {episode.get('episode', position)}"
+            group_label = str(episode.get("seasonLabel") or f"Сезон {episode.get('season', 1)}").strip()
+            label = f"{group_label} · серия {episode.get('episode', position)}"
             job["current"] = label
             await self._download_episode(directory, request, episode, job, position - 1, job_id)
             job["completed"] = position
@@ -1528,11 +1865,20 @@ class OfflineLibraryService:
         # Tests and third-party resolvers written for older AnimeSoul builds
         # may still return the original two-item tuple.
         source, actual_quality = resolved[:2]
-        skips = resolved[2] if len(resolved) > 2 and isinstance(resolved[2], dict) else {}
+        skips = _sanitize_skip_segments(
+            resolved[2] if len(resolved) > 2 and isinstance(resolved[2], dict) else {},
+            episode.get("duration"),
+        )
         anime_id = int(request["animeId"])
         season = int(episode.get("season") or 1)
         number = str(episode.get("episode") or "0")
         dubbing = str(episode.get("dubbing") or "Неизвестно")
+        if actual_quality != quality:
+            group_label = str(episode.get("seasonLabel") or f"Сезон {season}").strip()
+            raise OfflineLibraryError(
+                f"{group_label}, серия {number}: качество {quality}p недоступно "
+                f"для озвучки «{dubbing}» (Kodik вернул {actual_quality}p)."
+            )
         episode_id = hashlib.sha256(f"{anime_id}|{season}|{number}|{dubbing}|{actual_quality}".encode()).hexdigest()[:24]
         index = await self._read_index(directory)
         if any(item.get("id") == episode_id and self._existing_episode(directory, item) for item in index["episodes"]):
@@ -1592,6 +1938,7 @@ class OfflineLibraryService:
                 "title": str(request.get("title") or "Аниме"),
                 "year": request.get("year"),
                 "season": season,
+                "seasonLabel": str(episode.get("seasonLabel") or "").strip() or f"Сезон {season}",
                 "episode": number,
                 "originAnimeId": episode.get("originAnimeId"),
                 "originEpisode": str(episode.get("originEpisode") or number),
@@ -1872,13 +2219,13 @@ class OfflineLibraryService:
         return {str(key): str(value) for key, value in payload.items() if value is not None}
 
     @staticmethod
-    def _delete_android_content(content_uri: str) -> None:
+    def _delete_android_content(content_uri: str) -> bool | None:
         try:
             from java import jclass  # type: ignore[import-not-found]
 
-            jclass("com.animesoul.mobile.NativeDownloadSupport").deleteVideo(content_uri)
+            return bool(jclass("com.animesoul.mobile.NativeDownloadSupport").deleteVideo(content_uri))
         except Exception:
-            return
+            return None
 
     async def _download_android_hls_package(
         self,
@@ -2193,7 +2540,12 @@ class OfflineLibraryService:
     async def _remove_entry_files(self, directory: Path, entry: dict[str, Any]) -> None:
         content_uri = entry.get("contentUri")
         if isinstance(content_uri, str) and content_uri:
-            await asyncio.to_thread(self._delete_android_content, content_uri)
+            deleted = await asyncio.to_thread(self._delete_android_content, content_uri)
+            external = entry.get("externalPath")
+            if deleted is False and isinstance(external, str) and Path(external).is_file():
+                raise OfflineLibraryError(
+                    "Подтвердите удаление файла в системном окне Android, затем обновите библиотеку."
+                )
         for key in ("file", "preview"):
             relative = entry.get(key)
             if not isinstance(relative, str):
@@ -2239,10 +2591,11 @@ class OfflineLibraryService:
     @staticmethod
     def _public_episode(entry: dict[str, Any]) -> dict[str, Any]:
         result = {key: entry.get(key) for key in (
-            "id", "animeId", "season", "episode", "originAnimeId", "originEpisode",
+            "id", "animeId", "season", "seasonLabel", "episode", "originAnimeId", "originEpisode",
             "dubbing", "translationId", "quality", "duration", "mediaType", "downloadedAt",
             "sizeBytes", "skips",
         )}
+        result["skips"] = _sanitize_skip_segments(entry.get("skips"), entry.get("duration"))
         result["mediaUrl"] = f"/api/downloads/media/{entry['id']}"
         if entry.get("preview"):
             result["previewUrl"] = f"/api/downloads/previews/{entry['id']}"

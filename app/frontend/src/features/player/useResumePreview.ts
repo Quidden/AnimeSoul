@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
     fetchAnimeDetails,
     fetchAnimeTrailers,
-    fetchAnimeVideos,
 } from "../catalog/api";
 import {
     episodeResumePosition,
@@ -15,7 +14,6 @@ import type {
     HeroTrailer,
     PlayerPrefs,
     Progress,
-    Video,
 } from "../../lib/types";
 
 interface ResumePreviewOptions {
@@ -31,7 +29,6 @@ export function useResumePreview({
     progress,
 }: ResumePreviewOptions) {
     const [previewAnime, setPreviewAnime] = useState<Anime | null>(null);
-    const [previewVideo, setPreviewVideo] = useState<Video | null>(null);
     const [trailer, setTrailer] = useState<HeroTrailer | null>(null);
 
     const last = useMemo(
@@ -129,48 +126,8 @@ export function useResumePreview({
         playerPrefs.homePreviewMode,
     ]);
 
-    useEffect(() => {
-        const screenshotsEnabled = playerPrefs.homeEpisodePreview
-            && playerPrefs.homePreviewMode === "screenshots";
-        if (!lastAnime || !lastState || !lastPoint || !screenshotsEnabled) {
-            setPreviewVideo(null);
-            return;
-        }
-
-        let cancelled = false;
-        fetchAnimeVideos(lastPoint.state.originAnimeId ?? lastState.originAnimeId ?? lastAnime.anime_id)
-            .then(videos => {
-                if (cancelled) return;
-
-                const episodeNumber = lastPoint.state.originEpisode ?? lastState.originEpisode ?? lastPoint.episode;
-                const episodeVideos = videos.filter(
-                    video => video.number === episodeNumber,
-                );
-                setPreviewVideo(selectPreviewVideo(episodeVideos, lastPoint.state.dub ?? lastState.dub));
-            })
-            .catch(() => {
-                if (!cancelled) setPreviewVideo(null);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [
-        lastAnime?.anime_id,
-        lastPoint?.episode,
-        lastPoint?.state.dub,
-        lastPoint?.state.originAnimeId,
-        lastPoint?.state.originEpisode,
-        lastState?.dub,
-        lastState?.originAnimeId,
-        lastState?.originEpisode,
-        playerPrefs.homeEpisodePreview,
-        playerPrefs.homePreviewMode,
-    ]);
-
     return {
         heroPreviewAnime: previewAnime,
-        heroPreviewVideo: previewVideo,
         heroTrailer: trailer,
         last,
         lastAnime,
@@ -187,13 +144,4 @@ function resolveDisplayEpisode(
     if (pointEpisode && Number(pointEpisode) > 0) return pointEpisode;
     if (stateEpisode && Number(stateEpisode) > 0) return stateEpisode;
     return "1";
-}
-
-function selectPreviewVideo(videos: Video[], dubbing: string) {
-    return videos.find(video =>
-        video.data.dubbing === dubbing && /kodik/i.test(video.data.player),
-    )
-        ?? videos.find(video => /kodik/i.test(video.data.player))
-        ?? videos[0]
-        ?? null;
 }

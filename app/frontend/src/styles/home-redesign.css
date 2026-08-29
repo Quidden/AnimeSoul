@@ -99,24 +99,10 @@
   pointer-events: none;
 }
 
-.home-cinema-episode-media .episode-slideshow > img,
-.home-cinema-episode-media .preview-video-layer {
+.home-cinema-episode-media .episode-slideshow > img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-/* Kodik embeds can draw a title line at the very top of their document.
- * Keep the stable episode artwork underneath and fade the decorative video
- * into it, so provider chrome never leaks into the cinematic home hero. */
-.home-cinema-episode-media .preview-video-layer {
-  inset: 0;
-  /* Android WebView does not always apply a soft CSS mask to an iframe's
-     own document chrome.  Clip the provider-only edges first, then blend the
-     remaining picture into the poster underneath. */
-  clip-path: inset(12% 0 16% 0);
-  -webkit-mask-image: linear-gradient(180deg, transparent 0 9%, #000 27% 80%, transparent 100%);
-  mask-image: linear-gradient(180deg, transparent 0 9%, #000 27% 80%, transparent 100%);
 }
 
 .home-cinema-episode-media .episode-preview-copy,
@@ -983,8 +969,7 @@
 
   .home-cinema-media > img,
   .home-cinema-media > video,
-  .home-cinema-episode-media .episode-slideshow > img,
-  .home-cinema-episode-media .preview-video-layer {
+  .home-cinema-episode-media .episode-slideshow > img {
     object-position: center 28%;
   }
 

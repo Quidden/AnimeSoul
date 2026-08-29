@@ -18,6 +18,7 @@ from backend.app.services.offline_library import (
     OfflineLibraryError,
     OfflineLibraryService,
     CredentialVerificationUnavailable,
+    _android_video_record,
     _anime_folder_name,
     _dpapi_protect,
     _dpapi_unprotect,
@@ -28,6 +29,7 @@ from backend.app.services.offline_library import (
     _normalise_kodik_skips,
     _normalise_kodik_sources,
     _normalise_kodik_subtitles,
+    _sanitize_skip_segments,
     _private_player_link,
     _select_kodik_source,
 )
@@ -57,6 +59,91 @@ def request_for(anime_id: int = 101, title: str = "Тестовое аниме")
 
 
 class OfflineLibraryTests(unittest.TestCase):
+    def test_public_episode_keeps_human_season_label(self) -> None:
+        episode = OfflineLibraryService._public_episode({
+            "id": "rezero-season-three",
+            "animeId": 1248,
+            "season": 8,
+            "seasonLabel": "Сезон 3 · Re:Zero. Жизнь с нуля 3",
+            "episode": "1",
+            "dubbing": "AniLibria",
+            "quality": 720,
+            "downloadedAt": 1,
+            "sizeBytes": 100,
+        })
+
+        self.assertEqual(episode["season"], 8)
+        self.assertEqual(episode["seasonLabel"], "Сезон 3 · Re:Zero. Жизнь с нуля 3")
+
+    def test_download_availability_reports_exact_quality_per_episode(self) -> None:
+        async def scenario(root: Path) -> None:
+            service = OfflineLibraryService(root / "data")
+            await service.update_settings(
+                "downloads",
+                kodik_public_key="public-test-key",
+                kodik_private_key="private-test-key",
+            )
+
+            async def resolve(
+                _url: str,
+                _public_key: str,
+                _private_key: str,
+                **details: object,
+            ) -> dict[str, object]:
+                episode = str(details.get("episode"))
+                qualities = [720, 480] if episode == "1" else [480, 360]
+                return {
+                    "sources": [
+                        {"quality": quality, "src": f"https://cdn.example/{episode}/{quality}.m3u8", "type": "hls"}
+                        for quality in qualities
+                    ],
+                    "subtitles": [],
+                }
+
+            service.resolver.resolve_playback_api = resolve  # type: ignore[method-assign]
+            request = request_for()
+            request["episodes"].append({
+                **request["episodes"][0],
+                "videoId": 2,
+                "seasonLabel": "2 · OVA · Тестовый спецвыпуск",
+                "episode": "2",
+                "originEpisode": "2",
+                "iframeUrl": "https://kodik.info/serial/2/hash/720p?episode=2",
+            })
+
+            result = await service.download_availability(request)
+
+            self.assertFalse(result["available"])
+            self.assertEqual(len(result["issues"]), 1)
+            issue = result["issues"][0]
+            self.assertEqual((issue["season"], issue["episode"], issue["kind"]), (1, "2", "quality"))
+            self.assertEqual(issue["availableQualities"], [360, 480])
+            self.assertIn("OVA · Тестовый спецвыпуск", issue["message"])
+            self.assertIn("нет 720p", issue["message"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory)))
+
+    def test_android_media_store_name_restores_episode_metadata(self) -> None:
+        record = _android_video_record({
+            "uri": "content://media/external/video/media/100",
+            "path": "/storage/emulated/0/Movies/AnimeSoul/Re Zero [1248]/Сезон 02/video.mp4",
+            "relativePath": "Movies/AnimeSoul/Re Zero [1248]/Сезон 02/",
+            "displayName": "Re Zero [1248] — 7 — Озвучка AniLibria — 720p.mp4",
+            "sizeBytes": 123,
+            "dateModified": 1_700_000_000,
+        })
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record["animeId"], 1248)
+        self.assertEqual(record["title"], "Re Zero")
+        self.assertEqual(record["season"], 2)
+        self.assertEqual(record["episode"], "7")
+        self.assertEqual(record["dubbing"], "Озвучка AniLibria")
+        self.assertEqual(record["quality"], 720)
+        self.assertEqual(record["sizeBytes"], 123)
+
     def test_kodik_credentials_are_reported_per_field_before_save(self) -> None:
         async def scenario(root: Path) -> None:
             service = OfflineLibraryService(root / "data")
@@ -378,6 +465,17 @@ class OfflineLibraryTests(unittest.TestCase):
                 "ending": {"time": 1320.0, "length": 80.0},
             },
         )
+        self.assertEqual(
+            _normalise_kodik_skips({"segments": {"skip": [[1471, 1484]]}}),
+            {"ending": {"time": 1471.0, "length": 13.0}},
+        )
+        self.assertEqual(
+            _sanitize_skip_segments(
+                {"opening": {"time": 1471, "length": 64}},
+                1485,
+            ),
+            {"ending": {"time": 1471.0, "length": 14.0}},
+        )
 
     def test_queue_persists_media_and_deletion_removes_all_library_files(self) -> None:
         async def scenario(root: Path) -> None:
@@ -561,8 +659,12 @@ class OfflineLibraryTests(unittest.TestCase):
                 kodik_private_key="private-test-key",
             )
             await service.set_network_type("mobile")
-            with self.assertRaisesRegex(OfflineLibraryError, "мобильную сеть"):
-                await service.enqueue(request_for())
+            queued = await service.enqueue(request_for())
+            await asyncio.sleep(.04)
+            self.assertEqual(service._jobs[queued["id"]]["status"], "paused")
+            await service.cancel(queued["id"])
+            assert service._worker is not None
+            await asyncio.wait_for(service._worker, 1)
 
             job = {"status": "downloading", "pauseReason": "", "error": ""}
             waiter = asyncio.create_task(service._wait_for_network(job, "job-network"))
@@ -573,6 +675,47 @@ class OfflineLibraryTests(unittest.TestCase):
             await asyncio.wait_for(waiter, 1)
             self.assertEqual(job["status"], "downloading")
             self.assertEqual(job["pauseReason"], "")
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory)))
+
+    def test_second_season_can_be_queued_while_first_is_active(self) -> None:
+        async def scenario(root: Path) -> None:
+            service = OfflineLibraryService(root / "data")
+            await service.update_settings(
+                "downloads",
+                kodik_public_key="public-test-key",
+                kodik_private_key="private-test-key",
+            )
+            await service.set_network_type("mobile")
+            first_request = request_for()
+            second_request = request_for()
+            second_request["episodes"] = [{
+                **second_request["episodes"][0],
+                "videoId": 2,
+                "season": 2,
+                "episode": "3",
+                "originEpisode": "3",
+                "iframeUrl": "https://kodik.info/serial/2/hash/720p?episode=3",
+            }]
+
+            first = await service.enqueue(first_request)
+            second = await service.enqueue(second_request)
+            await asyncio.sleep(.04)
+            jobs = service.jobs()
+
+            self.assertEqual(len(jobs), 2)
+            self.assertEqual(first["animeId"], 101)
+            self.assertEqual(second["items"], [{"season": 2, "episode": "3", "dubbing": "AniLibria"}])
+            self.assertEqual(service._jobs[first["id"]]["status"], "paused")
+            self.assertEqual(service._jobs[second["id"]]["status"], "queued")
+            with self.assertRaisesRegex(OfflineLibraryError, "уже скачаны или добавлены"):
+                await service.enqueue(second_request)
+
+            await service.cancel(first["id"])
+            await service.cancel(second["id"])
+            assert service._worker is not None
+            await asyncio.wait_for(service._worker, 1)
 
         with tempfile.TemporaryDirectory() as directory:
             asyncio.run(scenario(Path(directory)))

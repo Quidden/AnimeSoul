@@ -515,6 +515,28 @@ footer span:nth-of-type(1) {
   line-height: 1.7;
 }
 
+.watch-info-shikimori-link {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 36px;
+  gap: 7px;
+  align-items: center;
+  margin: 2px 0 13px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb,#9a72d4 42%,#342e3a);
+  border-radius: 9px;
+  color: #c9acec;
+  background: color-mix(in srgb,#7650a9 10%,#17141b);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.watch-info-shikimori-link:hover {
+  border-color: #a47adf;
+  color: #f0e4ff;
+  background: color-mix(in srgb,#7650a9 18%,#17141b);
+}
+
 .watch-info aside {
   display: flex;
   flex-direction: column;
@@ -531,6 +553,12 @@ footer span:nth-of-type(1) {
   border: 1px solid #342e3a;
   border-radius: 9px;
   padding: 12px;
+}
+
+.watch-info aside button.download-active {
+  border-color: color-mix(in srgb,var(--accent) 62%,#342e3a);
+  color: #eadfff;
+  background: color-mix(in srgb,var(--accent) 14%,#17141b);
 }
 
 .watch-info aside small {

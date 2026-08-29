@@ -119,7 +119,7 @@ export function useCatalogController({
                     setCatalog(current => uniqueAnime([...anime, ...current]));
                 }
             }).catch(() => undefined);
-        }, 120);
+        }, 300);
 
         return () => {
             cancelled = true;
@@ -145,11 +145,17 @@ export function useCatalogController({
 
             for (let attempt = 0; attempt < 5 && addedCards < 12; attempt += 1) {
                 const page = await fetchCatalogPage({limit: 48, offset: cursor});
+                const pageFresh: Anime[] = [];
 
                 for (const anime of page) {
                     if (existingIds.has(anime.anime_id)) continue;
                     existingIds.add(anime.anime_id);
                     fresh.push(anime);
+                    pageFresh.push(anime);
+                }
+
+                if (pageFresh.length) {
+                    setCatalog(current => uniqueAnime([...current, ...pageFresh]));
                 }
 
                 cursor += page.length;
@@ -286,9 +292,21 @@ export function useCatalogController({
             });
         }
 
-        void hydrateEpisodeStatistics();
+        const idleWindow = window as typeof window & {
+            requestIdleCallback?: (callback: () => void, options?: {timeout: number}) => number;
+            cancelIdleCallback?: (handle: number) => void;
+        };
+        const idleHandle = idleWindow.requestIdleCallback?.(
+            () => void hydrateEpisodeStatistics(),
+            {timeout: 1800},
+        );
+        const fallbackTimer = idleHandle === undefined
+            ? window.setTimeout(() => void hydrateEpisodeStatistics(), 900)
+            : undefined;
         return () => {
             cancelled = true;
+            if (idleHandle !== undefined) idleWindow.cancelIdleCallback?.(idleHandle);
+            if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
         };
     }, [idsNeedingStats.join(","), view, active]);
 

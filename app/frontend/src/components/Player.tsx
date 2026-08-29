@@ -33,7 +33,9 @@ import {
 } from "../lib/playerPreferences";
 import {
   cancelDownload,
+  checkDownloadAvailability,
   enqueueDownload,
+  fetchDownloadJobs,
   fetchOfflineAnime,
   fetchOfflineLibrary,
   fetchOfflineSettings,
@@ -44,9 +46,11 @@ import {
   type DownloadJob,
   type OfflineAnime,
 } from "../lib/downloads";
+import { DownloadPicker, type DownloadCandidate } from "../features/downloads/DownloadPicker";
 import { IS_ANDROID_APP } from "../lib/platform";
 import {
   createPlaybackProgressTarget,
+  nextEpisodeInSeason,
   recordPlaybackObservation,
   type PlaybackProgressTarget,
 } from "../lib/playerProgress";
@@ -63,9 +67,30 @@ function isSubtitleVideo(video: Video) {
   return isSubtitleTranslation(video.data.dubbing, video.data.translation_type);
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const run = async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  };
+  await Promise.all(
+    Array.from({length: Math.min(Math.max(1, concurrency), items.length)}, run),
+  );
+  return results;
+}
+
 function downloadJobText(job: DownloadJob) {
   const percent = Math.round(Math.max(0, Math.min(1, job.progress)) * 100);
-  if (job.status === "queued") return `В очереди: ${job.total} сер. · ожидает начала`;
+  if (job.status === "queued") return `В очереди${job.queuePosition ? ` №${job.queuePosition}` : ""}: ${job.total} сер. · ожидает начала`;
+  if (job.status === "paused") return `На паузе: ${job.current || "ожидает разрешённую сеть"}`;
   if (job.status === "downloading") {
     const current = job.current || "Подготавливаем загрузку";
     return `Скачивается: ${current} · ${percent}% · ${Math.min(job.completed + 1, job.total)} из ${job.total}`;
@@ -73,14 +98,6 @@ function downloadJobText(job: DownloadJob) {
   if (job.status === "completed") return `Готово: скачано ${job.completed || job.total} сер.`;
   if (job.status === "cancelled") return "Загрузка отменена";
   return `Ошибка загрузки: ${job.error || "не удалось получить серию"}`;
-}
-
-function downloadJobLabel(status: DownloadJob["status"]) {
-  if (status === "queued") return "В очереди";
-  if (status === "downloading") return "Скачивается";
-  if (status === "completed") return "Готово";
-  if (status === "cancelled") return "Отменено";
-  return "Ошибка";
 }
 
 export function Watch({ header, anime, resumeRequested, newEpisodeRequested, favorite, onFavorite, onBack, onLibrary, onGenre, saved, ratings, communityRating, onRatingChange, onProgress, onPlayerPrefsChange, onFolders, tracker, onTrack, onUntrack, folderPicker, folders, toggleFolder, createFolder, closePicker }: WatchProps) {
@@ -118,7 +135,9 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const [sourceLoadIssues, setSourceLoadIssues] = useState<VideoSourceIssue[]>([]);
   const [showSourceLoadIssues, setShowSourceLoadIssues] = useState(false);
   const [downloadQuality, setDownloadQuality] = useState<number>(read("animesoul:download-quality", 720));
-  const [downloadJob, setDownloadJob] = useState<DownloadJob | null>(null);
+  const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
+  const [downloadPickerOpen, setDownloadPickerOpen] = useState(false);
+  const [downloadDubbing, setDownloadDubbing] = useState(saved?.dub ?? "");
   const [isSubmittingDownload, setIsSubmittingDownload] = useState(false);
   const [isCancellingDownload, setIsCancellingDownload] = useState(false);
   const [downloadNotice, setDownloadNotice] = useState("");
@@ -263,7 +282,9 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     setOfflineAnime(cachedOfflineAnime);
     setOfflineLookupReady(cachedLookupReady);
     setLocalPlaybackReady(false);
-    setDownloadJob(null);
+    setDownloadJobs([]);
+    setDownloadPickerOpen(false);
+    setDownloadDubbing(resumeDubbing);
     setRemoteSourcesUnavailable(false);
     setDirectStreamInfo(null);
     setSeasonVideos({});
@@ -287,6 +308,11 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   }, [anime.anime_id]);
   useEffect(() => {
     let stopped = false;
+    fetchDownloadJobs()
+      .then(jobs => {
+        if (!stopped) setDownloadJobs(jobs.filter(job => job.animeId === anime.anime_id));
+      })
+      .catch(() => undefined);
     fetchOfflineAnime(anime.anime_id)
       .then(item => {
         if (!stopped) setOfflineAnime(item);
@@ -302,16 +328,14 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     };
   }, [anime.anime_id]);
   useEffect(() => {
-    const downloadIsActive = downloadJob?.status === "queued"
-      || downloadJob?.status === "downloading"
-      || downloadJob?.status === "paused";
-    if (!downloadIsActive) return;
+    const hasActiveDownload = downloadJobs.some(job => ["queued", "downloading", "paused"].includes(job.status));
+    if (!hasActiveDownload) return;
     let stopped = false;
     const refresh = () => {
       void fetchOfflineLibrary().then(library => {
         if (stopped) return;
         setOfflineAnime(library.anime.find(item => item.animeId === anime.anime_id) ?? null);
-        setDownloadJob(current => current ? library.jobs.find(job => job.id === current.id) ?? current : null);
+        setDownloadJobs(library.jobs.filter(job => job.animeId === anime.anime_id));
       }).catch(() => undefined);
     };
     refresh();
@@ -320,7 +344,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [anime.anime_id, downloadJob?.id, downloadJob?.status]);
+  }, [anime.anime_id, downloadJobs.map(job => `${job.id}:${job.status}`).join("|")]);
 
   useEffect(() => {
     let stopped = false;
@@ -345,12 +369,6 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     };
   }, []);
 
-  useEffect(() => {
-    if (!downloadJob || (downloadJob.status !== "completed" && downloadJob.status !== "cancelled" && downloadJob.status !== "error")) return;
-    const jobId = downloadJob.id;
-    const timer = window.setTimeout(() => setDownloadJob(current => current?.id === jobId ? null : current), 8500);
-    return () => window.clearTimeout(timer);
-  }, [downloadJob?.id, downloadJob?.status]);
   const offlineVideosBySeason = useMemo(() => {
     const grouped: Record<number, Video[]> = {};
     for (const [index, item] of (offlineAnime?.episodes ?? []).entries()) {
@@ -566,9 +584,9 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       const remote: Record<number, Video[]> = {};
       let completedGroups = 0;
 
-      const loaded = await Promise.all(seasons.map(async group => {
+      const loadGroup = async (group: SeasonGroup) => {
         const ordered = [...group.entries].sort(byViewingOrder);
-        const payloads = await Promise.all(ordered.map(async entry => {
+        const payloads = await mapWithConcurrency(ordered, 2, async entry => {
           try {
             const result = await fetchAnimeVideoResult(entry.anime_id, { refresh });
             return {
@@ -600,7 +618,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
               }),
             };
           }
-        }));
+        });
         let offset = 0;
         const normalized = payloads.flatMap(({ entry, list }) => {
           const kind: Video["contentKind"] = group.kind === "movie"
@@ -633,7 +651,12 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
           else setStatus(`Загружаем сезоны… ${completedGroups} из ${seasons.length}`);
         }
         return { number: group.number, videos: unique, issues: payloads.flatMap(payload => payload.issues) };
-      }));
+      };
+      const selectedGroup = seasons.find(group => group.number === selectedSeason);
+      const remainingGroups = seasons.filter(group => group.number !== selectedGroup?.number);
+      const loaded = selectedGroup ? [await loadGroup(selectedGroup)] : [];
+      if (loadId !== videoLoadId.current) return;
+      loaded.push(...await mapWithConcurrency(remainingGroups, 2, loadGroup));
       if (loadId !== videoLoadId.current) return;
       Object.assign(remote, Object.fromEntries(loaded.map(group => [group.number, group.videos])));
       const issues = loaded.flatMap(group => group.issues);
@@ -727,6 +750,88 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     const normalizedRight = rightRank < 0 && right !== manualDubbing && right !== globalDubbing ? Number.MAX_SAFE_INTEGER : rightRank;
     return normalizedLeft - normalizedRight;
   });
+  const downloadDubbings = useMemo(() => Array.from(new Set(
+    Object.values(seasonVideos)
+      .flat()
+      .filter(video => !video.offline && isKodikEmbed(video.iframe_url, video.data.player))
+      .map(video => video.data.dubbing),
+  )).sort((left, right) => left.localeCompare(right, "ru")), [seasonVideos]);
+  const effectiveDownloadDubbing = downloadDubbings.includes(downloadDubbing)
+    ? downloadDubbing
+    : downloadDubbings.includes(dub)
+      ? dub
+      : downloadDubbings[0] ?? "";
+  useEffect(() => {
+    if (effectiveDownloadDubbing && effectiveDownloadDubbing !== downloadDubbing) {
+      setDownloadDubbing(effectiveDownloadDubbing);
+    }
+  }, [effectiveDownloadDubbing, downloadDubbing]);
+  const downloadVideoChoices = useMemo(() => {
+    const selected = new Map<string, Video & { __season: number }>();
+    for (const [rawSeason, list] of Object.entries(seasonVideos)) {
+      const season = Number(rawSeason);
+      for (const video of list) {
+        if (
+          video.offline
+          || video.data.dubbing !== effectiveDownloadDubbing
+          || !isKodikEmbed(video.iframe_url, video.data.player)
+        ) continue;
+        const key = `${season}:${video.number}`;
+        const currentChoice = selected.get(key);
+        if (!currentChoice || /kodik/i.test(video.data.player)) {
+          selected.set(key, { ...video, __season: season });
+        }
+      }
+    }
+    return selected;
+  }, [effectiveDownloadDubbing, seasonVideos]);
+  const activeDownloadJobs = downloadJobs.filter(job => ["queued", "downloading", "paused"].includes(job.status));
+  const downloadEpisodeKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const [rawSeason, list] of Object.entries(seasonVideos)) {
+      const season = Number(rawSeason);
+      for (const video of list) {
+        if (!video.offline && isKodikEmbed(video.iframe_url, video.data.player)) {
+          keys.add(`${season}:${video.number}`);
+        }
+      }
+    }
+    return [...keys];
+  }, [seasonVideos]);
+  const downloadCandidates = useMemo<DownloadCandidate[]>(() => {
+    const downloaded = new Set(
+      (offlineAnime?.episodes ?? [])
+        .filter(item => item.dubbing === effectiveDownloadDubbing && item.quality === downloadQuality)
+        .map(item => `${item.season}:${item.episode}`),
+    );
+    const queued = new Set(
+      downloadJobs
+        .filter(job => ["queued", "downloading", "paused"].includes(job.status) && job.quality === downloadQuality)
+        .flatMap(job => job.items ?? [])
+        .filter(item => item.dubbing === effectiveDownloadDubbing)
+        .map(item => `${item.season}:${item.episode}`),
+    );
+    return downloadEpisodeKeys.map(key => {
+      const video = downloadVideoChoices.get(key);
+      const separator = key.indexOf(":");
+      const season = Number(key.slice(0, separator));
+      const group = displaySeasons.find(item => item.number === season);
+      const groupTitle = group?.entries.map(item => item.title).join(" / ") ?? "";
+      const descriptor = group?.label ?? `Сезон ${season}`;
+      const seasonLabel = group?.kind === "season" && groupTitle
+        ? `${descriptor} · ${groupTitle}`
+        : descriptor;
+      return {
+        key,
+        season,
+        seasonLabel,
+        episode: video?.number ?? key.slice(separator + 1),
+        downloaded: downloaded.has(key),
+        queued: queued.has(key),
+        missingDubbing: !video,
+      };
+    });
+  }, [displaySeasons, downloadEpisodeKeys, downloadJobs, downloadQuality, downloadVideoChoices, effectiveDownloadDubbing, offlineAnime]);
   const currentEpisodeDubbings = new Set(
     voiceVideos.filter(video => video.number === episode).map(video => video.data.dubbing),
   );
@@ -793,6 +898,22 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const directPlaybackKey = useAnimeSoulPlayer && current
     ? `${current.offline?.episodeId ?? current.video_id}:${selectedSeason}:${episode}:${dub}`
     : "";
+  const downloadQualityOptions = useMemo(() => {
+    const resolved = directStreamInfo?.key === directPlaybackKey && effectiveDownloadDubbing === dub
+      ? directStreamInfo.info.sources.map(source => source.quality)
+      : [];
+    return [...new Set(resolved.length ? resolved : [360, 480, 720])]
+      .filter(value => Number.isFinite(value) && value > 0)
+      .sort((left, right) => left - right);
+  }, [directPlaybackKey, directStreamInfo, dub, effectiveDownloadDubbing]);
+  useEffect(() => {
+    if (!downloadPickerOpen || downloadQualityOptions.includes(downloadQuality)) return;
+    const next = [...downloadQualityOptions].reverse().find(value => value <= downloadQuality)
+      ?? downloadQualityOptions.at(-1);
+    if (!next) return;
+    setDownloadQuality(next);
+    write("animesoul:download-quality", next);
+  }, [downloadPickerOpen, downloadQuality, downloadQualityOptions]);
   const resolvedDirectSkips = directStreamInfo?.key === directPlaybackKey ? directStreamInfo.info.skips : undefined;
   const playbackSkips = {
     opening: resolvedDirectSkips?.opening ?? current?.skips?.opening,
@@ -1349,8 +1470,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     const activeSelection = (fullscreenActive.current || isPlayerFullscreen())
       ? playbackCursor.current
       : { season: selectedSeason, episode, dub, player: effectivePlayer };
-    const activeIndex = carouselItems.findIndex(item => item.season === activeSelection.season && item.number === activeSelection.episode);
-    const next = activeIndex >= 0 ? carouselItems[activeIndex + 1] : undefined;
+    const next = nextEpisodeInSeason(carouselItems, activeSelection.season, activeSelection.episode);
     if (!next) return;
     const transitionKey = `${activeSelection.season}:${activeSelection.episode}`;
     if (autoNextTransitionKey.current === transitionKey) return;
@@ -1590,27 +1710,15 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     setPartyPlaying(false);
     if (autoNext) advanceAfterPlayback();
   };
-  const requestDownload = async (scope: "episode" | "season" | "anime") => {
+  const queueDownloadVideos = async (
+    selectedVideos: (Video & { __season: number })[],
+  ): Promise<boolean> => {
     if (!kodikAccessReady) {
       setDownloadNotice("Добавьте публичный и секретный ключи Kodik в настройках офлайн-библиотеки.");
-      return;
+      return false;
     }
-    if (isSubmittingDownload || downloadJob?.status === "queued" || downloadJob?.status === "downloading") return;
-    const sourceLists = scope === "episode"
-      ? [[selectedSeason, sources] as const]
-      : scope === "season"
-        ? [[selectedSeason, seasonVideos[selectedSeason] ?? []] as const]
-        : Object.entries(seasonVideos).map(([season, list]) => [Number(season), list] as const);
-    const selected = new Map<string, Video & { __season: number }>();
-    for (const [season, list] of sourceLists) {
-      for (const video of list) {
-        if (video.offline || video.data.dubbing !== dub || !isKodikEmbed(video.iframe_url, video.data.player)) continue;
-        const key = `${season}:${video.number}:${video.data.dubbing}`;
-        const currentChoice = selected.get(key);
-        if (!currentChoice || /kodik/i.test(video.data.player)) selected.set(key, { ...video, __season: season });
-      }
-    }
-    const episodes = [...selected.values()].map(video => {
+    if (isSubmittingDownload) return false;
+    const episodes = selectedVideos.map(video => {
       const previewAnime = previewAnimeById[video.originAnimeId ?? anime.anime_id] ?? anime;
       const remoteIds = previewAnime.remote_ids;
       const sourceReference = remoteIds?.shikimori_id
@@ -1621,18 +1729,14 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       return {
         videoId: video.video_id,
         season: video.__season,
+        seasonLabel: downloadCandidates.find(item => item.key === `${video.__season}:${video.number}`)?.seasonLabel,
         episode: video.number,
         originAnimeId: video.originAnimeId,
         originEpisode: video.originNumber,
         dubbing: video.data.dubbing,
-        // `player_id` is YummyAnime's provider id (Kodik is commonly `4`),
-        // not Kodik's translation id. Supplying it as a translation makes the
-        // API look for an unrelated/nonexistent dub. If Yummy has no explicit
-        // Kodik translation id, the resolver uses the embed's default voice.
+        // Yummy's player id is not Kodik's translation id. The explicit
+        // translation field is the only safe value to forward here.
         translationId: video.data.translation_id,
-        // The private Kodik API signs the original, concrete player link. The
-        // serial URL is only for keeping the online iframe stable while the
-        // user switches episodes; it is not a valid replacement here.
         iframeUrl: video.iframe_url,
         ...sourceReference,
         sourceTitle: previewAnime.title,
@@ -1643,43 +1747,69 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     });
     if (!episodes.length) {
       setDownloadNotice("Для выбранной озвучки пока нет доступных онлайн-серий Kodik.");
-      return;
+      return false;
     }
     try {
       setIsSubmittingDownload(true);
-      setDownloadNotice("Добавляем выбранные серии в очередь…");
-      const job = await enqueueDownload({
+      setDownloadNotice("Проверяем озвучку и качество для каждой выбранной серии…");
+      const request = {
         animeId: anime.anime_id,
         title: anime.title,
         year: anime.year,
         posterUrl: anime.poster?.fullsize ?? anime.poster?.big,
         quality: downloadQuality,
         episodes,
-      });
-      setDownloadJob(job);
-      setDownloadNotice("");
+      };
+      const availability = await checkDownloadAvailability(request);
+      if (!availability.available) {
+        setDownloadNotice([
+          "Не удалось начать загрузку:",
+          ...availability.issues.map(issue => `• ${issue.message}`),
+        ].join("\n"));
+        return false;
+      }
+      setDownloadNotice("Проверка пройдена. Добавляем серии в очередь…");
+      const job = await enqueueDownload(request);
+      setDownloadJobs(current => [job, ...current.filter(item => item.id !== job.id)]);
+      setDownloadNotice(`Добавлено в очередь: ${job.total} сер. Можно выбрать следующий сезон.`);
+      return true;
     } catch (error) {
-      setDownloadJob(null);
       setDownloadNotice(error instanceof Error ? error.message : "Не удалось добавить загрузку в очередь.");
+      return false;
     } finally {
       setIsSubmittingDownload(false);
     }
   };
-  const cancelActiveDownload = async () => {
-    const job = downloadJob;
-    if (!job || (job.status !== "queued" && job.status !== "downloading") || isCancellingDownload) return;
+  const requestSelectedDownloads = async (keys: string[]) => {
+    const missing = keys.filter(key => !downloadVideoChoices.has(key));
+    if (missing.length) {
+      setDownloadNotice([
+        "Не удалось начать загрузку:",
+        ...missing.map(key => {
+          const separator = key.indexOf(":");
+          const candidate = downloadCandidates.find(item => item.key === key);
+          const group = candidate?.seasonLabel ?? `Сезон ${key.slice(0, separator)}`;
+          return `• ${group}, серия ${key.slice(separator + 1)}: нет озвучки «${effectiveDownloadDubbing}».`;
+        }),
+      ].join("\n"));
+      return false;
+    }
+    const selected = keys
+      .map(key => downloadVideoChoices.get(key))
+      .filter((video): video is Video & { __season: number } => Boolean(video));
+    return queueDownloadVideos(selected);
+  };
+  const cancelActiveDownload = async (jobId: string) => {
+    const job = downloadJobs.find(item => item.id === jobId);
+    if (!job || !["queued", "downloading", "paused"].includes(job.status) || isCancellingDownload) return;
 
     try {
       setIsCancellingDownload(true);
       setDownloadNotice("Отменяем скачивание…");
       await cancelDownload(job.id);
-      setDownloadJob((current) => {
-        if (
-          current?.id !== job.id
-          || (current.status !== "queued" && current.status !== "downloading")
-        ) return current;
-        return { ...current, status: "cancelled", error: "" };
-      });
+      setDownloadJobs(current => current.map(item => item.id === job.id
+        ? { ...item, status: "cancelled", error: "" }
+        : item));
       setDownloadNotice("Скачивание отменено. Недокачанный файл удалён.");
     } catch (error) {
       setDownloadNotice(error instanceof Error ? error.message : "Не удалось отменить скачивание.");
@@ -1687,25 +1817,11 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       setIsCancellingDownload(false);
     }
   };
-  const downloadIsActive = isSubmittingDownload || downloadJob?.status === "queued" || downloadJob?.status === "downloading";
-  const downloadCanCancel = downloadJob?.status === "queued" || downloadJob?.status === "downloading";
-  const visibleDownloadNotice = downloadJob ? downloadJobText(downloadJob) : downloadNotice;
-  const customPlayerDownloadControls = kodikAccessReady ? (
-    <div className={`animesoul-player-download-menu${downloadIsActive ? " is-active" : ""}`}>
-      <span>Скачать</span>
-      <div>
-        <button type="button" disabled={downloadIsActive} onClick={() => void requestDownload("episode")}>Серию</button>
-        <button type="button" disabled={downloadIsActive} onClick={() => void requestDownload("season")}>Сезон</button>
-        <button type="button" disabled={downloadIsActive} onClick={() => void requestDownload("anime")}>Всё аниме</button>
-      </div>
-      {downloadCanCancel && (
-        <button type="button" className="cancel" disabled={isCancellingDownload} onClick={() => void cancelActiveDownload()}>
-          {isCancellingDownload ? "Отменяем…" : "Отменить скачивание"}
-        </button>
-      )}
-      {visibleDownloadNotice && <small role="status" aria-live="polite">{visibleDownloadNotice}</small>}
-    </div>
-  ) : undefined;
+  const primaryDownloadJob = activeDownloadJobs.find(job => job.status === "downloading" || job.status === "paused")
+    ?? [...activeDownloadJobs].sort((left, right) => (left.queuePosition ?? 999) - (right.queuePosition ?? 999))[0]
+    ?? downloadJobs[0];
+  const downloadIsActive = activeDownloadJobs.length > 0;
+  const visibleDownloadNotice = downloadNotice || (primaryDownloadJob ? downloadJobText(primaryDownloadJob) : "");
   const setToolbar = (p: ToolbarPosition) => { setPosition(p); write(K.toolbar, p) ;};
   const chooseDubbing = (value: string) => {
     if (!dubbingHasEpisode(voiceVideos, value, episode)) return;
@@ -1860,7 +1976,6 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
                   subtitles: subtitleStreamOptions,
                   externalToolbarVisible: initialPrefs.customPlayerToolbarVisible,
                   onExternalToolbarVisibleChange: customPlayerToolbarVisible => patchPrefs({ customPlayerToolbarVisible }),
-                  downloadControls: customPlayerDownloadControls,
                 }}
                 opening={playbackSkips.opening}
                 ending={playbackSkips.ending}
@@ -1968,58 +2083,6 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
           onPrefsChange={patchPrefs}
           position={position}
           onPositionChange={setToolbar}
-          downloadControls={kodikAccessReady ? (
-            <div className={`offline-download-controls${downloadIsActive ? " is-active" : ""}`}>
-              <details className="offline-download-menu">
-                <summary title={downloadJob ? downloadJobText(downloadJob) : "Скачать"} aria-label={downloadJob ? downloadJobText(downloadJob) : "Скачать"}><span>⇩ Скачать</span></summary>
-                <div className="offline-download-menu-content">
-                  <label>
-                    Качество
-                    <select
-                      value={downloadQuality}
-                      onChange={event => {
-                        const next = Number(event.target.value);
-                        setDownloadQuality(next);
-                        write("animesoul:download-quality", next);
-                      }}
-                    >
-                      {[360, 480, 720, 1080].map(value => <option key={value} value={value}>{value}p</option>)}
-                    </select>
-                  </label>
-                  {downloadJob && (
-                    <div className={`offline-download-status is-${downloadJob.status}`} role="status" aria-live="polite">
-                      <div>
-                        <strong>{downloadJobLabel(downloadJob.status)}</strong>
-                        <span>{downloadJob.current || `${downloadJob.completed} из ${downloadJob.total} сер.`}</span>
-                      </div>
-                      <div className="offline-download-status-progress" role="progressbar" aria-label={downloadJobText(downloadJob)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(downloadJob.progress * 100)}>
-                        <span style={{ width: `${Math.round(Math.max(0, Math.min(1, downloadJob.progress)) * 100)}%` }} />
-                      </div>
-                    </div>
-                  )}
-                  {downloadCanCancel && (
-                    <button
-                      className="offline-download-cancel"
-                      type="button"
-                      disabled={isCancellingDownload}
-                      onClick={() => void cancelActiveDownload()}
-                    >
-                      {isCancellingDownload ? "Отменяем…" : "Отменить скачивание"}
-                    </button>
-                  )}
-                  <button type="button" disabled={downloadIsActive} onClick={() => void requestDownload("episode")}>Эту серию</button>
-                  <button type="button" disabled={downloadIsActive} onClick={() => void requestDownload("season")}>Весь сезон</button>
-                  <button type="button" disabled={downloadIsActive} onClick={() => void requestDownload("anime")}>Всё аниме</button>
-                </div>
-              </details>
-              {visibleDownloadNotice && (
-                <div className={`offline-download-notice${downloadJob ? ` is-${downloadJob.status}` : " is-error"}`} role="status" aria-live="polite">
-                  <strong>{downloadJob ? downloadJobLabel(downloadJob.status) : "Загрузка"}</strong>
-                  <span>{visibleDownloadNotice}</span>
-                </div>
-              )}
-            </div>
-          ) : undefined}
         />
       )}</div>
       {initialPrefs.watchPartyPanelPosition === "overlay" && partyPanel}
@@ -2044,9 +2107,13 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
         tracker={tracker}
         totalEpisodes={totalAcrossSeasons}
         totalDuration={totalDurationAcrossSeasons}
+        downloadAvailable={kodikAccessReady}
+        downloadActive={downloadIsActive}
+        downloadStatus={visibleDownloadNotice}
         onGenre={onGenre}
         onFavorite={onFavorite}
         onFolders={onFolders}
+        onDownload={() => setDownloadPickerOpen(true)}
         onTrack={onTrack}
         onUntrack={onUntrack}
         onResetProgress={onProgress}
@@ -2073,5 +2140,28 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
         onSeasonRatingChange={(season, value) => onRatingChange({ scope: "season", season }, value)}
         onEpisodeRatingChange={(season, ratedEpisode, value) => onRatingChange({ scope: "episode", season, episode: ratedEpisode }, value)}
       />
-    </section>{folderPicker && <FolderPicker anime={folderPicker} folders={folders} onToggle={toggleFolder} onCreate={createFolder} onClose={closePicker} />}</main>;
+    </section>
+    <DownloadPicker
+      open={downloadPickerOpen}
+      title={anime.title}
+      candidates={downloadCandidates}
+      dubbings={downloadDubbings}
+      dubbing={effectiveDownloadDubbing}
+      quality={downloadQuality}
+      qualities={downloadQualityOptions}
+      initialKey={`${selectedSeason}:${episode}`}
+      jobs={activeDownloadJobs}
+      busy={isSubmittingDownload}
+      notice={downloadNotice}
+      onClose={() => setDownloadPickerOpen(false)}
+      onDubbingChange={setDownloadDubbing}
+      onQualityChange={value => {
+        setDownloadQuality(value);
+        write("animesoul:download-quality", value);
+      }}
+      onSubmit={requestSelectedDownloads}
+      onCancelJob={jobId => void cancelActiveDownload(jobId)}
+    />
+    {folderPicker && <FolderPicker anime={folderPicker} folders={folders} onToggle={toggleFolder} onCreate={createFolder} onClose={closePicker} />}
+  </main>;
 }

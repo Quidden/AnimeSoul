@@ -8,7 +8,7 @@
 | Точка | Файл/символ | Когда используется | Выход |
 | --- | --- | --- | --- |
 | корневой BAT | `Start AnimeSoul.bat` | обычный source-запуск из корня | вызывает `app/Start AnimeSoul.bat` |
-| основной BAT | `app/Start AnimeSoul.bat` | source runtime | venv → pip → npm → build → `run.py` |
+| основной BAT | `app/Start AnimeSoul.bat` | source runtime | venv → changed-only prepare → `run.py` |
 | browser BAT | `app/Start AnimeSoul in Browser.bat` | принудительный browser | `run.py --mode browser` |
 | desktop BAT | `app/Start AnimeSoul Desktop.bat` | принудительный PyWebView | `run.py --mode desktop` |
 | configure BAT | `app/Configure AnimeSoul.bat` | повторная настройка | `run.py --configure` |
@@ -238,7 +238,7 @@ queue дополнительно coalesce несколько документо�
 ```text
 CatalogPage/Header input
 -> useCatalogController.setQuery
--> через 120 ms prefetchCatalogSearch
+-> через 300 ms prefetchCatalogSearch
 -> features/catalog/api.cachedCatalogSearch
 -> GET /api/yummy?mode=catalog&q=...&limit=24&offset=0
 -> api.yummy.yummy_proxy
@@ -246,10 +246,12 @@ CatalogPage/Header input
    -> anime_search_queries
    -> параллельные _request /anime
    -> первая непустая страница
-   -> cache 5 min
+-> cache 5 min
+-> persistent SQLite cache + stale-if-error
 -> Anime[]
 -> controller uniqueAnime
 -> useCatalogPresentation
+   -> metadata только для карточек рядом с viewport, concurrency 2
 -> AnimeCard[]
 ```
 
@@ -277,7 +279,9 @@ AnimeCard/onOpen
    -> иначе details/search fallback через /api/yummy
 -> groupFranchises / SeasonGroup[]
 -> Player.fetchVideos
-   -> для каждого entry до 4 попыток GET mode=videos&id=...
+   -> сначала выбранная группа/сезон
+   -> затем остальные группы в фоне, concurrency 2
+   -> для entry GET mode=videos&id=... с frontend/backend dedup
    -> нормализовать originAnimeId/originNumber/contentKind/contentTitle
    -> offset episode numbers внутри группы
    -> dedup по video_id

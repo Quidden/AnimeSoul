@@ -1,7 +1,7 @@
 # Синхронизация AnimeSoul с Google Drive
 
 Документ описывает фактическую реализацию `backend/app/services/gdrive.py`,
-`gdrive_merge.py`, `api/gdrive.py` и frontend-клиента версии 0.2.4.
+`gdrive_merge.py`, `api/gdrive.py` и frontend-клиента версии 0.2.5.
 
 ## Назначение и границы
 

@@ -8,20 +8,9 @@ if not exist ".venv\Scripts\python.exe" (
   if errorlevel 1 goto :error
 )
 
-echo Installing Python dependencies...
-".venv\Scripts\python.exe" -m pip install -q -r backend\requirements.txt
-if errorlevel 1 goto :error
-
-if not exist "frontend\node_modules" (
-  echo Installing React dependencies...
-  call npm --prefix frontend install
-  if errorlevel 1 goto :error
-)
-
-echo Building React interface...
 rem Never let a mobile build flag leak into the desktop bundle.
 set "VITE_ANIMESOUL_PLATFORM="
-call npm --prefix frontend run build
+".venv\Scripts\python.exe" tools\prepare_runtime.py
 if errorlevel 1 goto :error
 
 ".venv\Scripts\python.exe" run.py %*

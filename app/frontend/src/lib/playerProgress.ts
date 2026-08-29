@@ -28,6 +28,25 @@ export type PlaybackObservation = {
   updatedAt?: number;
 };
 
+/**
+ * Auto-next is episode navigation, not franchise navigation.
+ *
+ * The carousel also contains films, specials and alternate cuts. Crossing a
+ * group boundary automatically can therefore reset the visible episode number
+ * from e.g. 25 to 1 and look like a jump to a previous episode. Those adjacent
+ * cards remain available for explicit manual navigation.
+ */
+export function nextEpisodeInSeason<T extends { season: number; number: string }>(
+  items: readonly T[],
+  season: number,
+  episode: string,
+): T | undefined {
+  const index = items.findIndex(item => item.season === season && item.number === episode);
+  if (index < 0) return undefined;
+  const candidate = items[index + 1];
+  return candidate?.season === season ? candidate : undefined;
+}
+
 export function createPlaybackProgressTarget(
   input: Omit<PlaybackProgressTarget, "key">,
 ): PlaybackProgressTarget {

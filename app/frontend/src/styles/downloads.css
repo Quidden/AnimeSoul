@@ -115,7 +115,9 @@
 }
 
 .downloads-back-button,
-.downloads-primary-action {
+.downloads-primary-action,
+.downloads-scan-button,
+.downloads-secondary-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -134,6 +136,25 @@
 .downloads-back-button {
   padding: 0 14px;
   white-space: nowrap;
+}
+
+.downloads-scan-button {
+  min-height: 42px;
+  padding: 0 14px;
+  border-color: rgba(103, 212, 169, .35);
+  color: #a6e8ce;
+  white-space: nowrap;
+}
+.downloads-scan-button:hover:not(:disabled) { border-color: #67d4a9; background: rgba(67, 160, 125, .12); }
+.downloads-scan-button:disabled,
+.downloads-secondary-action:disabled { cursor: wait; opacity: .58; }
+.downloads-scan-notice {
+  margin: 0 0 18px;
+  padding: 11px 14px;
+  border: 1px solid rgba(103, 212, 169, .24);
+  border-radius: 11px;
+  color: #a6e8ce;
+  background: rgba(49, 132, 99, .09);
 }
 
 .downloads-back-button:hover {
@@ -315,6 +336,12 @@
   background: linear-gradient(90deg, #8870f5, #57cdf4);
 }
 
+.download-job .download-job-selection {
+  margin-top: -3px;
+  color: #c5b7d4;
+  font-size: 11px;
+}
+
 .download-job-footer {
   display: flex;
   gap: 14px;
@@ -466,6 +493,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+}
+
+.downloads-secondary-action {
+  min-height: 42px;
+  margin-left: 8px;
+  padding: 0 15px;
+  border-color: rgba(103, 212, 169, .32);
+  color: #a6e8ce;
 }
 
 .downloaded-anime-card {
@@ -676,6 +711,26 @@
   padding: 0 10px 7px 25px;
 }
 
+.downloaded-season-select-all {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid rgba(255, 255, 255, .045);
+  color: #cfc3d9;
+  cursor: pointer;
+  font-size: 11px;
+}
+.downloaded-season-select-all input,
+.downloaded-episode-sizes p.is-selecting input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: #9270e8;
+}
+.downloaded-episode-sizes p.is-selecting { align-items: center; }
+.downloaded-episode-sizes p.is-selecting > span { flex: 1; }
+
 .downloaded-episode-sizes details p {
   display: flex;
   gap: 12px;
@@ -684,6 +739,25 @@
   padding: 5px 0;
   border-top: 1px solid rgba(255, 255, 255, .045);
   color: var(--muted);
+}
+
+.downloaded-episode-sizes details p.is-watched {
+  color: #8edab9;
+  background: linear-gradient(90deg,rgba(43,157,111,.12),transparent 72%);
+}
+
+.downloaded-episode-sizes details p.is-watched > span > i {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  place-items: center;
+  border-radius: 50%;
+  color: #07150f;
+  background: #64d5a5;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
 }
 
 .downloaded-episode-sizes details p b {
@@ -714,7 +788,9 @@
 }
 
 .downloaded-anime-open,
-.downloaded-anime-delete {
+.downloaded-anime-delete,
+.downloaded-anime-select,
+.downloaded-anime-delete-selected {
   display: inline-flex;
   min-height: 38px;
   gap: 8px;
@@ -729,6 +805,14 @@
   font-weight: 750;
   transition: border-color .18s ease, color .18s ease, background .18s ease, transform .18s ease;
 }
+
+.downloaded-anime-select { color: #d7cae3; background: rgba(255, 255, 255, .035); }
+.downloaded-anime-delete-selected {
+  border-color: rgba(232, 114, 139, .38);
+  color: #ffc0cd;
+  background: rgba(173, 55, 81, .12);
+}
+.downloaded-anime-delete-selected svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 
 .downloaded-anime-open {
   border-color: rgba(157, 125, 247, .46);
@@ -978,6 +1062,200 @@
 .offline-download-menu-content button:hover { border-color: var(--accent); color: var(--accent); }
 .offline-download-notice { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
 
+/* Multi-season episode picker. It is portalled to the document body so the
+   player, fullscreen animations and side toolbars cannot clip it. */
+.download-picker-layer {
+  position: fixed;
+  z-index: 5400;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(5, 4, 8, .78);
+  backdrop-filter: blur(9px);
+}
+
+.download-picker-dialog {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(120px, 1fr) auto auto;
+  box-sizing: border-box;
+  width: min(860px, calc(100vw - 36px));
+  max-height: min(840px, calc(100dvh - 36px));
+  overflow: hidden;
+  border: 1px solid #57416d;
+  border-radius: 20px;
+  color: #f4eef7;
+  background: #151118;
+  box-shadow: 0 28px 90px #000d;
+}
+
+.download-picker-header,
+.download-picker-footer {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 19px;
+  background: #19141e;
+}
+
+.download-picker-header { border-bottom: 1px solid #33293b; }
+.download-picker-header h2 { margin: 2px 0 0; font-size: 22px; }
+.download-picker-header p { overflow: hidden; max-width: 620px; margin: 3px 0 0; color: #aaa2b0; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.download-picker-header span { color: #b899ff; font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.download-picker-header > button {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  color: #d8cfe0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 28px;
+}
+.download-picker-header > button:hover { color: #fff; background: #2b2331; }
+
+.download-picker-controls {
+  display: grid;
+  grid-template-columns: 1.4fr .7fr 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 13px 18px 10px;
+}
+
+.download-picker-controls label { display: grid; align-content: start; gap: 5px; color: #aaa2b0; font-size: 11px; }
+.download-picker-controls label > small { color: #756d7b; font-size: 9px; line-height: 1.25; }
+.download-picker-controls select,
+.download-picker-range select {
+  min-width: 0;
+  height: 39px;
+  padding: 0 10px;
+  border: 1px solid #3c3245;
+  border-radius: 9px;
+  color: #f5f1f7;
+  background: #211c27;
+}
+
+.download-picker-bulk-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 18px 12px;
+  border-bottom: 1px solid #2f2735;
+}
+.download-picker-bulk-actions button,
+.download-picker-range button,
+.download-picker-season-heading button,
+.download-picker-queue button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #403548;
+  border-radius: 8px;
+  color: #ddd4e4;
+  background: #211c27;
+  cursor: pointer;
+}
+.download-picker-bulk-actions button:hover,
+.download-picker-range button:hover,
+.download-picker-season-heading button:hover,
+.download-picker-queue button:hover { border-color: #8e6ec3; color: #fff; }
+.download-picker-bulk-actions > span { margin-left: auto; color: #93899a; font-size: 11px; }
+
+.download-picker-seasons {
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  padding: 13px 18px 16px;
+}
+.download-picker-season { padding: 12px; border: 1px solid #332a3a; border-radius: 13px; background: #ffffff05; }
+.download-picker-season-heading { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.download-picker-season-heading > label { display: flex; min-width: 0; gap: 8px; align-items: center; cursor: pointer; }
+.download-picker-season-heading input { width: 17px; height: 17px; accent-color: #9470ec; }
+.download-picker-season-copy { display: grid; min-width: 0; gap: 2px; }
+.download-picker-season-heading strong { overflow-wrap: anywhere; font-size: 14px; line-height: 1.25; }
+.download-picker-season-heading span { color: #99909f; font-size: 11px; }
+.download-picker-season-heading .download-picker-season-copy strong { color: #f4eef7; }
+.download-picker-season-heading button:disabled { cursor: default; opacity: .4; }
+
+.download-picker-range {
+  display: grid;
+  grid-template-columns: auto minmax(76px, 110px) minmax(76px, 110px) auto;
+  gap: 7px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 9px;
+  border-radius: 9px;
+  background: #0e0b11a8;
+}
+.download-picker-range > span { color: #aaa2b0; font-size: 11px; }
+.download-picker-range select { height: 32px; }
+
+.download-picker-episodes { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+.download-picker-episodes > label {
+  position: relative;
+  display: grid;
+  min-width: 42px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #403647;
+  border-radius: 9px;
+  color: #d9d1df;
+  background: #211c27;
+  cursor: pointer;
+  user-select: none;
+}
+.download-picker-episodes input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.download-picker-episodes label.is-selected { border-color: #a584f4; color: #fff; background: #7253c9; box-shadow: 0 0 0 2px #9d7bef24; }
+.download-picker-episodes label.is-downloaded { border-color: #346653; color: #87dcb8; background: #183229; cursor: default; }
+.download-picker-episodes label.is-queued { border-color: #6c5832; color: #e7c47d; background: #332813; cursor: default; }
+.download-picker-episodes label.is-missing-dubbing { min-width: 72px; border-color: #743d4b; color: #f1a7b8; background: #351923; }
+.download-picker-episodes small { position: absolute; top: 2px; right: 4px; max-width: calc(100% - 8px); overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.download-picker-episodes > p,
+.download-picker-empty { margin: 5px 0; color: #93899a; font-size: 12px; }
+
+.download-picker-queue { display: grid; gap: 6px; padding: 11px 18px; border-top: 1px solid #302737; background: #110e15; }
+.download-picker-queue h3 { margin: 0 0 2px; color: #b8afbe; font-size: 12px; }
+.download-picker-queue > div { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.download-picker-queue span { display: flex; min-width: 0; gap: 8px; align-items: baseline; }
+.download-picker-queue b { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.download-picker-queue small { flex: 0 0 auto; color: #948a9b; }
+.download-picker-queue button { min-height: 28px; color: #e9a9b7; font-size: 10px; }
+
+.download-picker-footer { border-top: 1px solid #392d42; }
+.download-picker-footer > div { display: grid; min-width: 0; gap: 3px; }
+.download-picker-footer strong { color: #fff; font-size: 17px; }
+.download-picker-footer span { color: #aaa2b0; font-size: 11px; white-space: pre-line; }
+.download-picker-footer > button {
+  min-height: 43px;
+  padding: 0 18px;
+  border: 1px solid #9b7ae8;
+  border-radius: 11px;
+  color: #fff;
+  background: linear-gradient(135deg, #7554d2, #9671e4);
+  cursor: pointer;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.download-picker-footer > button:disabled { cursor: default; filter: grayscale(.4); opacity: .5; }
+
+@media (max-width: 620px) {
+  .download-picker-layer { place-items: end center; padding: 0; }
+  .download-picker-dialog { width: 100%; max-height: 92dvh; border-width: 1px 0 0; border-radius: 22px 22px 0 0; }
+  .download-picker-header { padding: 13px 15px; }
+  .download-picker-controls { grid-template-columns: 1fr 1fr; padding: 11px 14px 9px; }
+  .download-picker-controls label:last-child { grid-column: 1 / -1; }
+  .download-picker-bulk-actions { padding: 0 14px 10px; }
+  .download-picker-bulk-actions > span { display: none; }
+  .download-picker-seasons { padding: 11px 14px 14px; }
+  .download-picker-range { grid-template-columns: 1fr 1fr auto; }
+  .download-picker-range > span { grid-column: 1 / -1; }
+  .download-picker-footer { align-items: stretch; padding: 12px 14px calc(12px + var(--android-safe-bottom)); }
+  .download-picker-footer > div span:not(.has-notice) { display: none; }
+  .download-picker-footer > div span.has-notice { display: block; max-height: 74px; overflow: auto; }
+  .download-picker-queue { padding-inline: 14px; }
+}
+
 .toolbar-left .offline-download-controls,
 .toolbar-right .offline-download-controls { width: 100%; }
 
@@ -1034,6 +1312,8 @@
   .downloads-stats { width: 100%; }
   .downloads-stats > div { flex: 1; }
   .downloads-back-button { width: 100%; }
+  .downloads-scan-button { width: 100%; }
+  .downloads-secondary-action { width: 100%; margin: 8px 0 0; }
   .download-jobs-refresh { display: none; }
 
   .downloads-page { padding-inline: 14px; }
@@ -1067,9 +1347,11 @@
   .downloaded-anime-details > div.is-wide { grid-column: auto; }
   .downloaded-anime-details dd > span { display: flex; width: fit-content; max-width: 100%; }
   .downloaded-anime-footer { align-items: stretch; flex-direction: column; gap: 9px; }
-  .downloaded-anime-actions { width: 100%; }
+  .downloaded-anime-actions { width: 100%; flex-wrap: wrap; }
   .downloaded-anime-open { flex: 1; }
-  .downloaded-anime-delete { padding-inline: 11px; }
+  .downloaded-anime-delete,
+  .downloaded-anime-select,
+  .downloaded-anime-delete-selected { flex: 1 1 auto; padding-inline: 11px; }
   .download-job-footer { align-items: flex-start; flex-direction: column; gap: 7px; }
   .settings-item.offline-directory-setting > div:last-child,
   .settings-item.offline-kodik-setting > .offline-kodik-setting-controls {

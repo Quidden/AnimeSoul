@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PlayerPrefs, ToolbarPosition } from "../../lib/types";
 import { Toggle } from "../../components/Toggle";
@@ -46,7 +46,6 @@ type PlayerToolbarProps = {
   onPrefsChange: (patch: Partial<PlayerPrefs>) => void;
   position: ToolbarPosition;
   onPositionChange: (position: ToolbarPosition) => void;
-  downloadControls?: ReactNode;
 };
 
 /**
@@ -92,7 +91,6 @@ export function PlayerToolbar({
   onPrefsChange,
   position,
   onPositionChange,
-  downloadControls,
 }: PlayerToolbarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsDialogRef = useRef<HTMLElement>(null);
@@ -151,7 +149,6 @@ export function PlayerToolbar({
       </div>
 
       <div className="player-toolbar-actions">
-        {downloadControls}
         <button
           type="button"
           className="player-settings-trigger"

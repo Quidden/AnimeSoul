@@ -50,6 +50,7 @@ type CatalogPageProps = {
     onOpen: (anime: Anime) => void;
     onFavorite: (animeId: number) => void;
     onFolders: (anime: Anime) => void;
+    onCardVisible: (anime: Anime) => void;
     onLoadMore: () => void;
     onRetry: () => void;
 };
@@ -101,6 +102,7 @@ export function CatalogPage({
     onOpen,
     onFavorite,
     onFolders,
+    onCardVisible,
     onLoadMore,
     onRetry,
 }: CatalogPageProps) {
@@ -249,6 +251,7 @@ export function CatalogPage({
         </div>}
         <div className="cards">{visible.map(anime => <AnimeCard key={anime.anime_id} anime={anime}
             meta={cardMeta[anime.anime_id]} onOpen={onOpen} favorite={favorites.includes(anime.anime_id)}
+            onVisible={onCardVisible}
             onFavorite={() => onFavorite(anime.anime_id)} onFolders={() => onFolders(anime)}
             progress={progress[anime.anime_id]} ratings={ratings[anime.anime_id]}
             communityRating={communityRatings[anime.anime_id]}/>)}</div>

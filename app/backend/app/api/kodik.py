@@ -58,3 +58,9 @@ async def kodik_stream(payload: KodikStreamPayload) -> dict[str, object]:
         return await playback.playback_source(data)
     except OfflineLibraryError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+async def close_kodik_services() -> None:
+    """Close the standalone credential-check connection pool."""
+
+    await gateway.close()

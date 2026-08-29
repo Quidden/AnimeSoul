@@ -63,6 +63,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 41;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 42;
+    private static final int VIDEO_LIBRARY_PERMISSION_REQUEST = 43;
     private static final String LOOPBACK_HOST = "127.0.0.1";
     private static final String PLAYBACK_CHANNEL_ID = "animesoul_playback";
     private static final int PLAYBACK_NOTIFICATION_ID = 1702;
@@ -250,7 +251,7 @@ public final class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setSupportMultipleWindows(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " AnimeSoulAndroid/0.2.4");
+        settings.setUserAgentString(settings.getUserAgentString() + " AnimeSoulAndroid/0.2.5");
 
         // This deliberately exposes only two parameterless download lifecycle
         // signals. The native service reads all state from the trusted
@@ -588,7 +589,7 @@ public final class MainActivity extends Activity {
 
     private void startLocalRuntime() {
         try {
-            File frontend = new File(getFilesDir(), "frontend-0.2.4");
+            File frontend = new File(getFilesDir(), "frontend-0.2.5");
             copyAssetTree(getAssets(), "frontend", frontend);
 
             Python python = Python.getInstance();
@@ -783,6 +784,41 @@ public final class MainActivity extends Activity {
         requestDownloadNotificationPermission();
     }
 
+    private void requestOfflineLibraryPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            dispatchOfflineLibraryPermissionChanged();
+            return;
+        }
+        String permission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                ? Manifest.permission.READ_MEDIA_VIDEO
+                : Manifest.permission.READ_EXTERNAL_STORAGE;
+        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+            dispatchOfflineLibraryPermissionChanged();
+            return;
+        }
+        requestPermissions(new String[]{permission}, VIDEO_LIBRARY_PERMISSION_REQUEST);
+    }
+
+    private void dispatchOfflineLibraryPermissionChanged() {
+        if (webView == null) return;
+        webView.evaluateJavascript(
+                "window.dispatchEvent(new Event('animesoul:media-permission-changed'))",
+                null
+        );
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == VIDEO_LIBRARY_PERMISSION_REQUEST) {
+            dispatchOfflineLibraryPermissionChanged();
+        }
+    }
+
     private void configureDownloadNetworkMonitor() {
         connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         if (connectivityManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
@@ -849,6 +885,11 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void prepareNotificationPermission() {
             runOnUiThread(MainActivity.this::requestDownloadNotificationPermission);
+        }
+
+        @JavascriptInterface
+        public void requestOfflineLibraryPermission() {
+            runOnUiThread(MainActivity.this::requestOfflineLibraryPermission);
         }
 
         @JavascriptInterface

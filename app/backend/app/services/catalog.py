@@ -281,15 +281,35 @@ class HybridCatalogueService:
         query: str,
         limit: int,
         offset: int,
+        *,
+        refresh: bool = False,
     ) -> tuple[list[dict[str, Any]], SourceStates]:
         yummy_call = (
-            self.yummy.search(query, limit=limit, offset=offset)
+            self.yummy.search(query, limit=limit, offset=offset, refresh=True)
+            if query.strip() and refresh
+            else self.yummy.search(query, limit=limit, offset=offset)
             if query.strip()
+            else self.yummy.request(
+                "/anime",
+                {"limit": limit, "offset": offset},
+                refresh=True,
+            )
+            if refresh
             else self.yummy.request("/anime", {"limit": limit, "offset": offset})
+        )
+        kodik_call = (
+            self.kodik.catalogue(
+                query,
+                limit=limit,
+                offset=offset,
+                refresh=True,
+            )
+            if refresh
+            else self.kodik.catalogue(query, limit=limit, offset=offset)
         )
         yummy_result, kodik_result = await asyncio.gather(
             yummy_call,
-            self.kodik.catalogue(query, limit=limit, offset=offset),
+            kodik_call,
             return_exceptions=True,
         )
         sources = {"yummy": _source_state(yummy_result), "kodik": _source_state(kodik_result)}
@@ -303,9 +323,19 @@ class HybridCatalogueService:
         await self.registry.remember(anime)
         return anime, sources
 
-    async def details(self, ids: list[str]) -> tuple[list[dict[str, Any]], SourceStates]:
+    async def details(
+        self,
+        ids: list[str],
+        *,
+        refresh: bool = False,
+    ) -> tuple[list[dict[str, Any]], SourceStates]:
         yummy_results = await asyncio.gather(
-            *(self.yummy.request(f"/anime/{item}") for item in ids),
+            *(
+                self.yummy.request(f"/anime/{item}", refresh=True)
+                if refresh
+                else self.yummy.request(f"/anime/{item}")
+                for item in ids
+            ),
             return_exceptions=True,
         )
         yummy_ok = any(isinstance(item, dict) for item in yummy_results)
@@ -327,7 +357,13 @@ class HybridCatalogueService:
 
         kodik_results = await asyncio.gather(
             *(
-                self.kodik.find_for_anime(context, anime_id=anime_id)
+                self.kodik.find_for_anime(
+                    context,
+                    anime_id=anime_id,
+                    refresh=True,
+                )
+                if refresh
+                else self.kodik.find_for_anime(context, anime_id=anime_id)
                 for context, anime_id in zip(contexts, numeric_ids)
             ),
             return_exceptions=True,
@@ -359,18 +395,42 @@ class HybridCatalogueService:
         await self.registry.remember(anime)
         return anime, sources
 
-    async def videos(self, anime_id: int) -> tuple[dict[str, Any], SourceStates]:
+    async def videos(
+        self,
+        anime_id: int,
+        *,
+        refresh: bool = False,
+    ) -> tuple[dict[str, Any], SourceStates]:
         # Catalogue/details calls persist enough identity metadata to start the
         # Kodik lookup immediately. Previously it waited for both YummyAnime
         # requests first, so the two upstream timeout windows accumulated and
         # made an anime page appear frozen. Keep the sequential fallback only
         # for a truly unknown id.
-        yummy_details_task = asyncio.create_task(self.yummy.request(f"/anime/{anime_id}"))
-        yummy_videos_task = asyncio.create_task(self.yummy.request(f"/anime/{anime_id}/videos"))
+        yummy_details_task = asyncio.create_task(
+            self.yummy.request(f"/anime/{anime_id}", refresh=True)
+            if refresh
+            else self.yummy.request(f"/anime/{anime_id}")
+        )
+        yummy_videos_task = asyncio.create_task(
+            self.yummy.request(f"/anime/{anime_id}/videos", refresh=True)
+            if refresh
+            else self.yummy.request(f"/anime/{anime_id}/videos")
+        )
         context = await self.registry.get(anime_id)
         if context:
             kodik_task = asyncio.create_task(
-                self.kodik.find_for_anime(context, anime_id=anime_id, with_episodes=True)
+                self.kodik.find_for_anime(
+                    context,
+                    anime_id=anime_id,
+                    with_episodes=True,
+                    refresh=True,
+                )
+                if refresh
+                else self.kodik.find_for_anime(
+                    context,
+                    anime_id=anime_id,
+                    with_episodes=True,
+                )
             )
             yummy_details, yummy_videos, kodik_value = await asyncio.gather(
                 yummy_details_task,
@@ -385,8 +445,22 @@ class HybridCatalogueService:
                 return_exceptions=True,
             )
             context = yummy_details if isinstance(yummy_details, dict) else None
+            kodik_call = (
+                self.kodik.find_for_anime(
+                    context,
+                    anime_id=anime_id,
+                    with_episodes=True,
+                    refresh=True,
+                )
+                if refresh
+                else self.kodik.find_for_anime(
+                    context,
+                    anime_id=anime_id,
+                    with_episodes=True,
+                )
+            )
             kodik_result = await asyncio.gather(
-                self.kodik.find_for_anime(context, anime_id=anime_id, with_episodes=True),
+                kodik_call,
                 return_exceptions=True,
             )
             kodik_value = kodik_result[0]

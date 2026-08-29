@@ -25,6 +25,7 @@ type CatalogCacheEntry = {
 const CATALOG_SEARCH_CACHE_TTL = 5 * 60_000;
 const CATALOG_SEARCH_CACHE_LIMIT = 40;
 const catalogSearchCache = new Map<string, CatalogCacheEntry>();
+const DETAILS_CACHE_TTL = 12 * 60 * 60_000;
 const VIDEO_CACHE_TTL = 10 * 60_000;
 export type AnimeVideoResult = {
     anime?: Anime;
@@ -45,6 +46,7 @@ export class CatalogVideoRequestError extends Error {
 }
 
 const videoCache = new Map<number, { expiresAt: number; request: Promise<AnimeVideoResult> }>();
+const detailsCache = new Map<number, { expiresAt: number; request: Promise<Anime | undefined> }>();
 
 async function requestJson<T extends {error?: string}>(url: string): Promise<T> {
     const response = await fetch(url);
@@ -115,12 +117,53 @@ async function requestCatalogPage({limit, offset, query}: CatalogPageOptions) {
 }
 
 /** Load full metadata for known anime identifiers. */
-export async function fetchAnimeDetails(ids: number[]): Promise<Anime[]> {
-    if (!ids.length) return [];
-    const payload = await requestJson<AnimePayload>(
-        `/api/yummy?mode=details&ids=${ids.join(",")}`,
-    );
-    return payload.anime ?? [];
+export async function fetchAnimeDetails(
+    ids: number[],
+    options: { refresh?: boolean } = {},
+): Promise<Anime[]> {
+    const requested = [...new Set(ids)].filter(Number.isFinite);
+    if (!requested.length) return [];
+    const now = Date.now();
+    const missing = requested.filter(animeId => {
+        const cached = detailsCache.get(animeId);
+        if (!options.refresh && cached && cached.expiresAt > now) return false;
+        if (cached) detailsCache.delete(animeId);
+        return true;
+    });
+
+    if (missing.length) {
+        for (let start = 0; start < missing.length; start += 50) {
+            const batchIds = missing.slice(start, start + 50);
+            const params = new URLSearchParams({
+                mode: "details",
+                ids: batchIds.join(","),
+            });
+            if (options.refresh) params.set("refresh", "true");
+            const batch = requestJson<AnimePayload>(`/api/yummy?${params.toString()}`)
+                .then(payload => payload.anime ?? []);
+            for (const animeId of batchIds) {
+                const request = batch
+                    .then(anime => anime.find(item => item.anime_id === animeId))
+                    .then(anime => {
+                        if (!anime) detailsCache.delete(animeId);
+                        return anime;
+                    })
+                    .catch(error => {
+                        detailsCache.delete(animeId);
+                        throw error;
+                    });
+                detailsCache.set(animeId, {
+                    expiresAt: now + DETAILS_CACHE_TTL,
+                    request,
+                });
+            }
+        }
+    }
+
+    const resolved = await Promise.all(requested.map(animeId =>
+        detailsCache.get(animeId)?.request ?? Promise.resolve(undefined),
+    ));
+    return resolved.filter((anime): anime is Anime => Boolean(anime));
 }
 
 /** Load all player variants and episodes exposed for one API anime record. */
@@ -143,7 +186,7 @@ export async function fetchAnimeVideoResult(
     const cached = videoCache.get(animeId);
     if (!options.refresh && cached && cached.expiresAt > now) return cached.request;
     if (cached) videoCache.delete(animeId);
-    const request = requestAnimeVideos(animeId)
+    const request = requestAnimeVideos(animeId, Boolean(options.refresh))
         .catch(error => {
             videoCache.delete(animeId);
             throw error;
@@ -152,14 +195,19 @@ export async function fetchAnimeVideoResult(
     return request;
 }
 
-async function requestAnimeVideos(animeId: number): Promise<AnimeVideoResult> {
+async function requestAnimeVideos(
+    animeId: number,
+    refresh: boolean,
+): Promise<AnimeVideoResult> {
     const controller = new AbortController();
     const timeout = setTimeout(
         () => controller.abort(new DOMException("Request timed out", "TimeoutError")),
         15_000,
     );
     try {
-        const response = await fetch(`/api/yummy?mode=videos&id=${animeId}`, {
+        const params = new URLSearchParams({mode: "videos", id: String(animeId)});
+        if (refresh) params.set("refresh", "true");
+        const response = await fetch(`/api/yummy?${params.toString()}`, {
             signal: controller.signal,
         });
         const payload = await response.json().catch(() => ({})) as VideoPayload;

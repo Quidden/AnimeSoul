@@ -41,6 +41,7 @@ class KodikCredentialsPayload(BaseModel):
 class DownloadEpisodePayload(BaseModel):
     videoId: int | str
     season: int = Field(ge=1, le=99)
+    seasonLabel: str | None = Field(default=None, max_length=300)
     episode: str = Field(min_length=1, max_length=40)
     originAnimeId: int | None = None
     originEpisode: str | None = None
@@ -64,6 +65,10 @@ class DownloadJobPayload(BaseModel):
     # ``min_items``/``max_items`` work in both Pydantic 1 (Android) and 2
     # (desktop), while v1 rejects list constraints spelled as string lengths.
     episodes: list[DownloadEpisodePayload] = Field(min_items=1, max_items=1000)
+
+
+class DeleteEpisodesPayload(BaseModel):
+    episodeIds: list[str] = Field(min_items=1, max_items=1000)
 
 
 def _http_error(error: Exception) -> HTTPException:
@@ -97,6 +102,14 @@ async def get_offline_library() -> dict[str, Any]:
     return await offline_library.library()
 
 
+@router.post("/api/downloads/scan")
+async def scan_offline_library() -> dict[str, int]:
+    try:
+        return await offline_library.scan_existing()
+    except OfflineLibraryError as error:
+        raise _http_error(error) from error
+
+
 @router.post("/api/downloads/credentials/validate")
 async def validate_kodik_credentials(payload: KodikCredentialsPayload) -> dict[str, Any]:
     return await offline_library.verify_kodik_credentials(
@@ -113,6 +126,17 @@ async def get_downloaded_anime(anime_id: int) -> dict[str, Any]:
 @router.get("/api/downloads/jobs")
 async def get_download_jobs() -> dict[str, list[dict[str, Any]]]:
     return {"jobs": offline_library.jobs()}
+
+
+@router.post("/api/downloads/availability")
+async def check_download_availability(payload: DownloadJobPayload) -> dict[str, Any]:
+    """Validate the exact requested rendition before a queue item is created."""
+
+    try:
+        data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+        return await offline_library.download_availability(data)
+    except OfflineLibraryError as error:
+        raise _http_error(error) from error
 
 
 @router.post("/api/downloads/network")
@@ -145,6 +169,15 @@ async def delete_downloaded_episode(episode_id: str) -> dict[str, bool]:
     except (KeyError, OfflineLibraryError) as error:
         raise _http_error(error) from error
     return {"deleted": True}
+
+
+@router.post("/api/downloads/episodes/delete")
+async def delete_downloaded_episodes(payload: DeleteEpisodesPayload) -> dict[str, int]:
+    try:
+        count = await offline_library.delete_episodes(payload.episodeIds)
+    except (KeyError, OfflineLibraryError) as error:
+        raise _http_error(error) from error
+    return {"deleted": count}
 
 
 @router.delete("/api/downloads/anime/{anime_id}")

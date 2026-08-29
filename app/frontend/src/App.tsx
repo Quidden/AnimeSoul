@@ -270,6 +270,7 @@ export default function Home() {
         genres,
         randomCandidates,
         ratingSources,
+        requestCardMeta,
         visible,
     } = useCatalogPresentation({
         active,
@@ -295,7 +296,6 @@ export default function Home() {
     });
     const {
         heroPreviewAnime,
-        heroPreviewVideo,
         heroTrailer,
         last,
         lastAnime,
@@ -536,7 +536,6 @@ export default function Home() {
             hasStoredResume: Boolean(last),
             displayEpisode: lastDisplayEpisode,
             previewAnime: heroPreviewAnime,
-            previewVideo: heroPreviewVideo,
             trailer: heroTrailer,
         },
         playerPrefs,
@@ -696,7 +695,7 @@ export default function Home() {
                 />
             )}
             {view === "downloads" && (
-                <DownloadsPage onCatalog={showCatalog} onOpen={openAnime} />
+                <DownloadsPage onCatalog={showCatalog} onOpen={openAnime} progress={progress} />
             )}
             {view === "catalog" && (
                 <CatalogPage
@@ -745,6 +744,7 @@ export default function Home() {
                     onOpen={openAnime}
                     onFavorite={toggleFavorite}
                     onFolders={setFolderPicker}
+                    onCardVisible={requestCardMeta}
                     onLoadMore={() => void loadMore()}
                     onRetry={() => void load(0, false, query)}
                 />

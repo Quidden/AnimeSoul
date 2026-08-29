@@ -178,6 +178,20 @@ export function byViewingOrder(a: Anime, b: Anime) {
 export function shortEntryTitle(title: string, root: string) {
   return title.replace(root, "").replace(/^[\s:|.–—-]+/, "").trim() || title;
 }
+export function shikimoriAnimeUrl(
+  anime: Pick<Anime, "anime_id" | "title" | "title_ru" | "title_en" | "original" | "remote_ids">,
+) {
+  const explicitId = String(anime.remote_ids?.shikimori_id ?? "").trim();
+  const inheritedId = anime.anime_id < 0 ? String(Math.abs(anime.anime_id)) : "";
+  const shikimoriId = /^\d+$/.test(explicitId) && Number(explicitId) > 0
+    ? explicitId
+    : /^\d+$/.test(inheritedId) && Number(inheritedId) > 0
+      ? inheritedId
+      : "";
+  if (shikimoriId) return `https://shikimori.one/animes/${shikimoriId}`;
+  const title = anime.title_ru || anime.title || anime.title_en || anime.original || "аниме";
+  return `https://shikimori.one/animes?search=${encodeURIComponent(title)}`;
+}
 export function isEpisodeWatched(state?: EpisodeState) {
   return Boolean(state?.completed || state?.percent === 100);
 }
@@ -344,21 +358,59 @@ export function franchiseName(title: string) {
 export function franchiseKey(title: string) {
   return franchiseName(title).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
-function abortableRetryDelay(delay: number, signal?: AbortSignal) {
-  if (!signal) return new Promise<void>((resolve) => setTimeout(resolve, delay));
-  if (signal.aborted) return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
-  return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, delay);
-    const abort = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", abort);
+const FAMILY_CACHE_TTL = 12 * 60 * 60_000;
+const FAMILY_FALLBACK_TTL = 30 * 60_000;
+const familyCache = new Map<string, { expiresAt: number; request: Promise<Anime[]> }>();
+
+function waitForFamily(request: Promise<Anime[]>, signal?: AbortSignal) {
+  if (!signal) return request;
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+  }
+  return new Promise<Anime[]>((resolve, reject) => {
+    const aborted = () => {
+      signal.removeEventListener("abort", aborted);
       reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
     };
-    signal.addEventListener("abort", abort, { once: true });
+    signal.addEventListener("abort", aborted, { once: true });
+    request.then(
+      value => {
+        signal.removeEventListener("abort", aborted);
+        resolve(value);
+      },
+      error => {
+        signal.removeEventListener("abort", aborted);
+        reject(error);
+      },
+    );
   });
+}
+
+async function loadFamily(anime: Anime, root: string) {
+  try {
+    const response = await fetch(`/api/yummy?mode=details&ids=${anime.anime_id}`);
+    const payload = await response.json();
+    if (response.ok) {
+      const detail = (payload.anime?.[0] ?? anime) as Anime;
+      if (detail.viewing_order?.length) {
+        return [...new Map(detail.viewing_order.map((item) => [item.anime_id, item])).values()];
+      }
+    }
+  } catch {
+    // The catalogue lookup below is the independent family reserve.
+  }
+  try {
+    const response = await fetch(`/api/yummy?mode=catalog&limit=48&q=${encodeURIComponent(root)}`);
+    const payload = await response.json();
+    if (response.ok) {
+      const rootKey = franchiseKey(root);
+      const family = ((payload.anime ?? []) as Anime[]).filter((item) => franchiseKey(item.title) === rootKey);
+      if (family.length) return family;
+    }
+  } catch {
+    // The selected card remains usable even when both family lookups fail.
+  }
+  return [anime];
 }
 
 export async function fetchFamily(
@@ -366,35 +418,26 @@ export async function fetchFamily(
   root = franchiseName(anime.title),
   signal?: AbortSignal,
 ) {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      const response = await fetch(`/api/yummy?mode=details&ids=${anime.anime_id}`, { signal });
-      const payload = await response.json();
-      if (response.ok) {
-        const detail = (payload.anime?.[0] ?? anime) as Anime;
-        if (detail.viewing_order?.length)
-          return [...new Map(detail.viewing_order.map((item) => [item.anime_id, item])).values()];
-      }
-    } catch (error) {
-      if (signal?.aborted) throw error;
-    }
-    if (attempt < 3) await abortableRetryDelay(600 * (attempt + 1), signal);
+  const key = `${anime.anime_id}:${franchiseKey(root)}`;
+  const cached = familyCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return waitForFamily(cached.request, signal);
   }
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const response = await fetch(`/api/yummy?mode=catalog&limit=48&q=${encodeURIComponent(root)}`, { signal });
-      const payload = await response.json();
-      if (response.ok) {
-        const rootKey = franchiseKey(root);
-        const family = ((payload.anime ?? []) as Anime[]).filter((item) => franchiseKey(item.title) === rootKey);
-        if (family.length) return family;
-      }
-    } catch (error) {
-      if (signal?.aborted) throw error;
-    }
-    if (attempt < 2) await abortableRetryDelay(700 * (attempt + 1), signal);
-  }
-  return [anime];
+  if (cached) familyCache.delete(key);
+  const request = loadFamily(anime, root)
+    .then(family => {
+      familyCache.set(key, {
+        expiresAt: Date.now() + (family.length > 1 ? FAMILY_CACHE_TTL : FAMILY_FALLBACK_TTL),
+        request: Promise.resolve(family),
+      });
+      return family;
+    })
+    .catch(error => {
+      familyCache.delete(key);
+      throw error;
+    });
+  familyCache.set(key, { expiresAt: Date.now() + FAMILY_CACHE_TTL, request });
+  return waitForFamily(request, signal);
 }
 export function groupFranchises(items: Anime[]) {
   const groups = new Map<string, Anime[]>();

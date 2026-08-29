@@ -14,7 +14,6 @@ import type {
   PlayerPrefs,
   Progress,
   Tracker,
-  Video,
 } from "../../lib/types";
 
 type ResumePoint = ReturnType<typeof latestResumePoint>;
@@ -45,7 +44,6 @@ export type HomePageModel = {
     hasStoredResume: boolean;
     displayEpisode: string;
     previewAnime: Anime | null;
-    previewVideo: Video | null;
     trailer: HeroTrailer | null;
   };
   playerPrefs: PlayerPrefs;

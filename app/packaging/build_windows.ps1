@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $AppRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $RepoRoot = (Resolve-Path (Join-Path $AppRoot "..")).Path
-$Version = "0.2.4"
+$Version = "0.2.5"
 $WorkRoot = Join-Path $RepoRoot "release-work"
 $PyInstallerWork = Join-Path $WorkRoot "pyinstaller"
 $PackageRoot = Join-Path $WorkRoot "AnimeSoul-$Version"

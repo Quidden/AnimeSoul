@@ -94,8 +94,10 @@ Router разбирает transport-поля, применяет огранич�
 
 ### Services и policy
 
-- `services/yummy.py` — заголовки, таймауты, поиск с вариантами, кеш и
-  рекурсивная нормализация URL;
+- `services/yummy.py` — заголовки, таймауты, общий HTTP connection pool, поиск
+  с вариантами, cache/in-flight dedup и рекурсивная нормализация URL;
+- `services/response_cache.py` — общий для Windows и Android SQLite cache с
+  memory hot-layer и stale-if-error резервом;
 - `services/storage.py` — последовательная атомарная JSON-запись и одноразовый
   импорт legacy-сохранения;
 - `services/watch_party.py` — комнаты, участники, роли и playback в памяти;

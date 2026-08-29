@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Anime, AnimeProgress, SeasonGroup, Tracker, Video } from "../../lib/types";
-import { durationRange, isExtraAnime } from "../../lib/anime";
+import { durationRange, isExtraAnime, shikimoriAnimeUrl } from "../../lib/anime";
 
 interface WatchInfoProps {
   anime: Anime;
@@ -15,9 +15,13 @@ interface WatchInfoProps {
   tracker?: Tracker;
   totalEpisodes: number;
   totalDuration: number;
+  downloadAvailable: boolean;
+  downloadActive: boolean;
+  downloadStatus?: string;
   onGenre: (genre: string) => void;
   onFavorite: () => void;
   onFolders: () => void;
+  onDownload: () => void;
   onTrack: (
     knownEpisodeCount: number,
     dubbings: string[],
@@ -41,9 +45,13 @@ export function WatchInfo({
   tracker,
   totalEpisodes,
   totalDuration,
+  downloadAvailable,
+  downloadActive,
+  downloadStatus,
   onGenre,
   onFavorite,
   onFolders,
+  onDownload,
   onTrack,
   onUntrack,
   onResetProgress,
@@ -51,6 +59,7 @@ export function WatchInfo({
   const [trackingOpen, setTrackingOpen] = useState(false);
   const [trackedDubs, setTrackedDubs] = useState<string[]>(tracker?.dubs ?? []);
   const allVideos = Object.values(seasonVideos).flat();
+  const shikimoriUrl = shikimoriAnimeUrl(anime);
 
   const saveTracking = () => {
     const knownEpisodeKeys = [
@@ -89,6 +98,15 @@ export function WatchInfo({
         )}
       </div>
       <p>{anime.description}</p>
+      <a
+        className="watch-info-shikimori-link"
+        href={shikimoriUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={`Открыть «${anime.title}» на Shikimori`}
+      >
+        <span aria-hidden="true">↗</span> Страница аниме на Shikimori
+      </a>
       <div className="facts">
         <span>{seasons.length > 1 ? "◆ Франшиза · всё собрано" : "◇ Отдельный тайтл"}</span>
         <span>{seasons.filter(season => season.kind === "season").length} сезонов</span>
@@ -102,6 +120,15 @@ export function WatchInfo({
     <aside>
       <button onClick={onFavorite}>{favorite ? "♥ В избранном" : "♡ В избранное"}</button>
       <button onClick={onFolders}>＋ Добавить в папку</button>
+      {downloadAvailable && (
+        <button
+          className={downloadActive ? "download-active" : undefined}
+          title={downloadStatus || "Выбрать серии, озвучку и качество"}
+          onClick={onDownload}
+        >
+          {downloadActive ? "⇩ Загрузки в очереди" : "⇩ Скачать серии"}
+        </button>
+      )}
       <button onClick={() => setTrackingOpen(open => !open)}>
         {tracker ? "◉ Настроить отслеживание" : "◎ Следить за франшизой"}
       </button>

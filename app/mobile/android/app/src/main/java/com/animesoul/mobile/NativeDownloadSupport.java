@@ -1,8 +1,11 @@
 package com.animesoul.mobile;
 
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
+import android.app.PendingIntent;
+import android.app.RecoverableSecurityException;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -14,6 +17,7 @@ import com.arthenica.ffmpegkit.FFmpegSession;
 import com.arthenica.ffmpegkit.ReturnCode;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -21,6 +25,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Map;
+import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Native MP4 remuxing and scoped-storage publishing used by Chaquopy. */
@@ -141,12 +146,83 @@ public final class NativeDownloadSupport {
         }
     }
 
-    public static void deleteVideo(String contentUri) {
+    public static boolean deleteVideo(String contentUri) {
+        Uri uri = Uri.parse(contentUri);
         try {
-            requireContext().getContentResolver().delete(Uri.parse(contentUri), null, null);
+            return requireContext().getContentResolver().delete(uri, null, null) > 0;
+        } catch (RecoverableSecurityException error) {
+            requestDeletePermission(error.getUserAction().getActionIntent());
+            return false;
+        } catch (SecurityException error) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                PendingIntent request = MediaStore.createDeleteRequest(
+                        requireContext().getContentResolver(),
+                        Collections.singletonList(uri)
+                );
+                requestDeletePermission(request);
+            }
+            return false;
         } catch (Exception ignored) {
-            // A user may already have removed the visible file manually.
+            return false;
         }
+    }
+
+    private static void requestDeletePermission(PendingIntent request) {
+        MainActivity activity = MainActivity.activeInstance;
+        if (activity == null || request == null) return;
+        activity.runOnUiThread(() -> {
+            try {
+                activity.startIntentSenderForResult(
+                        request.getIntentSender(), 44, null, 0, 0, 0
+                );
+            } catch (Exception ignored) {
+                // The API response tells the WebView that confirmation is needed.
+            }
+        });
+    }
+
+    /** Return every MP4 previously published below Movies/AnimeSoul. */
+    public static String scanPublishedVideos() throws Exception {
+        Context context = requireContext();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return "[]";
+        ContentResolver resolver = context.getContentResolver();
+        Uri collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+        String[] projection = new String[] {
+                MediaStore.Video.Media._ID,
+                MediaStore.Video.Media.DISPLAY_NAME,
+                MediaStore.Video.Media.RELATIVE_PATH,
+                MediaStore.Video.Media.DATA,
+                MediaStore.Video.Media.SIZE,
+                MediaStore.Video.Media.DATE_MODIFIED
+        };
+        JSONArray result = new JSONArray();
+        try (Cursor cursor = resolver.query(
+                collection,
+                projection,
+                MediaStore.Video.Media.RELATIVE_PATH + " LIKE ?",
+                new String[] { Environment.DIRECTORY_MOVIES + "/AnimeSoul/%" },
+                MediaStore.Video.Media.DATE_MODIFIED + " ASC"
+        )) {
+            if (cursor == null) return result.toString();
+            int idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID);
+            int nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME);
+            int relativeColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
+            int pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA);
+            int sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE);
+            int modifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_MODIFIED);
+            while (cursor.moveToNext()) {
+                long id = cursor.getLong(idColumn);
+                JSONObject item = new JSONObject();
+                item.put("uri", ContentUris.withAppendedId(collection, id).toString());
+                item.put("displayName", cursor.getString(nameColumn));
+                item.put("relativePath", cursor.getString(relativeColumn));
+                item.put("path", cursor.getString(pathColumn));
+                item.put("sizeBytes", cursor.getLong(sizeColumn));
+                item.put("dateModified", cursor.getLong(modifiedColumn));
+                result.put(item);
+            }
+        }
+        return result.toString();
     }
 
     private static String mediaPath(ContentResolver resolver, Uri uri) {

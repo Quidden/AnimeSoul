@@ -55,8 +55,8 @@ android {
         applicationId 'com.animesoul.mobile'
         minSdk 24
         targetSdk 35
-        versionCode 2040001
-        versionName '0.2.4'
+        versionCode 2050001
+        versionName '0.2.5'
 
         ndk {
             // The installable test build targets current physical Android phones.
@@ -90,6 +90,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Development builds must coexist with a user's signed AnimeSoul
+            // installation so ADB verification never requires deleting data.
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+            buildConfigField 'int', 'LOCAL_SERVER_PORT', '19083'
+        }
         release {
             if (releaseSigningReady) signingConfig signingConfigs.release
             minifyEnabled false

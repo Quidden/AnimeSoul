@@ -21,6 +21,7 @@
 | `gdrive-credentials.json` | JSON | `GoogleDriveService` | OAuth `client_id`/`client_secret` текущего устройства |
 | `gdrive-tokens.json` | JSON | `GoogleDriveService` | access/refresh tokens, user info и cached sync status |
 | `community-ratings.sqlite3` | SQLite WAL | `CommunityRatingStore` | анонимные оценки текущего сервера |
+| `animesoul-response-cache.sqlite3` | SQLite WAL | `PersistentJsonCache` | публичные ответы YummyAnime/Kodik; можно удалить без потери профиля |
 
 Рядом с машинным config runtime публикует `animesoul.runtime.json`. Это не
 пользовательское сохранение, а подтверждение владельца процесса.

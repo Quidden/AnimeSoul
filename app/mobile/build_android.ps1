@@ -9,6 +9,8 @@ $androidRoot = Join-Path $mobileRoot "android"
 $toolchains = Join-Path $mobileRoot ".toolchains"
 $bundledJava = Get-ChildItem (Join-Path $toolchains "jdk") -Directory -Filter "jdk-17*" -ErrorAction SilentlyContinue |
     Select-Object -First 1
+$bundledGradle = Get-ChildItem (Join-Path $toolchains "gradle") -Directory -Filter "gradle-*" -ErrorAction SilentlyContinue |
+    Select-Object -First 1
 $sdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $toolchains "android-sdk" }
 
 if (-not $env:JAVA_HOME -and $bundledJava) {
@@ -27,7 +29,12 @@ Set-Content -LiteralPath (Join-Path $androidRoot "local.properties") -Value "sdk
 
 Push-Location $androidRoot
 try {
-    & ".\gradlew.bat" "assemble$Configuration"
+    $gradleCommand = if ($bundledGradle) {
+        Join-Path $bundledGradle.FullName "bin/gradle.bat"
+    } else {
+        ".\gradlew.bat"
+    }
+    & $gradleCommand "assemble$Configuration"
     if ($LASTEXITCODE -ne 0) { throw "Gradle завершился с кодом $LASTEXITCODE" }
 } finally {
     Pop-Location
@@ -38,6 +45,6 @@ $source = Join-Path $androidRoot "app/build/outputs/apk/$variant/app-$variant.ap
 $releaseDirectory = Join-Path $mobileRoot "releases"
 New-Item -ItemType Directory -Force $releaseDirectory | Out-Null
 $suffix = if ($Configuration -eq "Release") { "" } else { "-debug" }
-$destination = Join-Path $releaseDirectory "AnimeSoul-0.2.4-android-arm64$suffix.apk"
+$destination = Join-Path $releaseDirectory "AnimeSoul-0.2.5-android-arm64$suffix.apk"
 Copy-Item -LiteralPath $source -Destination $destination -Force
 Write-Host "APK: $destination"

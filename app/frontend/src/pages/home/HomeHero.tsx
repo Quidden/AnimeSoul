@@ -135,7 +135,7 @@ export function HomeHero({ model, actions }: HomePageProps) {
 
 function HeroMedia({ model, actions }: HomePageProps) {
   const { resume, playerPrefs } = model;
-  const { anime, previewAnime, previewVideo, displayEpisode, trailer } = resume;
+  const { anime, previewAnime, displayEpisode, trailer } = resume;
   const previewEnabled = Boolean(anime && playerPrefs.homeEpisodePreview);
   const fallback = previewAnime?.poster?.fullsize
     ?? previewAnime?.poster?.big
@@ -168,8 +168,6 @@ function HeroMedia({ model, actions }: HomePageProps) {
           fallback={fallback}
           allowLowQuality
           label=""
-          iframeUrl={previewVideo?.iframe_url}
-          duration={previewVideo?.duration ?? resume.point?.state.duration ?? 1440}
           onClick={() => actions.openAnime(anime, true)}
         />
       </div>

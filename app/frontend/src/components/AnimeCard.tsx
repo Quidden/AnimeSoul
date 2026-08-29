@@ -1,3 +1,4 @@
+import {useEffect, useRef} from "react";
 import type { Anime, AnimeProgress, AnimeUserRatings, CardMeta, CommunityAnimeRating } from "../lib/types";
 import { formatDuration, isMovieAnime, releaseStatus, watchTimeProgress } from "../lib/anime";
 import { animeApiRatings, formatRating } from "../lib/ratings";
@@ -13,6 +14,7 @@ export function AnimeCard({
   progress,
   ratings,
   communityRating,
+  onVisible,
 }: {
   anime: Anime;
   meta?: CardMeta;
@@ -23,7 +25,24 @@ export function AnimeCard({
   progress?: AnimeProgress;
   ratings?: AnimeUserRatings;
   communityRating?: CommunityAnimeRating;
+  onVisible?: (anime: Anime) => void;
 }) {
+  const cardRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (meta || !onVisible) return;
+    const card = cardRef.current;
+    if (!card || typeof IntersectionObserver === "undefined") {
+      onVisible(anime);
+      return;
+    }
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      observer.disconnect();
+      onVisible(anime);
+    }, {rootMargin: "500px 0px"});
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [anime.anime_id, meta, onVisible]);
   const whole = watchTimeProgress(progress);
   const isFranchise = (meta?.familyCount ?? anime.franchiseCount ?? 0) > 1;
   const status = meta?.status ?? releaseStatus(anime);
@@ -42,7 +61,7 @@ export function AnimeCard({
     ?? animeApiRatings(anime)[0]?.value;
 
   return (
-    <article className="anime-card">
+    <article className="anime-card" ref={cardRef}>
       <div className="poster" onClick={() => onOpen(anime)}>
         {anime.poster?.big && <img src={anime.poster.big} alt="" loading="lazy" />}
         <span className={`release-badge ${status.kind}`}><i />{status.label}</span>
