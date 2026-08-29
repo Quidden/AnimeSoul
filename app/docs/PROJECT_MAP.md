@@ -157,6 +157,7 @@
 | Путь | Назначение |
 | --- | --- |
 | `components/Header.tsx` | бренд, навигация, поиск, профили и статусы API/save/cloud/party |
+| `features/header/useHeaderCloudSync.ts` | polling, lifecycle merge, interval sync и presentation Google Drive в header |
 | `components/Player.tsx` | выбор direct/iframe-плеера, сезоны, sources, progress, Kodik messages и Watch Party |
 | `features/player/AnimeSoulPlayer.tsx` | собственные HLS controls, качество, субтитры, continuity и skip-маркеры |
 | `components/SettingsCenter.tsx` | modal shell, вкладки, поиск и orchestration настроек |

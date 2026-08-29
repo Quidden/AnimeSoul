@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Anime, ApiStatus, ConfigProfile, PlayerPrefs, SaveStatus, Theme } from "../lib/types";
 import { readLocal as read } from "../lib/storage";
-import { fetchGDriveAuthUrl, fetchGDriveStatus, syncGDrive, type GDriveStatus } from "../lib/gdrive";
 import { SettingsCenter } from "./SettingsCenter";
 import { recordDebugEvent } from "../lib/debugLog";
 import { emitAppEvent, listenAppEvent } from "../lib/events";
@@ -13,6 +12,7 @@ import {
   type SettingsSearchResult,
 } from "../features/settings/settingsCatalog";
 import { IS_ANDROID_APP } from "../lib/platform";
+import { useHeaderCloudSync } from "../features/header/useHeaderCloudSync";
 
 type HeaderProps = {
   query: string;
@@ -274,237 +274,21 @@ export function Header({
       connection?.removeEventListener?.("change", updateDownlink);
     };
   }, []);
-  const [gdriveStatus, setGDriveStatus] = useState<GDriveStatus | null>(null);
-  const [gdriveSyncing, setGDriveSyncing] = useState(false);
-  const [gdriveError, setGDriveError] = useState<string>("");
-  const cloudStatusLoadedRef = useRef(false);
-  const lastCloudSyncRef = useRef(0);
-  const cloudLifecycleSyncRef = useRef(false);
-  const cloudLifecycleSyncAtRef = useRef(0);
-  const cloudBackendSyncRunningRef = useRef(false);
-  const initialCloudMergeRef = useRef(false);
-  const onStorageReloadRef = useRef(onStorageReload);
-
-  cloudBackendSyncRunningRef.current = Boolean(gdriveStatus?.sync_running);
-
-  useEffect(() => {
-    onStorageReloadRef.current = onStorageReload;
-  }, [onStorageReload]);
-
-  const refreshGDriveStatus = async () => {
-    try {
-      const status = await fetchGDriveStatus();
-      setGDriveStatus(status);
-    } catch {
-      setGDriveStatus(null);
-    }
-  };
-
-  useEffect(() => {
-    refreshGDriveStatus();
-    const timer = setInterval(refreshGDriveStatus, 2_500);
-    const handleMsg = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "GDRIVE_AUTH_SUCCESS") {
-        refreshGDriveStatus();
-      }
-    };
-    window.addEventListener("message", handleMsg);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("message", handleMsg);
-    };
-  }, []);
-
-  useEffect(() => {
-    const syncedAt = Number(gdriveStatus?.last_sync_at || 0);
-    if (!cloudStatusLoadedRef.current) {
-      cloudStatusLoadedRef.current = true;
-      lastCloudSyncRef.current = syncedAt;
-      return;
-    }
-    if (syncedAt <= lastCloudSyncRef.current) return;
-    lastCloudSyncRef.current = syncedAt;
-    // A background Drive merge can replace the file behind React's in-memory
-    // snapshot. Re-read it as soon as the backend confirms completion so the
-    // home screen and resume button cannot stay on the previous device's item.
-    void onStorageReloadRef.current?.();
-    const time = new Date(syncedAt * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-    showStatusNotice({ tone: "success", text: `Облако сохранено · ${time}` });
-  }, [gdriveStatus?.last_sync_at]);
-
-  useEffect(() => {
-    if (!gdriveStatus?.connected) {
-      initialCloudMergeRef.current = false;
-      return;
-    }
-    if (gdriveStatus.choice_pending) return;
-    const autoMode = read<"instant" | "interval" | "manual">("animesoul:gdrive-auto-sync-mode", "instant");
-    if (autoMode === "manual") return;
-
-    let cancelled = false;
-    const mergeCloudState = async () => {
-      const now = Date.now();
-      if (
-        cancelled
-        || cloudLifecycleSyncRef.current
-        || now - cloudLifecycleSyncAtRef.current < 15_000
-      ) return;
-
-      cloudLifecycleSyncAtRef.current = now;
-      // A storage autosave already performs the same merge. Let it finish and
-      // rely on last_sync_at above to refresh the UI instead of racing it with
-      // a second explicit request.
-      if (cloudBackendSyncRunningRef.current) return;
-
-      cloudLifecycleSyncRef.current = true;
-      setGDriveSyncing(true);
-      setGDriveError("");
-      try {
-        const folderMode = read("animesoul:gdrive-folder-mode", "visible");
-        const preferWatched = read("animesoul:gdrive-prefer-watched", true);
-        await syncGDrive("merge", preferWatched, folderMode);
-        if (cancelled) return;
-        await onStorageReloadRef.current?.();
-        await refreshGDriveStatus();
-      } catch (error: unknown) {
-        if (!cancelled) {
-          setGDriveError(error instanceof Error ? error.message : "Ошибка синхронизации");
-        }
-      } finally {
-        cloudLifecycleSyncRef.current = false;
-        if (!cancelled) setGDriveSyncing(false);
-      }
-    };
-
-    if (!initialCloudMergeRef.current) {
-      initialCloudMergeRef.current = true;
-      void mergeCloudState();
-    }
-    const handleForeground = () => {
-      if (document.visibilityState === "visible") void mergeCloudState();
-    };
-    window.addEventListener("focus", handleForeground);
-    document.addEventListener("visibilitychange", handleForeground);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", handleForeground);
-      document.removeEventListener("visibilitychange", handleForeground);
-    };
-  }, [gdriveStatus?.connected, gdriveStatus?.choice_pending]);
-
-  useEffect(() => {
-    if (!gdriveStatus?.connected) return;
-
-    const runIntervalSync = async () => {
-      const mode = read<"instant" | "interval" | "manual">("animesoul:gdrive-auto-sync-mode", "instant");
-      if (mode !== "interval") return;
-
-      const folderMode = read("animesoul:gdrive-folder-mode", "visible");
-      const preferWatched = read("animesoul:gdrive-prefer-watched", true);
-
-      try {
-        setGDriveSyncing(true);
-        showStatusNotice({ tone: "loading", text: "Сохраняем в облако…" });
-        await syncGDrive("merge", preferWatched, folderMode);
-        onStorageReload?.();
-        await refreshGDriveStatus();
-      } catch {
-        showStatusNotice({ tone: "error", text: "Не удалось сохранить в облако" });
-      } finally {
-        setGDriveSyncing(false);
-      }
-    };
-
-    const minutes = read("animesoul:gdrive-auto-sync-interval", 15);
-    const timer = setInterval(runIntervalSync, Math.max(1, minutes) * 60 * 1000);
-    return () => clearInterval(timer);
-  }, [gdriveStatus?.connected]);
-
-  const needsChoice = Boolean(
-    gdriveStatus?.connected &&
-    (gdriveStatus.choice_pending ||
-      (gdriveStatus.has_cloud_file && !read<boolean>("animesoul:gdrive-initial-choice-done", false)))
-  );
-
-  const handleGDriveClick = async () => {
-    if (gdriveSyncing) return;
-
-    if (!gdriveStatus?.connected) {
-      try {
-        const { url } = await fetchGDriveAuthUrl();
-        window.open(url, "gdrive_auth", "width=600,height=700");
-      } catch (err: any) {
-        alert(err?.message || "Ошибка получения ссылки авторизации Google");
-      }
-      return;
-    }
-
-    if (needsChoice) {
-      emitAppEvent("open-gdrive-choice");
-      return;
-    }
-
-    setGDriveSyncing(true);
-    setGDriveError("");
-    showStatusNotice({ tone: "loading", text: "Сохраняем в облако…" });
-    try {
-      const folderMode = read("animesoul:gdrive-folder-mode", "visible");
-      const preferWatched = read("animesoul:gdrive-prefer-watched", true);
-      await syncGDrive("merge", preferWatched, folderMode);
-      onStorageReload?.();
-      await refreshGDriveStatus();
-    } catch (err: any) {
-      setGDriveError(err?.message || "Ошибка синхронизации");
-      showStatusNotice({ tone: "error", text: "Не удалось сохранить в облако" });
-    } finally {
-      setGDriveSyncing(false);
-    }
-  };
+  const {
+    gdriveStatus,
+    cloudSyncing,
+    cloudError,
+    cloudIndicatorState,
+    cloudLabel,
+    needsChoice,
+    handleGDriveClick,
+  } = useHeaderCloudSync({ diskStatus, onStorageReload, showStatusNotice });
 
   const statusText = diskStatus.state === "saving" ? "ПК · Сохраняем…" : diskStatus.state === "saved" ? `ПК · Сохранено${diskStatus.at ? ` ${new Date(diskStatus.at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}` : ""}` : diskStatus.state === "error" ? "ПК · Только браузер" : "ПК · Подключаем…";
   const apiText = apiStatus.state === "updating" ? "Обновляем YummyAnime API…" : apiStatus.state === "updated" ? `YummyAnime API доступен${apiStatus.at ? ` · ${new Date(apiStatus.at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}` : ""}` : apiStatus.state === "error" ? "YummyAnime API недоступен — данные берутся из Kodik" : "YummyAnime API ожидает";
   const apiDiagnostics = `${apiStatus.pingMs ? `${apiStatus.pingMs} мс` : "пинг —"} · ${apiStatus.downlinkMbps ? `≈ ${apiStatus.downlinkMbps.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} Мбит/с` : "скорость —"}`;
   const kodikApiText = kodikApiStatus.state === "updating" ? "Обновляем Kodik API…" : kodikApiStatus.state === "updated" ? `Kodik API доступен${kodikApiStatus.at ? ` · ${new Date(kodikApiStatus.at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}` : ""}` : kodikApiStatus.state === "error" ? "Kodik API недоступен или публичный ключ не настроен — данные берутся из YummyAnime" : "Kodik API ожидает";
   const kodikApiDiagnostics = kodikApiStatus.pingMs ? `${kodikApiStatus.pingMs} мс` : kodikApiStatus.state === "error" ? "недоступен" : "пинг —";
-
-  const cloudAutoMode = read<"instant" | "interval" | "manual">("animesoul:gdrive-auto-sync-mode", "instant");
-  const cloudLastSyncMs = Number(gdriveStatus?.last_sync_at || 0) * 1000;
-  const cloudSyncing = gdriveSyncing || gdriveStatus?.sync_state === "syncing";
-  const cloudError = gdriveError || gdriveStatus?.last_sync_error || "";
-  const cloudHasLocalChanges = Boolean(
-    gdriveStatus?.connected &&
-    diskStatus.state === "saved" &&
-    diskStatus.at &&
-    cloudLastSyncMs + 250 < diskStatus.at
-  );
-  const cloudIndicatorState = cloudSyncing
-    ? "saving"
-    : cloudError || needsChoice
-    ? "error"
-    : gdriveStatus?.connected && !cloudHasLocalChanges && cloudLastSyncMs
-    ? "saved"
-    : "idle";
-  const cloudTime = cloudLastSyncMs
-    ? new Date(cloudLastSyncMs).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
-    : "";
-  const cloudLabel = cloudSyncing
-    ? "Облако · Сохраняем…"
-    : needsChoice
-    ? "Облако · Требуется выбор"
-    : cloudError
-    ? "Облако · Ошибка"
-    : !gdriveStatus?.connected
-    ? "Облако · Не подключено"
-    : cloudHasLocalChanges && cloudAutoMode === "instant"
-    ? "Облако · В очереди…"
-    : cloudHasLocalChanges && cloudAutoMode === "interval"
-    ? "Облако · Ждёт синхронизации"
-    : cloudHasLocalChanges
-    ? "Облако · Есть изменения"
-    : cloudTime
-    ? `Облако · Сохранено ${cloudTime}`
-    : "Облако · Готово";
 
   const navigateFromBottomBar = (navigate: () => void) => {
     emitAppEvent("close-settings");
