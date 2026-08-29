@@ -121,6 +121,7 @@
 | `features/player/types.ts` | props/контракты экрана просмотра |
 | `features/player/useResumePreview.ts` | выбор последнего доступного продолжения и его preview |
 | `features/player/activeWatchActions.ts` | запись прогресса и подтверждение новой серии |
+| `features/player/useOfflinePlayback.ts` | обнаружение локальной библиотеки, polling загрузок, доступ Kodik и offline video mapping |
 | `features/player/PlayerToolbar.tsx` | настройки источника, озвучки и действий плеера |
 | `features/player/SeasonList.tsx` | сезоны, серии, прогресс и ручные отметки |
 | `features/player/ReleaseSchedule.tsx` | сведения о следующем/предыдущем выпуске |
