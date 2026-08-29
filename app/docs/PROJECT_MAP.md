@@ -58,6 +58,7 @@
 | Путь | Назначение / ключевые функции |
 | --- | --- |
 | `services/yummy.py` | `YummyAnimeGateway`, варианты поискового запроса, cache/in-flight dedup, URL normalization |
+| `services/http_client.py` | lazy lifecycle общего `httpx.AsyncClient` для upstream gateway |
 | `services/response_cache.py` | SQLite + memory cache публичных upstream-ответов, TTL и stale-if-error |
 | `services/storage.py` | `JsonStorage.read/write`, temp-файл и atomic replace, первый импорт legacy |
 | `services/watch_party.py` | `WatchPartyService`, `Room`, `Participant`, REST-authoritative state и WS broadcast |
@@ -180,6 +181,7 @@
 | `hooks/useEpisodeTracking.ts` | запуск сразу и каждые 5 минут, защита от частичного сбоя |
 | `hooks/useWatchParty.ts` | create/join/update/state/leave, REST polling и feedback-loop guard |
 | `lib/types.ts` | все общие API, storage, player, rating и party типы |
+| `lib/http.ts` | общий JSON transport, извлечение backend error и typed HTTP status/code |
 | `lib/settings.ts` | schema version, localStorage keys, themes и player defaults |
 | `lib/storage.ts` | localStorage helpers, document/snapshot migrations, PUT helper |
 | `lib/anime.ts` | поиск, franchise/grouping, прогресс, resume и форматирование |

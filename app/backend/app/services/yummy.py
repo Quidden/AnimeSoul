@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from .http_client import LazyAsyncClient
 from .response_cache import CacheRecord, PersistentJsonCache, response_cache_path
 
 
@@ -140,8 +141,16 @@ class YummyAnimeGateway:
             response_cache_path(data_dir),
             "yummy",
         )
-        self._client: httpx.AsyncClient | None = None
-        self._client_lock = asyncio.Lock()
+        self._http = LazyAsyncClient(
+            timeout=httpx.Timeout(10.0, read=20.0),
+            follow_redirects=True,
+            headers={"Accept": "application/json"},
+            limits=httpx.Limits(
+                max_connections=12,
+                max_keepalive_connections=8,
+                keepalive_expiry=30.0,
+            ),
+        )
 
     @property
     def headers(self) -> dict[str, str]:
@@ -184,7 +193,7 @@ class YummyAnimeGateway:
     ) -> Any:
         try:
             async with self._request_slots:
-                value = await self._request(await self._http_client(), path, params)
+                value = await self._request(await self._http.get(), path, params)
         except Exception:
             # A stale public response is a better reserve than an empty player
             # while both upstreams are experiencing a short outage.
@@ -195,27 +204,8 @@ class YummyAnimeGateway:
         await self._response_cache.set(key, value, ttl=ttl, stale_ttl=stale_ttl)
         return value
 
-    async def _http_client(self) -> httpx.AsyncClient:
-        if self._client is not None:
-            return self._client
-        async with self._client_lock:
-            if self._client is None:
-                self._client = httpx.AsyncClient(
-                    timeout=httpx.Timeout(10.0, read=20.0),
-                    follow_redirects=True,
-                    headers={"Accept": "application/json"},
-                    limits=httpx.Limits(
-                        max_connections=12,
-                        max_keepalive_connections=8,
-                        keepalive_expiry=30.0,
-                    ),
-                )
-        return self._client
-
     async def close(self) -> None:
-        client, self._client = self._client, None
-        if client is not None:
-            await client.aclose()
+        await self._http.close()
 
     async def clear_cache(self) -> None:
         self._search_cache.clear()
@@ -309,7 +299,7 @@ class YummyAnimeGateway:
 
         queries = anime_search_queries(query)
         first_error: BaseException | None = None
-        client = await self._http_client()
+        client = await self._http.get()
         tasks = [
             asyncio.create_task(self._request(
                 client,

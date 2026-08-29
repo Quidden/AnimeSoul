@@ -1,4 +1,5 @@
 import type { CredentialCheck } from "../features/settings/credentialImport";
+import { requestJson } from "./http";
 
 export type OfflineEpisode = {
   id: string;
@@ -178,12 +179,10 @@ export type DownloadAvailability = {
 };
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || "Офлайн-библиотека временно недоступна.");
-  }
-  return response.json() as Promise<T>;
+  return requestJson(url, {
+    ...init,
+    errorMessage: "Офлайн-библиотека временно недоступна.",
+  });
 }
 
 export const peekOfflineAnime = (animeId: number) => offlineAnimeCache.get(animeId) ?? null;

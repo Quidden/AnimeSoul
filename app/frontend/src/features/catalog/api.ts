@@ -1,4 +1,5 @@
 import type {Anime, HeroTrailer, ScheduleEntry, Video} from "../../lib/types";
+import {requestJson} from "../../lib/http";
 
 type AnimePayload = {anime?: Anime[]; error?: string};
 type VideoPayload = {
@@ -47,15 +48,6 @@ export class CatalogVideoRequestError extends Error {
 
 const videoCache = new Map<number, { expiresAt: number; request: Promise<AnimeVideoResult> }>();
 const detailsCache = new Map<number, { expiresAt: number; request: Promise<Anime | undefined> }>();
-
-async function requestJson<T extends {error?: string}>(url: string): Promise<T> {
-    const response = await fetch(url);
-    const payload = await response.json() as T;
-    if (!response.ok) {
-        throw new Error(payload.error || `API request failed with status ${response.status}`);
-    }
-    return payload;
-}
 
 /** Load one catalog page. Filtering and franchise grouping stay in selectors/UI code. */
 export async function fetchCatalogPage({limit, offset, query}: CatalogPageOptions): Promise<Anime[]> {

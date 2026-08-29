@@ -28,6 +28,15 @@ FOLDER_NAME = "AnimeSoul"
 STORAGE_FILENAME = "animesoul-storage.json"
 
 
+def _storage_file_query(mode: Literal["visible", "appdata"], folder_id: str | None) -> tuple[str, str]:
+    if mode == "appdata":
+        return (
+            f"name = '{STORAGE_FILENAME}' and 'appDataFolder' in parents and trashed = false",
+            "appDataFolder",
+        )
+    return f"name = '{STORAGE_FILENAME}' and '{folder_id}' in parents and trashed = false", "drive"
+
+
 class GoogleDriveService:
     """Handles Google Drive API v3 interactions, OAuth 2.0 tokens, and file sync."""
 
@@ -400,11 +409,7 @@ class GoogleDriveService:
             if mode == "visible" and not folder_id:
                 return None, None
 
-            spaces = "appDataFolder" if mode == "appdata" else "drive"
-            if mode == "appdata":
-                q = f"name = '{STORAGE_FILENAME}' and 'appDataFolder' in parents and trashed = false"
-            else:
-                q = f"name = '{STORAGE_FILENAME}' and '{folder_id}' in parents and trashed = false"
+            q, spaces = _storage_file_query(mode, folder_id)
 
             res = await client.get(
                 "https://www.googleapis.com/drive/v3/files",
@@ -444,11 +449,7 @@ class GoogleDriveService:
                 headers = {"Authorization": f"Bearer {access_token}"}
                 folder_id = await self._get_folder(client, access_token, mode, create=True)
 
-                spaces = "appDataFolder" if mode == "appdata" else "drive"
-                if mode == "appdata":
-                    q = f"name = '{STORAGE_FILENAME}' and 'appDataFolder' in parents and trashed = false"
-                else:
-                    q = f"name = '{STORAGE_FILENAME}' and '{folder_id}' in parents and trashed = false"
+                q, spaces = _storage_file_query(mode, folder_id)
 
                 res = await client.get(
                     "https://www.googleapis.com/drive/v3/files",

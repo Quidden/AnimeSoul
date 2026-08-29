@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from .http_client import LazyAsyncClient
 from .response_cache import CacheRecord, PersistentJsonCache, response_cache_path
 
 
@@ -303,8 +304,16 @@ class KodikAnimeGateway:
             response_cache_path(data_dir),
             "kodik",
         )
-        self._client: httpx.AsyncClient | None = None
-        self._client_lock = asyncio.Lock()
+        self._http = LazyAsyncClient(
+            timeout=httpx.Timeout(10.0, read=20.0),
+            follow_redirects=True,
+            headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+            limits=httpx.Limits(
+                max_connections=10,
+                max_keepalive_connections=6,
+                keepalive_expiry=30.0,
+            ),
+        )
 
     async def public_key(self) -> str:
         try:
@@ -356,7 +365,7 @@ class KodikAnimeGateway:
     ) -> dict[str, Any]:
         try:
             async with self._request_slots:
-                response = await (await self._http_client()).post(
+                response = await (await self._http.get()).post(
                     endpoint,
                     params=request_params,
                 )
@@ -379,27 +388,8 @@ class KodikAnimeGateway:
         )
         return payload
 
-    async def _http_client(self) -> httpx.AsyncClient:
-        if self._client is not None:
-            return self._client
-        async with self._client_lock:
-            if self._client is None:
-                self._client = httpx.AsyncClient(
-                    timeout=httpx.Timeout(10.0, read=20.0),
-                    follow_redirects=True,
-                    headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-                    limits=httpx.Limits(
-                        max_connections=10,
-                        max_keepalive_connections=6,
-                        keepalive_expiry=30.0,
-                    ),
-                )
-        return self._client
-
     async def close(self) -> None:
-        client, self._client = self._client, None
-        if client is not None:
-            await client.aclose()
+        await self._http.close()
 
     async def clear_cache(self) -> None:
         await self._response_cache.clear()

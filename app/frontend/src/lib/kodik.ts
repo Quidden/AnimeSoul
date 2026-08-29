@@ -48,14 +48,39 @@ export function playerEpisode(value: unknown): string {
   return String(payload.episode ?? payload.current_episode ?? payload.number ?? "");
 }
 
+const PLAYER_VALUE_FIELDS = ["dubbing", "translation", "voice", "data", "value"] as const;
+
+function parsePlayerJson(value: string): unknown | undefined {
+  const trimmed = value.trim();
+  if (!(
+    (trimmed.startsWith("{") && trimmed.endsWith("}"))
+    || (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  )) return undefined;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+}
+
+function nestedPlayerValue(
+  payload: Record<string, unknown>,
+  depth: number,
+  visit: (candidate: unknown, depth: number) => string,
+): string {
+  for (const key of PLAYER_VALUE_FIELDS) {
+    const nested = visit(payload[key], depth + 1);
+    if (nested) return nested;
+  }
+  return "";
+}
+
 export function playerDubbing(value: unknown): string {
   const visit = (candidate: unknown, depth = 0): string => {
     if (depth > 4 || candidate == null) return "";
     if (typeof candidate === "string") {
-      const trimmed = candidate.trim();
-      if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-        try { return visit(JSON.parse(trimmed), depth + 1); } catch { /* Use the original string below. */ }
-      }
+      const parsed = parsePlayerJson(candidate);
+      if (parsed !== undefined) return visit(parsed, depth + 1);
       return candidate;
     }
     if (typeof candidate !== "object") return "";
@@ -63,11 +88,7 @@ export function playerDubbing(value: unknown): string {
     const direct = payload.translation_title ?? payload.dubbing_title ?? payload.voice_title
       ?? payload.title ?? payload.name;
     if (typeof direct === "string" && direct.trim()) return direct;
-    for (const key of ["dubbing", "translation", "voice", "data", "value"]) {
-      const nested = visit(payload[key], depth + 1);
-      if (nested) return nested;
-    }
-    return "";
+    return nestedPlayerValue(payload, depth, visit);
   };
   return visit(value);
 }
@@ -78,10 +99,8 @@ export function playerTranslationId(value: unknown): string {
   const visit = (candidate: unknown, depth = 0): string => {
     if (depth > 4 || candidate == null) return "";
     if (typeof candidate === "string") {
-      const trimmed = candidate.trim();
-      if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-        try { return visit(JSON.parse(trimmed), depth + 1); } catch { /* Treat it as an id below. */ }
-      }
+      const parsed = parsePlayerJson(candidate);
+      if (parsed !== undefined) return visit(parsed, depth + 1);
     }
     // Some builds emit `translation_changed` with a nested primitive value.
     // A primitive at the root is intentionally ignored because episode events
@@ -93,11 +112,7 @@ export function playerTranslationId(value: unknown): string {
       ?? payload.dubbing_id ?? payload.dubbingId ?? payload.voice_id ?? payload.voiceId
       ?? (depth > 0 ? payload.id : undefined);
     if (typeof direct === "string" || typeof direct === "number") return String(direct);
-    for (const key of ["dubbing", "translation", "voice", "data", "value"]) {
-      const nested = visit(payload[key], depth + 1);
-      if (nested) return nested;
-    }
-    return "";
+    return nestedPlayerValue(payload, depth, visit);
   };
   return visit(value);
 }

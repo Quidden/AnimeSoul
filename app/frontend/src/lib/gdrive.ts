@@ -1,4 +1,5 @@
 import type { CredentialSaveOutcome } from "../features/settings/credentialImport";
+import { requestJson } from "./http";
 
 /**
  * Google Drive Connection & Sync Status object returned from /api/gdrive/status.
@@ -49,35 +50,33 @@ let pendingCompletion: Promise<{ pending: boolean; connected: boolean; user_emai
  * Fetches the current Google Drive authentication and synchronization status.
  */
 export async function fetchGDriveStatus(): Promise<GDriveStatus> {
-  const res = await fetch("/api/gdrive/status");
-  if (!res.ok) throw new Error("Failed to fetch Google Drive status");
-  return res.json();
+  return requestJson("/api/gdrive/status", {
+    errorMessage: "Failed to fetch Google Drive status",
+  });
 }
 
 /**
  * Fetches the OAuth 2.0 authorization URL for Google Sign-In.
  */
 export async function fetchGDriveAuthUrl(): Promise<{ url: string; redirect_uri: string }> {
-  const res = await fetch("/api/gdrive/auth-url");
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Failed to get auth URL" }));
-    throw new Error(err.detail || "Failed to get auth URL");
-  }
-  return res.json();
+  return requestJson("/api/gdrive/auth-url", {
+    errorMessage: "Failed to get auth URL",
+  });
 }
 
 /** Finish a callback saved while Android had the app in background. */
 export async function completeGDriveAuth(): Promise<{ pending: boolean; connected: boolean; user_email?: string }> {
   if (pendingCompletion) return pendingCompletion;
   pendingCompletion = (async () => {
-    const res = await fetch("/api/gdrive/complete-auth", { method: "POST" });
-    const payload = await res.json().catch(() => ({})) as {
+    const payload = await requestJson<{
       detail?: string;
       pending?: boolean;
       connected?: boolean;
       user_email?: string;
-    };
-    if (!res.ok) throw new Error(payload.detail || "Не удалось завершить подключение Google Drive");
+    }>("/api/gdrive/complete-auth", {
+      method: "POST",
+      errorMessage: "Не удалось завершить подключение Google Drive",
+    });
     return {
       pending: Boolean(payload.pending),
       connected: Boolean(payload.connected),
@@ -95,16 +94,15 @@ export async function completeGDriveAuth(): Promise<{ pending: boolean; connecte
  * Saves custom Google OAuth Client ID and Secret to backend credentials storage.
  */
 export async function saveGDriveCredentials(clientId: string, clientSecret?: string): Promise<CredentialSaveOutcome> {
-  const res = await fetch("/api/gdrive/credentials", {
+  const payload = await requestJson<Partial<CredentialSaveOutcome> & { detail?: string }>("/api/gdrive/credentials", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       client_id: clientId,
       client_secret: clientSecret?.trim() || null,
     }),
+    errorMessage: "Не удалось проверить Google OAuth credentials",
   });
-  const payload = await res.json().catch(() => ({})) as Partial<CredentialSaveOutcome> & { detail?: string };
-  if (!res.ok) throw new Error(payload.detail || "Не удалось проверить Google OAuth credentials");
   return {
     saved: Boolean(payload.saved),
     checks: Array.isArray(payload.checks) ? payload.checks : [],
@@ -115,8 +113,10 @@ export async function saveGDriveCredentials(clientId: string, clientSecret?: str
  * Asks the backend to revoke Google access, then disconnects cloud sync locally.
  */
 export async function disconnectGDrive(): Promise<void> {
-  const res = await fetch("/api/gdrive/disconnect", { method: "POST" });
-  if (!res.ok) throw new Error("Failed to disconnect Google Drive");
+  await requestJson("/api/gdrive/disconnect", {
+    method: "POST",
+    errorMessage: "Failed to disconnect Google Drive",
+  });
 }
 
 /**
@@ -132,7 +132,7 @@ export async function syncGDrive(
   folderMode: GDriveFolderMode = "visible",
   resolveInitialChoice = false,
 ): Promise<{ status: string; file_id?: string; document?: unknown; backup?: string | null }> {
-  const res = await fetch("/api/gdrive/sync", {
+  return requestJson("/api/gdrive/sync", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -141,10 +141,6 @@ export async function syncGDrive(
       folder_mode: folderMode,
       resolve_initial_choice: resolveInitialChoice,
     }),
+    errorMessage: "Sync failed",
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Sync failed" }));
-    throw new Error(err.detail || "Sync failed");
-  }
-  return res.json();
 }

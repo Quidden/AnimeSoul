@@ -71,6 +71,29 @@ import {
   parseCredentialImport,
 } from "../src/features/settings/credentialImport.ts";
 import { videoSourceIssues } from "../src/lib/sourceDiagnostics.ts";
+import { ApiRequestError, requestJson } from "../src/lib/http.ts";
+
+test("JSON transport preserves backend error details, status and code", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ detail: "Точная ошибка backend", code: "CONFLICT" }),
+    { status: 409, headers: { "Content-Type": "application/json" } },
+  );
+  try {
+    await assert.rejects(
+      requestJson("https://example.invalid/api", { errorMessage: "Запасная ошибка" }),
+      (error: unknown) => {
+        assert.ok(error instanceof ApiRequestError);
+        assert.equal(error.message, "Точная ошибка backend");
+        assert.equal(error.status, 409);
+        assert.equal(error.code, "CONFLICT");
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("Shikimori links prefer a remote id and keep a title-search fallback", () => {
   assert.equal(
@@ -712,9 +735,11 @@ test("Kodik event payload helpers accept common player formats", () => {
   assert.equal(playerDubbing({ translation: { title: "AniLibria" } }), "AniLibria");
   assert.equal(playerDubbing({ value: { translation: { name: "Dream Cast" } } }), "Dream Cast");
   assert.equal(playerDubbing('{"translation":{"title":"AniDUB"}}'), "AniDUB");
+  assert.equal(playerDubbing("{неполный payload"), "{неполный payload");
   assert.equal(playerTranslationId({ translation: { id: 610 } }), "610");
   assert.equal(playerTranslationId({ value: { translation_id: "711" } }), "711");
   assert.equal(playerTranslationId('{"translation":{"id":812}}'), "812");
+  assert.equal(playerTranslationId("812"), "");
 });
 
 test("tracking keeps a monotonic baseline and acknowledges an exact episode", () => {
