@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   completeGDriveAuth,
   disconnectGDrive,
@@ -57,7 +57,7 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
   const [credentialsChecks, setCredentialsChecks] = useState<CredentialCheck[]>([]);
   const [initialChoiceModal, setInitialChoiceModal] = useState(false);
 
-  const loadGDriveStatus = async () => {
+  const loadGDriveStatus = useCallback(async () => {
     const requestRevision = ++statusRequestRevision.current;
     try {
       let status = await fetchGDriveStatus();
@@ -98,7 +98,7 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
       if (requestRevision !== statusRequestRevision.current) return;
       setSyncMessage(error instanceof Error ? error.message : "Не удалось проверить Google Drive");
     }
-  };
+  }, []);
 
   const connect = async () => {
     setSyncMessage("");

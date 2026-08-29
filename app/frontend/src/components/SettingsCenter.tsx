@@ -87,7 +87,7 @@ export function SettingsCenter(props: Props) {
       loadGDriveStatus();
     };
     return listenAppEvent("open-gdrive-choice", handleChoiceEvent);
-  }, []);
+  }, [loadGDriveStatus, setInitialChoiceModal]);
 
   useEffect(() => listenAppEvent("open-settings", ({ tab, targetTitle }) => {
     if (IS_ANDROID_APP && tab === "party") return;
@@ -163,7 +163,7 @@ export function SettingsCenter(props: Props) {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", handleOAuthReturn);
     };
-  }, [open]);
+  }, [loadGDriveStatus, open]);
 
   useEffect(() => {
     if (!open || !IS_ANDROID_APP) return;
