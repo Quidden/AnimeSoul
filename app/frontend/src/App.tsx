@@ -17,6 +17,7 @@ import {
     selectHistoryItems,
     selectWatchingItems,
 } from "./features/library/selectors";
+import { useFolderManagement } from "./features/library/useFolderManagement";
 import { useResumePreview } from "./features/player/useResumePreview";
 import { createActiveWatchActions } from "./features/player/activeWatchActions";
 import { useProfileStorage } from "./features/storage/useProfileStorage";
@@ -25,7 +26,7 @@ import { useEpisodeTracking } from "./hooks/useEpisodeTracking";
 import { useWatchPartyPresence } from "./hooks/useWatchParty";
 import type { Anime, Folder } from "./lib/types";
 import { STORAGE_KEYS as K } from "./lib/settings";
-import { readLocal as read, writeLocal as write } from "./lib/storage";
+import { writeLocal as write } from "./lib/storage";
 import {
     animeSearchScore,
     reorder,
@@ -157,13 +158,8 @@ export default function Home() {
         personalRatings: ratings,
     });
 
-    const [libraryOpen] = useState(false);
-    const [folderPicker, setFolderPicker] = useState<Anime | null>(null);
-    const [openedFolder, setOpenedFolder] = useState<Folder | null>(null);
     const [collectionOverview, setCollectionOverview] =
         useState<CollectionOverviewKind | null>(null);
-    const [lastDeletedFolder, setLastDeletedFolder] =
-        useState<{ folder: Folder; index: number } | null>(null);
     const [partyHostDetails, setPartyHostDetails] = useState<Anime | null>(null);
     const partyPresence = useWatchPartyPresence({
         enabled: !IS_ANDROID_APP && view === "home" && playerPrefs.watchPartyEnabled,
@@ -171,47 +167,27 @@ export default function Home() {
     });
     useApiActivity();
     useEpisodeTracking({tracked, setTracked});
+    const {
+        confirmFolderDeletion,
+        createFolder,
+        currentFolder,
+        deleteFolder,
+        folderPicker,
+        lastDeletedFolder,
+        removeFromFolder,
+        reorderFolderAnime,
+        restoreLastFolder,
+        setFolderPicker,
+        setOpenedFolder,
+        toggleFolder,
+        updateFolderNote,
+    } = useFolderManagement({folders, saveFolders});
     const toggleFavorite = (id: number) => {
         const nextFavorites = favorites.includes(id)
             ? favorites.filter(item => item !== id)
             : [...favorites, id];
         saveFav(nextFavorites);
     };
-    const createFolder = () => {
-        const name = prompt("Название новой папки")?.trim();
-        if (name) {
-            const next = [...folders, {id: crypto.randomUUID(), name, animeIds: []}];
-            saveFolders(next);
-            return next.at(-1);
-        }
-    };
-    const toggleFolder = (folder: Folder, id: number) => {
-        saveFolders(folders.map(item => item.id === folder.id ? {
-            ...item,
-            animeIds: item.animeIds.includes(id)
-                ? item.animeIds.filter(animeId => animeId !== id)
-                : [...item.animeIds, id],
-        } : item));
-    };
-    const deleteFolder = (folder: Folder) => {
-        if (!confirm(`Удалить папку «${folder.name}»? Её можно будет вернуть кнопкой отмены.`)) return;
-        const deleted = {folder, index: Math.max(0, folders.findIndex(item => item.id === folder.id))};
-        setLastDeletedFolder(deleted);
-        write("animesoul:last-deleted-folder", deleted);
-        saveFolders(folders.filter(item => item.id !== folder.id));
-        if (openedFolder?.id === folder.id) setOpenedFolder(null);
-    };
-    const restoreLastFolder = () => {
-        if (!lastDeletedFolder || folders.some(folder => folder.id === lastDeletedFolder.folder.id)) return;
-        const next = [...folders];
-        next.splice(Math.min(lastDeletedFolder.index, next.length), 0, lastDeletedFolder.folder);
-        saveFolders(next);
-        setLastDeletedFolder(null);
-        localStorage.removeItem("animesoul:last-deleted-folder");
-    };
-    useEffect(() => setLastDeletedFolder(
-        read<{ folder: Folder; index: number } | null>("animesoul:last-deleted-folder", null),
-    ), []);
     const known = (id: number) => catalog.find(a => a.anime_id === id);
     const partyHost = partyPresence.party?.participants.find(
         participant => participant.role === "host",
@@ -560,12 +536,7 @@ export default function Home() {
         deleteFolder,
         restoreLastFolder,
         openFolder: folder => setOpenedFolder(folder),
-        removeFromFolder: (folderId, animeId) => {
-            saveFolders(folders.map(folder => folder.id === folderId ? {
-                ...folder,
-                animeIds: folder.animeIds.filter(item => item !== animeId),
-            } : folder));
-        },
+        removeFromFolder,
         openKnownAnime: animeId => {
             const anime = known(animeId);
             if (anime) setActive(anime);
@@ -618,33 +589,6 @@ export default function Home() {
             });
             openAnime(anime, true);
         },
-    };
-
-    const currentFolder = openedFolder
-        ? folders.find(folder => folder.id === openedFolder.id) ?? openedFolder
-        : null;
-    const updateFolderNote = (animeId: number, note: string) => {
-        if (!openedFolder) return;
-        saveFolders(folders.map(folder => (
-            folder.id === openedFolder.id
-                ? {
-                    ...folder,
-                    notes: {...(folder.notes ?? {}), [animeId]: note},
-                }
-                : folder
-        )));
-    };
-    const reorderFolderAnime = (from: number, to: number) => {
-        if (!openedFolder) return;
-        saveFolders(folders.map(folder => (
-            folder.id === openedFolder.id
-                ? {...folder, animeIds: reorder(folder.animeIds, from, to)}
-                : folder
-        )));
-    };
-    const confirmFolderDeletion = () => {
-        if (!openedFolder) return;
-        deleteFolder(openedFolder);
     };
 
     return (
@@ -786,9 +730,6 @@ export default function Home() {
                     onDelete={confirmFolderDeletion}
                     onClose={() => setOpenedFolder(null)}
                 />
-            )}
-            {libraryOpen && (
-                <div className="toast">Библиотека открыта ниже</div>
             )}
         </main>
     );

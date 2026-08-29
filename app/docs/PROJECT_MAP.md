@@ -116,6 +116,7 @@
 | Путь | Назначение |
 | --- | --- |
 | `features/library/selectors.ts` | чистые history/watching/folder/statistics selectors |
+| `features/library/useFolderManagement.ts` | состояние folder picker/view, создание, удаление/отмена, заметки и сортировка пользовательских папок |
 | `features/player/types.ts` | props/контракты экрана просмотра |
 | `features/player/useResumePreview.ts` | выбор последнего доступного продолжения и его preview |
 | `features/player/activeWatchActions.ts` | запись прогресса и подтверждение новой серии |
