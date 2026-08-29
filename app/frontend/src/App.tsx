@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import {
     CollectionOverview,
@@ -18,12 +18,14 @@ import {
     selectWatchingItems,
 } from "./features/library/selectors";
 import { useFolderManagement } from "./features/library/useFolderManagement";
+import { useAppNavigation } from "./features/navigation/useAppNavigation";
 import { useResumePreview } from "./features/player/useResumePreview";
 import { createActiveWatchActions } from "./features/player/activeWatchActions";
 import { useProfileStorage } from "./features/storage/useProfileStorage";
 import { useApiActivity } from "./hooks/useApiActivity";
 import { useEpisodeTracking } from "./hooks/useEpisodeTracking";
 import { useWatchPartyPresence } from "./hooks/useWatchParty";
+import { usePartyHostPlayback } from "./features/watch-party/usePartyHostPlayback";
 import type { Anime, Folder } from "./lib/types";
 import { STORAGE_KEYS as K } from "./lib/settings";
 import { writeLocal as write } from "./lib/storage";
@@ -40,13 +42,11 @@ import {
     type HomePageActions,
     type HomePageModel,
 } from "./pages/HomePage";
-import { fetchAnimeDetails } from "./features/catalog/api";
 import { hasUserRatings, setUserRating, type RatingTarget } from "./lib/ratings";
 import { RatingsPage } from "./pages/RatingsPage";
 import { useCommunityRatings } from "./features/ratings/useCommunityRatings";
 import { DownloadsPage } from "./features/downloads/DownloadsPage";
 import { IS_ANDROID_APP } from "./lib/platform";
-import { NATIVE_BACK_EVENT } from "./lib/modalAccessibility";
 
 export default function Home() {
     const catalogRef = useRef<Anime[]>([]);
@@ -160,7 +160,6 @@ export default function Home() {
 
     const [collectionOverview, setCollectionOverview] =
         useState<CollectionOverviewKind | null>(null);
-    const [partyHostDetails, setPartyHostDetails] = useState<Anime | null>(null);
     const partyPresence = useWatchPartyPresence({
         enabled: !IS_ANDROID_APP && view === "home" && playerPrefs.watchPartyEnabled,
         server: playerPrefs.watchPartyServer
@@ -189,33 +188,11 @@ export default function Home() {
         saveFav(nextFavorites);
     };
     const known = (id: number) => catalog.find(a => a.anime_id === id);
-    const partyHost = partyPresence.party?.participants.find(
-        participant => participant.role === "host",
-    );
-    const partyHostPlayback = partyHost?.playback;
-    const partyHostAnime = partyHostPlayback
-        ? known(partyHostPlayback.animeId)
-            ?? (partyHostDetails?.anime_id === partyHostPlayback.animeId
-                ? partyHostDetails
-                : null)
-        : null;
-    useEffect(() => {
-        if (!partyHostPlayback || known(partyHostPlayback.animeId)) {
-            setPartyHostDetails(null);
-            return;
-        }
-        let cancelled = false;
-        fetchAnimeDetails([partyHostPlayback.animeId])
-            .then(anime => {
-                if (!cancelled) setPartyHostDetails(anime[0] ?? null);
-            })
-            .catch(() => {
-                if (!cancelled) setPartyHostDetails(null);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [partyHostPlayback?.animeId, catalog.length]);
+    const {
+        anime: partyHostAnime,
+        host: partyHost,
+        playback: partyHostPlayback,
+    } = usePartyHostPlayback(partyPresence.party, catalog);
     const {
         cardMeta,
         dubbings,
@@ -273,7 +250,10 @@ export default function Home() {
     const animeProgress = calculateAnimeProgress;
     const folderStats = (folder: Folder) => calculateFolderProgress(folder, progress);
     const statistics = useMemo(
-        () => calculateAnimeStatistics(progress, known),
+        () => calculateAnimeStatistics(
+            progress,
+            id => catalog.find(anime => anime.anime_id === id),
+        ),
         [progress, catalog],
     );
     const favoriteStats = folderStats({id: "favorites", name: "Избранное", animeIds: favorites});
@@ -286,50 +266,24 @@ export default function Home() {
             ))
             .slice(0, 6);
     }, [franchises, query]);
-    const openAnime = (anime: Anime, resume = false) => {
-        // Offline-library cards are valid Anime records even when the remote
-        // catalogue is unavailable. Keep the selected record in memory so a
-        // local playback update can immediately become the home-page
-        // "Продолжить" item without waiting for a details request.
-        setCatalog(current => current.some(item => item.anime_id === anime.anime_id)
-            ? current
-            : [...current, anime]);
-        setResumeRequested(resume);
-        setNewEpisodeRequested(false);
-        setActive(anime);
-        window.scrollTo({top: 0});
-    };
-    const openLibrary = () => {
-        setActive(null);
-        setResumeRequested(false);
-        setNewEpisodeRequested(false);
-        setView("stats");
-        window.scrollTo({top: 0, behavior: "smooth"});
-    };
-    const showCatalog = () => {
-        setActive(null);
-        setResumeRequested(false);
-        setNewEpisodeRequested(false);
-        setView("catalog");
-        // Catalog is rendered directly after the sticky header.  Scrolling its
-        // section box into the viewport aligns it underneath that header and
-        // hides the title; a screen transition should always start at page top.
-        window.scrollTo({top: 0});
-    };
-    const showRatings = () => {
-        setActive(null);
-        setResumeRequested(false);
-        setNewEpisodeRequested(false);
-        setView("ratings");
-        window.scrollTo({top: 0, behavior: "smooth"});
-    };
-    const showDownloads = () => {
-        setActive(null);
-        setResumeRequested(false);
-        setNewEpisodeRequested(false);
-        setView("downloads");
-        window.scrollTo({top: 0, behavior: "smooth"});
-    };
+    const {
+        goHome,
+        openAnime,
+        openLibrary,
+        openSuggestion,
+        showCatalog,
+        showDownloads,
+        showRatings,
+    } = useAppNavigation({
+        active,
+        view,
+        setActive,
+        setCatalog,
+        setNewEpisodeRequested,
+        setQuery,
+        setResumeRequested,
+        setView,
+    });
     const updateRating = (
         animeId: number,
         title: string,
@@ -350,39 +304,6 @@ export default function Home() {
         showCatalog();
         void load(0, false, query);
     };
-    const openSuggestion = (anime: Anime) => {
-        setQuery(anime.title);
-        setActive(anime);
-        setResumeRequested(false);
-        setNewEpisodeRequested(false);
-    };
-    const goHome = () => {
-        setActive(null);
-        setResumeRequested(false);
-        setNewEpisodeRequested(false);
-        setView("home");
-        window.scrollTo({top: 0, behavior: "smooth"});
-    };
-
-    useEffect(() => {
-        const handleNativeBack = (event: Event) => {
-            // Dialog hooks close only the visually topmost modal. App-level
-            // navigation must wait for them instead of closing two layers.
-            if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
-            if (active) {
-                event.preventDefault();
-                showCatalog();
-                return;
-            }
-            if (view !== "home") {
-                event.preventDefault();
-                goHome();
-            }
-        };
-        window.addEventListener(NATIVE_BACK_EVENT, handleNativeBack);
-        return () => window.removeEventListener(NATIVE_BACK_EVENT, handleNativeBack);
-    }, [active, view]);
-
     const sharedHeaderProps = {
         query,
         setQuery,

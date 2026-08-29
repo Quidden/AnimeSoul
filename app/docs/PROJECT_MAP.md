@@ -117,6 +117,7 @@
 | --- | --- |
 | `features/library/selectors.ts` | чистые history/watching/folder/statistics selectors |
 | `features/library/useFolderManagement.ts` | состояние folder picker/view, создание, удаление/отмена, заметки и сортировка пользовательских папок |
+| `features/navigation/useAppNavigation.ts` | стабильные переходы между экранами, открытие тайтла и обработка native back |
 | `features/player/types.ts` | props/контракты экрана просмотра |
 | `features/player/useResumePreview.ts` | выбор последнего доступного продолжения и его preview |
 | `features/player/activeWatchActions.ts` | запись прогресса и подтверждение новой серии |
@@ -152,6 +153,7 @@
 | `features/ratings/useCommunityRatings.ts` | retry, очередь удалений и публикация при изменении `updatedAt` |
 | `features/watch-party/api.ts` | sessionStorage, REST transport, protocol guard и ошибки |
 | `features/watch-party/types.ts` | локальная сессия `{roomId, token, role}` |
+| `features/watch-party/usePartyHostPlayback.ts` | разрешение playback ведущего комнаты в полную запись каталога |
 
 ## Shared components
 
