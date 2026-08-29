@@ -135,6 +135,8 @@
 | `features/settings/settingsCatalog.ts` | вкладки и поисковые термины настроек |
 | `features/settings/Setting.tsx` | единая строка настройки и фильтрация по поиску |
 | `features/settings/AppearanceSettings.tsx` | темы, цвета и CSS-масштабы |
+| `features/settings/PlaybackSettings.tsx` | продолжение, плеер, панель управления и история |
+| `features/settings/WatchPartySettings.tsx` | параметры комнат и инструкция совместного просмотра |
 | `features/settings/ProfileSettings.tsx` | профили, import/export и переключение |
 | `features/settings/useGoogleDriveSettings.ts` | статус OAuth/sync, команды подключения и presentation state |
 | `features/settings/CloudSettings.tsx` | UI Google Drive |

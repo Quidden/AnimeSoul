@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -7,10 +6,9 @@ import type { ConfigProfile, PlayerPrefs, Theme, ToolbarPosition } from "../lib/
 import { DEFAULT_PLAYER_PREFS, STORAGE_KEYS as K, THEMES } from "../lib/settings";
 import { readLocal as read, writeLocal as write } from "../lib/storage";
 import { emitAppEvent, listenAppEvent } from "../lib/events";
-import { Toggle } from "./Toggle";
 import { DebugPanel } from "./DebugPanel";
 import { ChangelogPanel } from "./ChangelogModal";
-import { Setting, SettingsSearchContext } from "../features/settings/Setting";
+import { SettingsSearchContext } from "../features/settings/Setting";
 import {
   matchesSettingsQuery,
   SETTINGS_SEARCH_TERMS,
@@ -24,6 +22,8 @@ import { AppearanceSettings } from "../features/settings/AppearanceSettings";
 import { ProfileSettings } from "../features/settings/ProfileSettings";
 import { OfflineSettings } from "../features/settings/OfflineSettings";
 import { CredentialsSettings } from "../features/settings/CredentialsSettings";
+import { PlaybackSettings } from "../features/settings/PlaybackSettings";
+import { WatchPartySettings } from "../features/settings/WatchPartySettings";
 import { IS_ANDROID_APP } from "../lib/platform";
 import { useModalAccessibility } from "../lib/modalAccessibility";
 
@@ -42,6 +42,10 @@ type Props = {
   onStorageReload?: () => void;
 };
 
+const SETTINGS_CENTER_TABS = IS_ANDROID_APP
+  ? SETTINGS_TABS.filter(tab => tab.id !== "party")
+  : SETTINGS_TABS;
+
 export function SettingsCenter(props: Props) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>("watching");
@@ -50,10 +54,6 @@ export function SettingsCenter(props: Props) {
   const [toolbar, setToolbarState] = useState<ToolbarPosition>(read(K.toolbar, "bottom"));
   const modalRef = useRef<HTMLElement>(null);
   const tabListRef = useRef<HTMLDivElement>(null);
-  const settingsTabs = IS_ANDROID_APP
-    ? SETTINGS_TABS.filter(tab => tab.id !== "party")
-    : SETTINGS_TABS;
-
   const googleDrive = useGoogleDriveSettings({ onStorageReload: props.onStorageReload });
   const {
     syncing,
@@ -62,6 +62,7 @@ export function SettingsCenter(props: Props) {
     loadGDriveStatus,
     syncNow: handleSyncNow,
   } = googleDrive;
+  const activeTabDefinition = SETTINGS_CENTER_TABS.find(tab => tab.id === activeTab);
 
   useModalAccessibility(open, () => setOpen(false), modalRef);
 
@@ -69,7 +70,7 @@ export function SettingsCenter(props: Props) {
     const query = searchQuery.trim();
     if (!query) return;
 
-    const matchingTab = settingsTabs.find((tab) => {
+    const matchingTab = SETTINGS_CENTER_TABS.find((tab) => {
       const searchableText = `${tab.label} ${tab.description} ${SETTINGS_SEARCH_TERMS[tab.id]}`;
       return matchesSettingsQuery(searchableText, query);
     });
@@ -110,7 +111,7 @@ export function SettingsCenter(props: Props) {
       const candidates = modal.querySelectorAll<HTMLElement>(
         ".settings-item, .cloud-settings-card, .cloud-settings-field, .cloud-settings-details, .settings-group-title, .debug-privacy",
       );
-      highlighted = Array.from(candidates).find((element) => (
+      highlighted = Array.from(candidates).find(element => (
         element.textContent?.toLocaleLowerCase("ru").includes(target)
       )) ?? null;
       if (!highlighted) {
@@ -144,16 +145,14 @@ export function SettingsCenter(props: Props) {
 
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
-      if (event.data?.type === "GDRIVE_AUTH_SUCCESS") {
-        loadGDriveStatus();
-      }
+      if (event.data?.type === "GDRIVE_AUTH_SUCCESS") loadGDriveStatus();
     };
-
-    window.addEventListener("message", handleMessage);
     const handleOAuthReturn = () => void loadGDriveStatus();
     const handleVisibility = () => {
       if (document.visibilityState === "visible") void loadGDriveStatus();
     };
+
+    window.addEventListener("message", handleMessage);
     window.addEventListener("animesoul-oauth-return", handleOAuthReturn);
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("focus", handleOAuthReturn);
@@ -196,12 +195,9 @@ export function SettingsCenter(props: Props) {
   };
 
   const resetSettings = () => {
-    if (
-      !confirm(
-        "Сбросить оформление и настройки просмотра? Прогресс, папки, избранное и отслеживания останутся без изменений."
-      )
-    )
-      return;
+    if (!confirm(
+      "Сбросить оформление и настройки просмотра? Прогресс, папки, избранное и отслеживания останутся без изменений.",
+    )) return;
     const nextPrefs = { ...DEFAULT_PLAYER_PREFS };
     props.setPlayerPrefs(nextPrefs);
     props.setTheme(THEMES[0]);
@@ -222,636 +218,172 @@ export function SettingsCenter(props: Props) {
         aria-label="Открыть настройки AnimeSoul"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen(current => !current)}
       >
         ⚙
       </button>
-      {open &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="settings-modal-backdrop"
-            onPointerDown={(event) => {
-              if (event.target === event.currentTarget) {
-                event.preventDefault();
-                event.stopPropagation();
-                setOpen(false);
-              }
-            }}
-            onClick={(event) => {
-              if (event.target === event.currentTarget) {
-                event.preventDefault();
-                event.stopPropagation();
-              }
-            }}
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          className="settings-modal-backdrop"
+          onPointerDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(false);
+          }}
+          onClick={(event) => {
+            if (event.target !== event.currentTarget) return;
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <section
+            ref={modalRef}
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Настройки AnimeSoul"
+            tabIndex={-1}
           >
-            <section
-              ref={modalRef}
-              className="settings-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Настройки AnimeSoul"
-              tabIndex={-1}
-            >
-              <header>
-                <div>
-                  <span>ЦЕНТР УПРАВЛЕНИЯ</span>
-                  <h2>{IS_ANDROID_APP ? "Настройки" : "Настройки AnimeSoul"}</h2>
-                  <p>Все параметры сохраняются в активном профиле автоматически.</p>
+            <header>
+              <div>
+                <span>ЦЕНТР УПРАВЛЕНИЯ</span>
+                <h2>{IS_ANDROID_APP ? "Настройки" : "Настройки AnimeSoul"}</h2>
+                <p>Все параметры сохраняются в активном профиле автоматически.</p>
+              </div>
+              <div className="settings-header-actions">
+                <button
+                  className="settings-reset"
+                  onClick={resetSettings}
+                  aria-label="Сбросить настройки"
+                  title="Сбросить настройки"
+                >
+                  ↺ Сбросить
+                </button>
+                <button onClick={() => setOpen(false)} aria-label="Закрыть">×</button>
+              </div>
+            </header>
+            <div className="settings-layout">
+              <nav className="settings-tabs" aria-label="Разделы настроек">
+                <label className="settings-search">
+                  <span aria-hidden="true">⌕</span>
+                  <input
+                    value={searchQuery}
+                    onChange={event => setSearchQuery(event.target.value)}
+                    placeholder="Найти настройку…"
+                    aria-label="Поиск по настройкам"
+                  />
+                  {searchQuery && (
+                    <button type="button" onClick={() => setSearchQuery("")} aria-label="Очистить поиск">
+                      ×
+                    </button>
+                  )}
+                </label>
+                <div ref={tabListRef} className="settings-tab-list" role="tablist">
+                  {SETTINGS_CENTER_TABS.map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === tab.id}
+                      className={activeTab === tab.id ? "active" : ""}
+                      onClick={() => setActiveTab(tab.id)}
+                    >
+                      <i aria-hidden="true">{tab.icon}</i>
+                      <span>
+                        <b>{tab.label}</b>
+                        <small>{tab.description}</small>
+                      </span>
+                    </button>
+                  ))}
                 </div>
-                <div className="settings-header-actions">
-                  <button
-                    className="settings-reset"
-                    onClick={resetSettings}
-                    aria-label="Сбросить настройки"
-                    title="Сбросить настройки"
-                  >
-                    ↺ Сбросить
-                  </button>
-                  <button onClick={() => setOpen(false)} aria-label="Закрыть">
-                    ×
-                  </button>
-                </div>
-              </header>
-              <div className="settings-layout">
-                <nav className="settings-tabs" aria-label="Разделы настроек">
-                  <label className="settings-search">
-                    <span aria-hidden="true">⌕</span>
-                    <input
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Найти настройку…"
-                      aria-label="Поиск по настройкам"
-                    />
-                    {searchQuery && (
-                      <button type="button" onClick={() => setSearchQuery("")} aria-label="Очистить поиск">
-                        ×
-                      </button>
-                    )}
-                  </label>
-                  <div ref={tabListRef} className="settings-tab-list" role="tablist">
-                    {settingsTabs.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={activeTab === tab.id}
-                        className={activeTab === tab.id ? "active" : ""}
-                        onClick={() => setActiveTab(tab.id)}
-                      >
-                        <i aria-hidden="true">{tab.icon}</i>
-                        <span>
-                          <b>{tab.label}</b>
-                          <small>{tab.description}</small>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </nav>
-                <main className="settings-workspace">
-                  <div className="settings-panel-heading">
+              </nav>
+              <main className="settings-workspace">
+                <div className="settings-panel-heading">
+                  <div>
+                    <span>{activeTabDefinition?.icon}</span>
                     <div>
-                      <span>{settingsTabs.find((tab) => tab.id === activeTab)?.icon}</span>
-                      <div>
-                        <h3>{settingsTabs.find((tab) => tab.id === activeTab)?.label}</h3>
-                        <p>{settingsTabs.find((tab) => tab.id === activeTab)?.description}</p>
-                      </div>
+                      <h3>{activeTabDefinition?.label}</h3>
+                      <p>{activeTabDefinition?.description}</p>
                     </div>
-                    <small>{searchQuery ? `Поиск: «${searchQuery}»` : "Изменения сохраняются автоматически"}</small>
                   </div>
-                  <SettingsSearchContext.Provider value={searchQuery}>
+                  <small>
+                    {searchQuery ? `Поиск: «${searchQuery}»` : "Изменения сохраняются автоматически"}
+                  </small>
+                </div>
+                <SettingsSearchContext.Provider value={searchQuery}>
                   <div
                     className={`settings-scroll${searchQuery ? " is-searching" : ""}`}
                     data-active-tab={activeTab}
                   >
-                <aside className="settings-known-issues" data-settings-tab="player">
-                  <b>Возможные ограничения источников</b>
-                  <p>
-                    Часть функций зависит от данных API и видеоплеера. У некоторых аниме или серий могут
-                    отсутствовать кадры, точные таймкоды опенинга и эндинга, отдельные озвучки либо
-                    подтверждённая дата следующей серии. Кадры иногда бывают низкого качества, повторяются
-                    или не полностью соответствуют серии — AnimeSoul показывает только то, что вернул источник.
-                  </p>
-                </aside>
-
-                <section className="settings-group" data-settings-tab="watching">
-                  <div className="settings-group-title">
-                    <b>Просмотр и продолжение</b>
-                    <span>Поведение сайта при открытии и переключении серий</span>
-                  </div>
-                  <Setting
-                    title="Автозапуск продолжения"
-                    description="После нажатия «Продолжить» плеер сам запускает серию с сохранённого момента."
-                    example="Остановились на 12:40 — серия откроется и начнёт играть с 12:40."
-                  >
-                    <Toggle
-                      label="Включён"
-                      value={props.playerPrefs.autoPlayResume}
-                      onChange={(value) => setPrefs({ autoPlayResume: value })}
+                    <PlaybackSettings
+                      playerPrefs={props.playerPrefs}
+                      toolbar={toolbar}
+                      historyEnabled={props.historyEnabled}
+                      updatePlayerPrefs={setPrefs}
+                      updateToolbar={setToolbar}
+                      onHistoryEnabledChange={props.onHistoryEnabledChange}
                     />
-                  </Setting>
-                  <Setting
-                    title="Предпросмотр на главной"
-                    description="Показывает визуальный предпросмотр последней серии вместо обычной кнопки продолжения."
-                    example="На главной появится широкая карточка текущей серии."
-                  >
-                    <Toggle
-                      label="Включён"
-                      value={props.playerPrefs.homeEpisodePreview}
-                      onChange={(value) => setPrefs({ homeEpisodePreview: value })}
+                    <AppearanceSettings
+                      theme={props.theme}
+                      playerPrefs={props.playerPrefs}
+                      setTheme={props.setTheme}
+                      updatePlayerPrefs={setPrefs}
                     />
-                  </Setting>
-                  <Setting
-                    title="Источник предпросмотра"
-                    description="HD-картинка использует постер, а кадры серии — беззвучный видеопредпросмотр, если его отдаёт источник. Не для всех серий доступны кадры; иногда они имеют низкое качество, повторяются или относятся не к той части тайтла."
-                    example="Для стабильного качества и экономии трафика выбери HD-картинку."
-                  >
-                    <div className="settings-segmented">
-                      <button
-                        disabled={!props.playerPrefs.homeEpisodePreview}
-                        className={props.playerPrefs.homePreviewMode === "poster" ? "active" : ""}
-                        onClick={() => setPrefs({ homePreviewMode: "poster" })}
+                    <ProfileSettings
+                      profiles={props.profiles}
+                      activeProfile={props.activeProfile}
+                      onSwitchProfile={props.onSwitchProfile}
+                      onExport={props.onExport}
+                      onImport={props.onImport}
+                    />
+                    <CredentialsSettings googleDrive={googleDrive} />
+                    <OfflineSettings />
+                    <CloudSettings state={googleDrive} />
+                    {!IS_ANDROID_APP && (
+                      <WatchPartySettings
+                        playerPrefs={props.playerPrefs}
+                        updatePlayerPrefs={setPrefs}
+                      />
+                    )}
+                    {activeTab === "changelog" && (
+                      <section
+                        className="settings-group settings-changelog-group"
+                        data-settings-tab="changelog"
                       >
-                        HD-картинка
-                      </button>
-                      <button
-                        disabled={!props.playerPrefs.homeEpisodePreview}
-                        className={props.playerPrefs.homePreviewMode === "screenshots" ? "active" : ""}
-                        onClick={() => setPrefs({ homePreviewMode: "screenshots" })}
+                        <div className="settings-group-title">
+                          <b>История изменений</b>
+                          <span>Все релизы AnimeSoul, новые возможности и исправленные проблемы</span>
+                        </div>
+                        <ChangelogPanel />
+                      </section>
+                    )}
+                    {activeTab === "debug" && (
+                      <section
+                        className="settings-group settings-debug-group"
+                        data-settings-tab="debug"
                       >
-                        Кадры серии
-                      </button>
-                    </div>
-                  </Setting>
-                  <Setting
-                    title="Переход к плееру"
-                    description="При ручном выборе серии страница плавно прокручивается к плееру. Автопереключение экран не двигает."
-                    example="Нажатие на серию 8 сразу покажет плеер."
-                  >
-                    <Toggle
-                      label="Включён"
-                      value={props.playerPrefs.autoScrollPlayer}
-                      onChange={(value) => setPrefs({ autoScrollPlayer: value })}
-                    />
-                  </Setting>
-                </section>
-
-                <section className="settings-group" data-settings-tab="player">
-                  <div className="settings-group-title">
-                    <b>Плеер</b>
-                    <span>Автоматизация и расположение элементов просмотра</span>
-                  </div>
-                  <Setting
-                    title="Автоскип опенинга"
-                    description="Автоматически перематывает опенинг, когда источник передал точный таймкод. Если таймкод отсутствует или ошибочен, кнопка и автопропуск могут быть недоступны."
-                    example="Плеер перескочит с 0:45 на 2:15."
-                  >
-                    <Toggle
-                      label="Включён"
-
-                      value={props.playerPrefs.autoSkipOpening}
-                      onChange={(value) => setPrefs({ autoSkipOpening: value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Автоскип эндинга"
-                    description="Отмечает серию просмотренной и перематывает эндинг по таймкоду источника. Для серий без корректного таймкода завершение определяется по общей длительности."
-                    example="На 22:40 плеер перейдёт к концу серии."
-                  >
-                    <Toggle
-                      label="Включён"
-                      value={props.playerPrefs.autoSkipEnding}
-                      onChange={(value) => setPrefs({ autoSkipEnding: value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Автосерия"
-                    description="После завершения текущей серии автоматически открывает и запускает следующую."
-                    example="После серии 4 сразу начнётся серия 5."
-                  >
-                    <Toggle
-                      label="Включён"
-                      value={props.playerPrefs.autoNext}
-                      onChange={(value) => setPrefs({ autoNext: value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Карусель серий"
-                    description="Показывает предыдущую и следующую серии по бокам плеера для быстрого переключения."
-                    example="Нажми на правую карточку, чтобы перейти к следующей серии."
-                  >
-                    <Toggle
-                      label="Включена"
-                      value={props.playerPrefs.playerEpisodeCarousel}
-                      onChange={(value) => setPrefs({ playerEpisodeCarousel: value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Миниатюры при наведении"
-                    description="Через полсекунды показывает доступные кадры конкретной серии над её карточкой. Если API не вернул уникальные кадры этой серии, миниатюра не показывается; это предотвращает подмену кадрами другого сезона."
-                    example="Наведи курсор на серию 3, чтобы увидеть её кадры."
-                  >
-                    <Toggle
-                      label="Включены"
-                      value={props.playerPrefs.episodeHoverPreview}
-                      onChange={(value) => setPrefs({ episodeHoverPreview: value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Компактный список серий"
-                    description="Включает более плотный новый вид серий под плеером. Выбор серии, прогресс, отметка просмотра, оценки и сворачивание сезонов остаются доступны."
-                    example="Удобно на телефоне и для длинных сезонов: на экране помещается больше серий."
-                  >
-                    <Toggle
-                      label="Новый вид"
-                      value={props.playerPrefs.compactEpisodeList}
-                      onChange={(value) => setPrefs({ compactEpisodeList: value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Панель управления"
-                    description="Определяет, с какой стороны плеера располагаются озвучка, серия, источник и настройки."
-                    example="На широком мониторе удобно расположение справа."
-                  >
-                    <select
-                      value={toolbar}
-                      onChange={(event) => setToolbar(event.target.value as ToolbarPosition)}
-                    >
-                      <option value="bottom">Снизу</option>
-                      <option value="top">Сверху</option>
-                      <option value="left">Слева</option>
-                      <option value="right">Справа</option>
-                    </select>
-                  </Setting>
-                </section>
-
-                <section className="settings-group" data-settings-tab="watching">
-                  <div className="settings-group-title">
-                    <b>История</b>
-                    <span>Отдельная лента недавних просмотров</span>
-                  </div>
-                  <Setting
-                    title="Сохранять историю"
-                    description="Добавляет просмотренные серии в раздел истории. Прогресс просмотра сохраняется независимо от этой настройки."
-                    example="Можно отключить историю, не потеряв момент остановки."
-                  >
-                    <Toggle
-                      label="Включена"
-                      value={props.historyEnabled}
-                      onChange={props.onHistoryEnabledChange}
-                    />
-                  </Setting>
-                </section>
-
-                <AppearanceSettings
-                  theme={props.theme}
-                  playerPrefs={props.playerPrefs}
-                  setTheme={props.setTheme}
-                  updatePlayerPrefs={setPrefs}
-                />
-
-                <ProfileSettings
-                  profiles={props.profiles}
-                  activeProfile={props.activeProfile}
-                  onSwitchProfile={props.onSwitchProfile}
-                  onExport={props.onExport}
-                  onImport={props.onImport}
-                />
-
-                <CredentialsSettings googleDrive={googleDrive} />
-
-                <OfflineSettings />
-
-                <CloudSettings state={googleDrive} />
-
-                {!IS_ANDROID_APP && <section className="settings-group" data-settings-tab="party">
-                  <div className="settings-group-title">
-                    <b>Совместный просмотр</b>
-                    <span>Комнаты через Hamachi, Tailscale или домашнюю сеть</span>
-                  </div>
-                  <Setting
-                    title="Разрешить совместный режим"
-                    description="Добавляет в настройки плеера создание комнаты, подключение по коду и список участников. Видео загружается отдельно у каждого человека."
-                  >
-                    <Toggle
-                      label="Включён"
-                      value={props.playerPrefs.watchPartyEnabled}
-                      onChange={(value) => setPrefs({ watchPartyEnabled: value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Имя участника"
-                    description="Это имя увидят остальные люди в комнате."
-                  >
-                    <input
-                      className="settings-text-input"
-                      value={props.playerPrefs.watchPartyName}
-                      maxLength={32}
-                      onChange={(event) => setPrefs({ watchPartyName: event.target.value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Адрес комнаты"
-                    description="Хост оставляет локальный адрес. Участник вводит IP компьютера хоста в Hamachi или Tailscale и порт 3002."
-                    example="http://25.10.20.30:3002"
-                  >
-                    <input
-                      className="settings-text-input"
-                      value={props.playerPrefs.watchPartyServer}
-                      onChange={(event) => setPrefs({ watchPartyServer: event.target.value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Правило комнаты"
-                    description="Выбирается хостом. В первом режиме только хост управляет синхронизированными участниками. Во втором любой синхронизированный участник может поставить паузу, запустить, перемотать или сменить серию у всех."
-                    example="Перед началом просмотра хост выбирает: «Все следуют за хостом» или «Все управляют на равных»."
-                  >
-                    <select
-                      value={props.playerPrefs.watchPartyRoomMode}
-                      onChange={(event) =>
-                        setPrefs({
-                          watchPartyRoomMode: event.target.value as "host" | "shared",
-                        })
-                      }
-                    >
-                      <option value="host">Все следуют за хостом</option>
-                      <option value="shared">Все управляют на равных</option>
-                    </select>
-                  </Setting>
-                  <Setting
-                    title="Мой личный режим"
-                    description="Синхронизированный режим подчиняется правилу комнаты. Свободный просмотр доступен каждому участнику в любой момент и временно отделяет только его плеер от общих команд."
-                    example="При медленном интернете включи свободный режим, дождись загрузки и затем нажми «Перейти к общему таймкоду»."
-                  >
-                    <select
-                      value={props.playerPrefs.watchPartyMode}
-                      onChange={(event) =>
-                        setPrefs({
-                          watchPartyMode: event.target.value as "follow" | "free",
-                        })
-                      }
-                    >
-                      <option value="follow">Следовать за хостом</option>
-                      <option value="free">Свободный просмотр / Режим медленного интернета</option>
-                    </select>
-                  </Setting>
-                  <Setting
-                    title="Озвучка в комнате"
-                    description="Своя озвучка не меняется. Режим предложения показывает выбор при смене озвучки хостом. Полное следование переключает её автоматически, если такая озвучка доступна у участника."
-                    example="Хост выбрал AniLibria — можно переключиться одним нажатием или оставить свою озвучку."
-                  >
-                    <select
-                      value={props.playerPrefs.watchPartyDubMode}
-                      onChange={(event) =>
-                        setPrefs({
-                          watchPartyDubMode: event.target.value as "own" | "suggest" | "follow",
-                        })
-                      }
-                    >
-                      <option value="own">Своя у каждого</option>
-                      <option value="suggest">Предлагать озвучку хоста</option>
-                      <option value="follow">Следовать за озвучкой хоста</option>
-                    </select>
-                  </Setting>
-                  <Setting
-                    title="Автоматически догонять хоста"
-                    description="При расхождении больше пяти секунд плеер перематывается на позицию хоста. При выключении доступна ручная кнопка «Догнать»."
-                  >
-                    <Toggle
-                      label="Включено"
-                      value={props.playerPrefs.watchPartyAutoCatchUp}
-                      onChange={(value) => setPrefs({ watchPartyAutoCatchUp: value })}
-                    />
-                  </Setting>
-                  <Setting
-                    title="Положение участников"
-                    description="Определяет, где рядом с плеером показывается состояние комнаты."
-                  >
-                    <select
-                      value={props.playerPrefs.watchPartyPanelPosition}
-                      onChange={(event) =>
-                        setPrefs({
-                          watchPartyPanelPosition: event.target.value as "top" | "bottom" | "overlay",
-                        })
-                      }
-                    >
-                      <option value="top">Над плеером</option>
-                      <option value="bottom">Под плеером</option>
-                      <option value="overlay">Поверх плеера</option>
-                    </select>
-                  </Setting>
-                  <details className="watch-party-guide">
-                    <summary>
-                      <span>
-                        <b>Как запустить совместный просмотр</b>
-                        <small>Инструкция для хоста и участников · решение проблем</small>
-                      </span>
-                      <i>⌄</i>
-                    </summary>
-                    <div className="watch-party-guide-content">
-                      <section>
-                        <h3>Что понадобится</h3>
-                        <ol>
-                          <li>У каждого участника должна быть установлена и запущена AnimeSoul.</li>
-                          <li>
-                            Все должны находиться в одной виртуальной сети либо в одной домашней сети.
-                            Скачать: <a href="https://vpn.net/" target="_blank" rel="noreferrer">Hamachi</a> или{" "}
-                            <a href="https://tailscale.com/download/windows" target="_blank" rel="noreferrer">
-                              Tailscale
-                            </a>
-                            .
-                          </li>
-                          <li>
-                            На компьютере хоста локальный сервер AnimeSoul должен быть доступен на порту{" "}
-                            <code>3002</code>.
-                          </li>
-                          <li>
-                            Одинаковые файлы сохранений не нужны: видео и прогресс у каждого загружаются
-                            независимо.
-                          </li>
-                        </ol>
+                        <div className="settings-group-title">
+                          <b>Журнал отладки</b>
+                          <span>Все важные действия, статусы и ошибки текущего устройства</span>
+                        </div>
+                        <DebugPanel />
                       </section>
-                      <section>
-                        <h3>Хост: создание комнаты</h3>
-                        <ol>
-                          <li>Запусти AnimeSoul через штатный BAT-файл или десктопное приложение.</li>
-                          <li>
-                            Оставь адрес комнаты <code>http://127.0.0.1:3002</code>.
-                          </li>
-                          <li>Открой нужное аниме, включи «Совместный режим» в настройках плеера.</li>
-                          <li>Выбери правило комнаты: управление только хостом или равноправное управление.</li>
-                          <li>Нажми «Создать комнату» и отправь появившийся код друзьям.</li>
-                          <li>
-                            При необходимости роль хоста можно передать любому подключённому участнику прямо
-                            в списке комнаты.
-                          </li>
-                        </ol>
-                      </section>
-                      <section>
-                        <h3>Участник: подключение</h3>
-                        <ol>
-                          <li>
-                            Узнай виртуальный IP хоста в Hamachi/Tailscale, например <code>25.10.20.30</code>.
-                          </li>
-                          <li>
-                            В поле «Адрес комнаты» укажи <code>http://25.10.20.30:3002</code>.
-                          </li>
-                          <li>Открой то же аниме, включи совместный режим и введи полученный код комнаты.</li>
-                          <li>
-                            Выбери личный режим. «Свободный просмотр / Режим медленного интернета» доступен
-                            всегда, независимо от правила комнаты.
-                          </li>
-                        </ol>
-                      </section>
-                      <section>
-                        <h3>Как работают режимы</h3>
-                        <dl>
-                          <div>
-                            <dt>Все следуют за хостом</dt>
-                            <dd>
-                              Только хост управляет общим запуском, паузой, серией и таймкодом. Остальные
-                              синхронизированные участники повторяют его действия.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Все управляют на равных</dt>
-                            <dd>
-                              Любой участник в синхронизированном режиме может поставить видео на паузу,
-                              продолжить, перемотать или выбрать серию — команда применяется у всех
-                              синхронизированных участников.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Свободный просмотр / медленный интернет</dt>
-                            <dd>
-                              Это не правило комнаты, а личный режим. Он доступен всем, включая хоста, в любой
-                              момент. Общие команды не двигают твой плеер, а твои действия не мешают остальным.
-                              Таймкоды участников остаются видны, вернуться можно кнопкой «Перейти к общему
-                              таймкоду».
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Передача хоста</dt>
-                            <dd>
-                              Текущий хост нажимает «Передать хоста» рядом с именем участника. Новый хост сразу
-                              получает право менять правило комнаты; при выходе хоста роль автоматически
-                              передаётся одному из оставшихся участников.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Своя озвучка</dt>
-                            <dd>
-                              У каждого остаётся выбранная им озвучка. Серия синхронизируется, но голосовая
-                              дорожка не меняется.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Предлагать озвучку хоста</dt>
-                            <dd>
-                              При смене озвучки появляется предложение «Переключиться» или «Оставить мою». Без
-                              подтверждения AnimeSoul ничего не меняет.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Следовать за озвучкой хоста</dt>
-                            <dd>
-                              Озвучка меняется автоматически, если она доступна для этой серии. При отсутствии
-                              AnimeSoul оставляет доступную локальную озвучку и показывает предупреждение.
-                            </dd>
-                          </div>
-                        </dl>
-                      </section>
-                      <section>
-                        <h3>Совместимость видеоплееров</h3>
-                        <dl>
-                          <div>
-                            <dt>Kodik</dt>
-                            <dd>
-                              Поддерживает полную синхронизацию AnimeSoul: серия, озвучка, запуск, пауза,
-                              перемотка и точный таймкод.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Другие источники</dt>
-                            <dd>
-                              Выбор серии и озвучки синхронизируется нашей оболочкой. Пауза, запуск, перемотка
-                              и точный таймкод работают только тогда, когда встроенный плеер отдаёт совместимые
-                              события управления.
-
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Почему у участников может быть разный результат</dt>
-                            <dd>
-                              Набор озвучек и источников иногда отличается между сериями. Для предсказуемого
-                              совместного просмотра всем участникам рекомендуется выбрать Kodik.
-                            </dd>
-                          </div>
-                        </dl>
-                      </section>
-                      <section className="watch-party-troubleshooting">
-                        <h3>Проблемы и решения</h3>
-                        <dl>
-                          <div>
-                            <dt>«Сервер комнаты недоступен» или Not found</dt>
-                            <dd>
-                              Полностью перезапусти AnimeSoul. Убедись, что адрес заканчивается на{" "}
-                              <code>:3002</code>, а не на порт сайта <code>:3001</code>.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Друг не подключается</dt>
-                            <dd>
-                              Проверь, что вы видите друг друга в Hamachi/Tailscale. Разреши Node.js/AnimeSoul в
-                              брандмауэре Windows для частных сетей и открой TCP-порт 3002.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Высокий пинг</dt>
-                            <dd>
-                              Переключись в свободный режим. Пинг комнаты показан в верхнем баре; он относится
-                              к командам синхронизации, а не к скорости загрузки видео.
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Видео у друга загружается медленнее</dt>
-                            <dd>
-                              Это не останавливает остальных: каждый получает видео от источника отдельно.
-                              </dd>
-                          </div>
-                        </dl>
-                      </section>
-                    </div>
-                  </details>
-                </section>}
-                {activeTab === "changelog" && <section className="settings-group settings-changelog-group" data-settings-tab="changelog">
-                  <div className="settings-group-title">
-                    <b>История изменений</b>
-                    <span>Все релизы AnimeSoul, новые возможности и исправленные проблемы</span>
+                    )}
                   </div>
-                  <ChangelogPanel />
-                </section>}
-                {activeTab === "debug" && <section className="settings-group settings-debug-group" data-settings-tab="debug">
-                  <div className="settings-group-title">
-                    <b>Журнал отладки</b>
-                    <span>Все важные действия, статусы и ошибки текущего устройства</span>
-                  </div>
-                  <DebugPanel />
-                </section>}
-                  </div>
-                  </SettingsSearchContext.Provider>
-                </main>
-              </div>
-            </section>
-          </div>,
-          document.body
-        )}
+                </SettingsSearchContext.Provider>
+              </main>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
 
       <GoogleDriveInitialSyncModal
         open={initialChoiceModal}
         syncing={syncing}
         onClose={() => setInitialChoiceModal(false)}
-        onSync={(mode) => void handleSyncNow(mode, true)}
+        onSync={mode => void handleSyncNow(mode, true)}
       />
     </>
   );
