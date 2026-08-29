@@ -15,8 +15,6 @@ import httpx
 
 from .gdrive_merge import (
     _document_timestamp,
-    merge_profile,
-    merge_snapshot,
     merge_storage_documents,
 )
 from .storage import validate_storage_document

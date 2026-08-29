@@ -527,7 +527,7 @@ class OfflineLibraryTests(unittest.TestCase):
             service._download_artwork = artwork  # type: ignore[method-assign]
             service._stream_to_file = stream  # type: ignore[method-assign]
 
-            job = await service.enqueue(request_for())
+            await service.enqueue(request_for())
             assert service._worker is not None
             await asyncio.wait_for(service._worker, 1)
             self.assertEqual(service.jobs()[0]["status"], "completed")

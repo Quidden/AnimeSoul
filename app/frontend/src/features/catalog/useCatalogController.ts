@@ -140,7 +140,7 @@ export function useCatalogController({
             );
 
             let cursor = offset;
-            let fresh: Anime[] = [];
+            const fresh: Anime[] = [];
             let addedCards = 0;
 
             for (let attempt = 0; attempt < 5 && addedCards < 12; attempt += 1) {

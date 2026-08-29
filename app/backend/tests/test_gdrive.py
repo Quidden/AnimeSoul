@@ -10,11 +10,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import httpx
 from fastapi import HTTPException
 
-from backend.app.services.gdrive import (
-    GoogleDriveService,
-    merge_storage_documents,
-    merge_snapshot,
-)
+from backend.app.services.gdrive import GoogleDriveService
+from backend.app.services.gdrive_merge import merge_snapshot, merge_storage_documents
 from backend.app.api.gdrive import _verify_google_credentials
 
 

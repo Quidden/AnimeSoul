@@ -400,7 +400,6 @@ export function Header({
       const mode = read<"instant" | "interval" | "manual">("animesoul:gdrive-auto-sync-mode", "instant");
       if (mode !== "interval") return;
 
-      const minutes = read("animesoul:gdrive-auto-sync-interval", 15);
       const folderMode = read("animesoul:gdrive-folder-mode", "visible");
       const preferWatched = read("animesoul:gdrive-prefer-watched", true);
 

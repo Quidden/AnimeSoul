@@ -23,38 +23,15 @@ import { useProfileStorage } from "./features/storage/useProfileStorage";
 import { useApiActivity } from "./hooks/useApiActivity";
 import { useEpisodeTracking } from "./hooks/useEpisodeTracking";
 import { useWatchPartyPresence } from "./hooks/useWatchParty";
-import type {
-    Anime,
-    Folder,
-    ScheduleEntry,
-    SeasonGroup,
-    Tracker,
-} from "./lib/types";
+import type { Anime, Folder } from "./lib/types";
 import { STORAGE_KEYS as K } from "./lib/settings";
 import { readLocal as read, writeLocal as write } from "./lib/storage";
 import {
     animeSearchScore,
-    byViewingOrder,
-    durationRange,
-    episodeDuration,
-    formatCalendarDate,
-    formatDuration,
-    formatLongDuration,
-    formatTime,
-    isMovieAnime,
-    isOvaAnime,
-    latestResumePoint,
-    partNumber,
     reorder,
-    shortEntryTitle,
-    watchTimeProgress,
 } from "./lib/anime";
 import { compareTrackedByRelease } from "./lib/tracking";
-import {
-    StatisticsPage,
-    type AnimeStatistics,
-    type StatisticsActivityEntry,
-} from "./pages/StatisticsPage";
+import { StatisticsPage } from "./pages/StatisticsPage";
 import { FolderView } from "./pages/FolderView";
 import { CatalogPage } from "./pages/CatalogPage";
 import {
@@ -180,7 +157,7 @@ export default function Home() {
         personalRatings: ratings,
     });
 
-    const [libraryOpen, setLibraryOpen] = useState(false);
+    const [libraryOpen] = useState(false);
     const [folderPicker, setFolderPicker] = useState<Anime | null>(null);
     const [openedFolder, setOpenedFolder] = useState<Folder | null>(null);
     const [collectionOverview, setCollectionOverview] =

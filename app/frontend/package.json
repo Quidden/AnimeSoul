@@ -7,8 +7,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "format:css": "node ../tools/format-css.mjs src/styles/*.css",
+    "lint": "eslint src tests vite.config.ts --max-warnings 61",
+    "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/critical-logic.test.ts"
+    "test": "node --experimental-strip-types --test tests/critical-logic.test.ts",
+    "check": "npm run lint && npm run typecheck:strict && npm test && npm run build"
   },
   "dependencies": {
     "hls.js": "^1.7.1",
@@ -17,10 +20,16 @@
     "source-map-js": "^1.2.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.5",
+    "globals": "^17.11.0",
     "typescript": "5.9.3",
-    "vite": "8.0.13"
+    "typescript-eslint": "^8.68.0",
+    "vite": "^8.2.2"
   }
 }

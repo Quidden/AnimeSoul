@@ -49,7 +49,7 @@ export function PartyNow({
 
 /** Full-viewport continuation banner. Media is decorative; the whole hero resumes playback. */
 export function HomeHero({ model, actions }: HomePageProps) {
-  const { resume, playerPrefs } = model;
+  const { resume } = model;
   const { anime, state, point } = resume;
   const hasResume = Boolean(anime && state);
   // Storage can be ready before the matching catalogue card has arrived.

@@ -55,7 +55,7 @@ Backend:
 ```powershell
 cd app
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
 .\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
 ```
 
@@ -85,11 +85,14 @@ npm --prefix frontend run build
 
 ```powershell
 cd app
+.\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
-npm --prefix frontend run typecheck
-npm --prefix frontend test
-npm --prefix frontend run build
+npm --prefix frontend run check
 ```
+
+`npm --prefix frontend run check` последовательно запускает ESLint, строгий TypeScript typecheck,
+тесты критической логики и production-сборку. Те же проверки выполняет GitHub
+Actions для каждого push и pull request.
 
 ## Документация для разработчика
 

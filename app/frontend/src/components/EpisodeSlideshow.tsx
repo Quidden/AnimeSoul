@@ -29,7 +29,6 @@ export function EpisodeSlideshow({
   images,
   fallback,
   iframeUrl,
-  duration = 1440,
   label,
   sublabel,
   onClick,

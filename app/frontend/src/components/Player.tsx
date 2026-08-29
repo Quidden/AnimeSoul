@@ -1,10 +1,10 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Anime, AnimeProgress, Folder, PartyPlayback, PlayerPrefs, ScheduleEntry, SeasonGroup, ToolbarPosition, Tracker, Video } from "../lib/types";
+import type { Anime, AnimeProgress, PartyPlayback, PlayerPrefs, ScheduleEntry, SeasonGroup, ToolbarPosition, Video } from "../lib/types";
 import { DEFAULT_PLAYER_PREFS, STORAGE_KEYS as K } from "../lib/settings";
 import { readLocal as read, writeLocal as write } from "../lib/storage";
-import { byViewingOrder, episodeDuration, episodeResumePosition, fetchFamily, formatCalendarDate, formatDuration, formatTime, franchiseName, isEpisodeWatched, isExtraAnime, isMovieAnime, isOvaAnime, latestResumePoint, releaseStatus, shortEntryTitle, stripPart, toggleEpisodeWatched } from "../lib/anime";
+import { byViewingOrder, episodeDuration, episodeResumePosition, fetchFamily, formatCalendarDate, formatDuration, formatTime, franchiseName, isEpisodeWatched, isExtraAnime, isMovieAnime, isOvaAnime, latestResumePoint, shortEntryTitle, stripPart, toggleEpisodeWatched } from "../lib/anime";
 import { EpisodeSlideshow, episodePreviewImages } from "./EpisodeSlideshow";
 import { FolderPicker } from "./FolderPicker";
 import { useWatchParty, WATCH_PARTY_SESSION_KEY } from "../hooks/useWatchParty";
@@ -100,7 +100,7 @@ function downloadJobText(job: DownloadJob) {
   return `Ошибка загрузки: ${job.error || "не удалось получить серию"}`;
 }
 
-export function Watch({ header, anime, resumeRequested, newEpisodeRequested, favorite, onFavorite, onBack, onLibrary, onGenre, saved, ratings, communityRating, onRatingChange, onProgress, onPlayerPrefsChange, onFolders, tracker, onTrack, onUntrack, folderPicker, folders, toggleFolder, createFolder, closePicker }: WatchProps) {
+export function Watch({ header, anime, resumeRequested, newEpisodeRequested, favorite, onFavorite, onBack, onGenre, saved, ratings, communityRating, onRatingChange, onProgress, onPlayerPrefsChange, onFolders, tracker, onTrack, onUntrack, folderPicker, folders, toggleFolder, createFolder, closePicker }: WatchProps) {
   const storedPlayerPrefs = read<Partial<PlayerPrefs>>(K.playerPrefs, {});
   const legacyPreferredDubbing = storedPlayerPrefs.dubbingPreferenceVersion === 2
     ? ""
@@ -1187,7 +1187,40 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       command("change_episode", { episode: /^\d+$/.test(originEpisode) ? Number(originEpisode) : originEpisode });
     }
   }, [iframeSource, current?.video_id, useAnimeSoulPlayer]);
-  const uniqueFranchiseVideos = Object.entries(seasonVideos).flatMap(([season, list]) => [...new Map(list.map(v => [`${season}:${v.number}`, v])).values()]), totalAcrossSeasons = uniqueFranchiseVideos.length, totalDurationAcrossSeasons = uniqueFranchiseVideos.reduce((sum, v) => sum + (v.duration ?? 0), 0), orderedEpisodeKeys = displaySeasons.flatMap(group => Array.from(new Set((seasonVideos[group.number] ?? []).filter(video => !tracker?.dubs?.length || tracker.dubs.includes(video.data.dubbing)).map(video => video.number))).sort((a, b) => +a - +b).map(number => `${group.number}:${number}`)), pendingDisplayKeys = (tracker?.pendingEpisodeKeys ?? []).flatMap(rawKey => { for (const [season, list] of Object.entries(seasonVideos)) { const match = list.find(video => `${video.originAnimeId}:${video.originNumber}` === rawKey && (!tracker?.dubs?.length || tracker.dubs.includes(video.data.dubbing))); if (match) return [`${season}:${match.number}`] ;} return [] ;}), datedEpisodeKeys = [...new Map(Object.entries(seasonVideos).flatMap(([season, list]) => list.filter(video => !tracker?.dubs?.length || tracker.dubs.includes(video.data.dubbing)).map(video => [`${video.originAnimeId}:${video.originNumber}`, { displayKey: `${season}:${video.number}`, date: video.date ?? 0 }] as const))).values()].sort((a, b) => a.date - b.date).map(item => item.displayKey), resolvedNewEpisodeKeys = pendingDisplayKeys.length ? pendingDisplayKeys : (tracker?.newEpisodes ? datedEpisodeKeys.slice(-tracker.newEpisodes) : []), newEpisodeKeys = new Set(resolvedNewEpisodeKeys);
+  const uniqueFranchiseVideos = Object.entries(seasonVideos).flatMap(([season, list]) =>
+    [...new Map(list.map(video => [`${season}:${video.number}`, video])).values()],
+  );
+  const totalAcrossSeasons = uniqueFranchiseVideos.length;
+  const totalDurationAcrossSeasons = uniqueFranchiseVideos.reduce(
+    (sum, video) => sum + (video.duration ?? 0),
+    0,
+  );
+  const pendingDisplayKeys = (tracker?.pendingEpisodeKeys ?? []).flatMap(rawKey => {
+    for (const [season, list] of Object.entries(seasonVideos)) {
+      const match = list.find(video =>
+        `${video.originAnimeId}:${video.originNumber}` === rawKey
+        && (!tracker?.dubs?.length || tracker.dubs.includes(video.data.dubbing)),
+      );
+      if (match) return [`${season}:${match.number}`];
+    }
+    return [];
+  });
+  const datedEpisodeKeys = [...new Map(
+    Object.entries(seasonVideos).flatMap(([season, list]) =>
+      list
+        .filter(video => !tracker?.dubs?.length || tracker.dubs.includes(video.data.dubbing))
+        .map(video => [
+          `${video.originAnimeId}:${video.originNumber}`,
+          { displayKey: `${season}:${video.number}`, date: video.date ?? 0 },
+        ] as const),
+    ),
+  ).values()]
+    .sort((a, b) => a.date - b.date)
+    .map(item => item.displayKey);
+  const resolvedNewEpisodeKeys = pendingDisplayKeys.length
+    ? pendingDisplayKeys
+    : (tracker?.newEpisodes ? datedEpisodeKeys.slice(-tracker.newEpisodes) : []);
+  const newEpisodeKeys = new Set(resolvedNewEpisodeKeys);
   useEffect(() => {
     if (!newEpisodeRequested || newEpisodeOpened.current || !tracker?.newEpisodes || !resolvedNewEpisodeKeys.length) return;
     const target = resolvedNewEpisodeKeys[0];

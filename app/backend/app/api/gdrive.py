@@ -228,14 +228,14 @@ async def oauth2callback(request: Request, code: str = Query(...), state: str = 
         # Store the one-time code now and exchange it after AnimeSoul returns
         # to the foreground. This callback therefore performs no remote I/O.
         gdrive_service.save_pending_oauth(code, redirect_uri)
-        return f"""
+        return """
         <!DOCTYPE html>
         <html lang="ru">
         <head>
             <meta charset="utf-8">
             <title>AnimeSoul — завершаем подключение</title>
             <style>
-                body {{
+                body {
                     font-family: system-ui, -apple-system, sans-serif;
                     background: #0d0b14;
                     color: #e2e8f0;
@@ -244,8 +244,8 @@ async def oauth2callback(request: Request, code: str = Query(...), state: str = 
                     justify-content: center;
                     height: 100vh;
                     margin: 0;
-                }}
-                .card {{
+                }
+                .card {
                     background: #181524;
                     border: 1px solid #2e2842;
                     border-radius: 16px;
@@ -253,10 +253,10 @@ async def oauth2callback(request: Request, code: str = Query(...), state: str = 
                     text-align: center;
                     max-width: 400px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                }}
-                h2 {{ color: #a78bfa; margin-top: 0; }}
-                p {{ color: #94a3b8; font-size: 14px; line-height: 1.5; }}
-                a {{ display:inline-block;margin-top:14px;padding:12px 18px;border-radius:12px;background:#8f6df2;color:white;text-decoration:none;font-weight:700; }}
+                }
+                h2 { color: #a78bfa; margin-top: 0; }
+                p { color: #94a3b8; font-size: 14px; line-height: 1.5; }
+                a { display:inline-block;margin-top:14px;padding:12px 18px;border-radius:12px;background:#8f6df2;color:white;text-decoration:none;font-weight:700; }
             </style>
         </head>
         <body>
@@ -266,7 +266,7 @@ async def oauth2callback(request: Request, code: str = Query(...), state: str = 
                 <a href="animesoul://oauth-complete">Вернуться в AnimeSoul</a>
             </div>
             <script>
-                setTimeout(() => {{ window.location.href = "animesoul://oauth-complete"; }}, 700);
+                setTimeout(() => { window.location.href = "animesoul://oauth-complete"; }, 700);
             </script>
         </body>
         </html>
