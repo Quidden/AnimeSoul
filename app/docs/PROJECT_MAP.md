@@ -65,6 +65,8 @@
 | `services/gdrive.py` | `GoogleDriveService`: credentials/tokens, OAuth, Drive folder/file I/O, coalesced autosave |
 | `services/gdrive_merge.py` | `merge_storage_documents`, `merge_profile`, `merge_snapshot`, episode conflict policy |
 | `services/community_ratings.py` | `CommunityRatingStore`, SQLite WAL, replace/delete vote и aggregate |
+| `services/kodik_helpers.py` | чистая валидация ссылок Kodik, подписи private API и нормализация sources/subtitles/skip-маркеров |
+| `services/offline_library.py` | очередь загрузок, локальный индекс, Kodik resolver, HLS/MP4 transfer и Android MediaStore integration |
 
 ### Backend tests
 
@@ -76,6 +78,7 @@
 | `backend/tests/test_community_ratings.py` | SQLite aggregate, валидация и HTTP-контракт |
 | `backend/tests/test_run_startup.py` | выбор занятого/свободного порта и startup branches |
 | `backend/tests/test_runtime_instance.py` | runtime state, instance ownership и атомарность |
+| `backend/tests/test_offline_library.py` | Kodik helper-контракт, очередь/отмена загрузок, локальный индекс, HLS и Android MediaStore |
 
 ## Frontend bootstrap
 
