@@ -35,13 +35,20 @@ import {
     buildProfileSnapshot,
     buildStorageDocument,
     resolveActiveProfileDocument,
-    upsertProfile,
 } from "./profileDocument";
+import {useProfileAutosave} from "./useProfileAutosave";
 
 type ProfileStorageOptions = {
     getCatalog: () => Anime[];
     resolveAnimeTitle: (animeId: number) => string | undefined;
 };
+
+type ApplyStorageProfile = (
+    document: StorageDocument,
+    profile: ConfigProfile,
+    snapshot: ConfigSnapshot,
+    suppressAutosave?: boolean,
+) => void;
 
 /**
  * Owns every persisted user preference and profile operation.
@@ -80,6 +87,7 @@ export function useProfileStorage({
     const storageEnvelopeRef = useRef<Partial<StorageDocument>>({});
     const profilesRef = useRef<ConfigProfile[]>([]);
     const skipNextAutosaveRef = useRef(true);
+    const applyStorageProfileRef = useRef<ApplyStorageProfile>(() => undefined);
     usePublishedSaveStatus(saveStatus);
 
     useEffect(() => {
@@ -162,7 +170,7 @@ export function useProfileStorage({
                     }
                     const resolved = resolveActiveProfileDocument(payload);
                     if (!cancelled) {
-                        applyStorageProfile(
+                        applyStorageProfileRef.current(
                             resolved.document,
                             resolved.profile,
                             resolved.snapshot,
@@ -242,93 +250,29 @@ export function useProfileStorage({
         }));
     }, []);
 
-    useEffect(() => {
-        if (!storageReady) return;
-        if (skipNextAutosaveRef.current) {
-            skipNextAutosaveRef.current = false;
-            return;
-        }
-        setSaveStatus({ state: "saving" });
-        const saveController = new AbortController();
-
-        const timer = window.setTimeout(async () => {
-            const currentProfiles = profilesRef.current;
-            const existing = currentProfiles.find(profile => profile.id === activeProfile);
-            const name = existing?.name ?? "Основной";
-            const snapshot = makeSnapshot(name);
-            const nextProfiles = upsertProfile(
-                currentProfiles,
-                activeProfile,
-                name,
-                snapshot,
-            );
-            const document = makeDocument(nextProfiles);
-            write(K.profiles, nextProfiles);
-            // Carry the just-written snapshot (including per-field revisions)
-            // into the next edit without causing an autosave dependency loop.
-            profilesRef.current = nextProfiles;
-
-            let lastError: unknown;
-            for (const delay of [0, 500, 1_500]) {
-                if (delay) {
-                    try {
-                        await new Promise<void>((resolve, reject) => {
-                            const onAbort = () => {
-                                window.clearTimeout(retryTimer);
-                                reject(saveController.signal.reason);
-                            };
-                            const retryTimer = window.setTimeout(() => {
-                                saveController.signal.removeEventListener("abort", onAbort);
-                                resolve();
-                            }, delay);
-                            saveController.signal.addEventListener("abort", onAbort, { once: true });
-                        });
-                    } catch {
-                        return;
-                    }
-                }
-                if (saveController.signal.aborted) return;
-                try {
-                    const response = await saveStorageDocument(
-                        document,
-                        saveController.signal,
-                    );
-                    if (!response.ok) {
-                        throw Error(`Storage unavailable (HTTP ${response.status})`);
-                    }
-                    setSaveStatus({ state: "saved", at: Date.now() });
-                    return;
-                } catch (error) {
-                    if (saveController.signal.aborted) return;
-                    lastError = error;
-                }
-            }
-            console.warn("Не удалось сохранить данные на диск", lastError);
-            setSaveStatus({ state: "error" });
-        }, 400);
-
-        return () => {
-            window.clearTimeout(timer);
-            saveController.abort();
-        };
-    }, [
-        storageReady,
+    useProfileAutosave({
+        activeProfile,
         favorites,
         folders,
-        progress,
-        ratings,
-        tracked,
-        theme,
-        playerPrefs,
         historyClearedAt,
         historyEnabled,
-        libraryExpanded,
-        watchingExpanded,
         historyExpanded,
-        watchingHidden,
-        activeProfile,
+        libraryExpanded,
+        makeDocument,
+        makeSnapshot,
+        playerPrefs,
         profiles,
-    ]);
+        profilesRef,
+        progress,
+        ratings,
+        setSaveStatus,
+        skipNextAutosaveRef,
+        storageReady,
+        theme,
+        tracked,
+        watchingExpanded,
+        watchingHidden,
+    });
 
     function createDocumentFromBrowserBackup(): StorageDocument {
         const localSnapshot = migrateSnapshot({
@@ -478,6 +422,7 @@ export function useProfileStorage({
         write(K.profiles, document.profiles);
         localStorage.setItem(K.activeProfile, profile.id);
     }
+    applyStorageProfileRef.current = applyStorageProfile;
 
     async function reloadStorage() {
         try {

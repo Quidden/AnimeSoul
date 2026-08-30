@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "format:css": "node ../tools/format-css.mjs src/styles/*.css",
-    "lint": "eslint src tests vite.config.ts --max-warnings 50",
+    "lint": "eslint src tests vite.config.ts --max-warnings 48",
     "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/critical-logic.test.ts",

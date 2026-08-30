@@ -135,7 +135,8 @@
 | Путь | Назначение |
 | --- | --- |
 | `features/storage/profileDocument.ts` | чистая сборка/разрешение `StorageDocument` и сохранение неизвестных полей |
-| `features/storage/useProfileStorage.ts` | startup hydrate, localStorage mirror, debounce-save, import/export/switch profile |
+| `features/storage/useProfileStorage.ts` | состояние профиля, startup hydrate, localStorage mirror, import/export/switch profile |
+| `features/storage/useProfileAutosave.ts` | debounce, retry и abort lifecycle записи активного профиля в файловое хранилище |
 | `features/settings/settingsCatalog.ts` | вкладки и поисковые термины настроек |
 | `features/settings/Setting.tsx` | единая строка настройки и фильтрация по поиску |
 | `features/settings/AppearanceSettings.tsx` | темы, цвета и CSS-масштабы |
