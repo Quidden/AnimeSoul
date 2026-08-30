@@ -66,7 +66,8 @@
 | `services/gdrive_merge.py` | `merge_storage_documents`, `merge_profile`, `merge_snapshot`, episode conflict policy |
 | `services/community_ratings.py` | `CommunityRatingStore`, SQLite WAL, replace/delete vote и aggregate |
 | `services/kodik_helpers.py` | чистая валидация ссылок Kodik, подписи private API и нормализация sources/subtitles/skip-маркеров |
-| `services/offline_library.py` | очередь загрузок, локальный индекс, Kodik resolver, HLS/MP4 transfer и Android MediaStore integration |
+| `services/kodik_resolver.py` | проверка ключей и подписанный клиент Kodik private API для playback/download sources |
+| `services/offline_library.py` | очередь загрузок, локальный индекс, HLS/MP4 transfer и Android MediaStore integration |
 
 ### Backend tests
 
