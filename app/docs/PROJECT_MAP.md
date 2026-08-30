@@ -165,6 +165,7 @@
 | `features/header/useHeaderCloudSync.ts` | polling, lifecycle merge, interval sync и presentation Google Drive в header |
 | `components/Player.tsx` | выбор direct/iframe-плеера, сезоны, sources, progress, Kodik messages и Watch Party |
 | `features/player/AnimeSoulPlayer.tsx` | собственные HLS controls, качество, субтитры, continuity и skip-маркеры |
+| `features/player/AnimeSoulPlayerMenus.tsx` | панель настроек и быстрый выбор сезона/серии собственного плеера |
 | `components/SettingsCenter.tsx` | modal shell, вкладки, поиск и orchestration настроек |
 | `components/AnimeCard.tsx` | карточка каталога и progress bar |
 | `components/RatingBoard.tsx` | сводка источников рейтинга |

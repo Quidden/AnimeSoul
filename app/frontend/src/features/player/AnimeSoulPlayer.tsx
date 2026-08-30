@@ -23,33 +23,15 @@ import {
   type KodikStreamInfo,
   type KodikStreamRequest,
 } from "../../lib/kodikStream";
+import {
+  PlayerSettingsPanel,
+  PlayerTopNavigation,
+  type PlayerMenu,
+  type VideoFit,
+} from "./AnimeSoulPlayerMenus";
 
 type SkipSegment = { time: number; length: number };
 type HlsSubtitleOption = { index: number; label: string; language: string };
-type PlayerMenuOption = { value: string; label: string; disabled?: boolean; warning?: string };
-type BurnedSubtitleOption = { value: string; label: string; request: KodikStreamRequest };
-type VideoFit = "contain" | "cover" | "ambient";
-type PlayerMenu = {
-  dubbings: PlayerMenuOption[];
-  dubbing: string;
-  onDubbingChange: (value: string) => void;
-  dubbingFavorite: boolean;
-  onDubbingFavoriteToggle: () => void;
-  dubbingGloballyPreferred: boolean;
-  onDubbingGloballyPreferredToggle: () => void;
-  seasons: PlayerMenuOption[];
-  season: string;
-  onSeasonChange: (value: string) => void;
-  episodes: PlayerMenuOption[];
-  episode: string;
-  onEpisodeChange: (value: string) => void;
-  sources: PlayerMenuOption[];
-  source: string;
-  onSourceChange: (value: string) => void;
-  subtitles: BurnedSubtitleOption[];
-  externalToolbarVisible: boolean;
-  onExternalToolbarVisibleChange: (value: boolean) => void;
-};
 
 type AnimeSoulPlayerProps = {
   request: KodikStreamRequest;
@@ -1117,69 +1099,23 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     typeof document !== "undefined" && document.pictureInPictureEnabled
   );
   const settingsPanel = (
-    <aside className="animesoul-player-settings" aria-label="Настройки плеера" onClick={(event: MouseEvent) => event.stopPropagation()}>
-      <header>
-        <div><strong>Настройки</strong><span>{seasonLabel} · {episodeLabel}</span></div>
-        <button type="button" aria-label="Закрыть настройки" onClick={() => setSettingsOpen(false)}>×</button>
-      </header>
-      <div className="animesoul-player-settings-content">
-        <label>
-          <span>Озвучка</span>
-          <select value={menu.dubbing} onChange={event => menu.onDubbingChange(event.target.value)}>
-            {menu.dubbings.map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
-          </select>
-        </label>
-        <div className="animesoul-player-dubbing-actions">
-          <button type="button" className={menu.dubbingFavorite ? "active" : ""} aria-pressed={menu.dubbingFavorite} onClick={menu.onDubbingFavoriteToggle}>★ <span>В избранном</span></button>
-          <button type="button" className={menu.dubbingGloballyPreferred ? "active title" : ""} aria-pressed={menu.dubbingGloballyPreferred} onClick={menu.onDubbingGloballyPreferredToggle}>♥ <span>Любимая везде</span></button>
-        </div>
-        {activeDubbingOption?.warning && <div className="animesoul-player-duration-warning">⚠ {activeDubbingOption.warning}</div>}
-        <label>
-          <span>Сезон</span>
-          <select value={menu.season} onChange={event => menu.onSeasonChange(event.target.value)}>
-            {menu.seasons.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Серия</span>
-          <select value={menu.episode} onChange={event => menu.onEpisodeChange(event.target.value)}>
-            {menu.episodes.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Источник</span>
-          <select value={menu.source} onChange={event => menu.onSourceChange(event.target.value)}>
-            {menu.sources.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        <label className="animesoul-player-fit-control">
-          <span>Отображение видео</span>
-          <select
-            value={videoFit}
-            onChange={event => {
-              const next: VideoFit = event.target.value === "cover"
-                ? "cover"
-                : event.target.value === "ambient" ? "ambient" : "contain";
-              setVideoFit(next);
-              window.localStorage.setItem("animesoul:video-fit", next);
-            }}
-          >
-            <option value="cover">Заполнить экран</option>
-            <option value="contain">Показывать целиком</option>
-            <option value="ambient">Погружение · динамический фон</option>
-          </select>
-        </label>
-        <div className="animesoul-player-stream-state">
-          <span>{localPlayback ? "Источник" : "Поток"}</span>
-          <strong>{localPlayback ? `Локальный файл · ${activeQuality || quality}p` : `${activeQuality || quality}p${activeBitrate ? ` · ${activeBitrate}` : ""}`}</strong>
-        </div>
-        <label className="animesoul-player-toolbar-toggle">
-          <input type="checkbox" checked={menu.externalToolbarVisible} onChange={event => menu.onExternalToolbarVisibleChange(event.target.checked)} />
-          <span>Показывать внешнюю панель</span>
-        </label>
-        {onFallback && <button type="button" className="animesoul-player-kodik-fallback" onClick={onFallback}>Открыть обычный плеер Kodik</button>}
-      </div>
-    </aside>
+    <PlayerSettingsPanel
+      activeBitrate={activeBitrate}
+      activeDubbingOption={activeDubbingOption}
+      activeQuality={activeQuality}
+      episodeLabel={episodeLabel}
+      localPlayback={localPlayback}
+      menu={menu}
+      onClose={() => setSettingsOpen(false)}
+      onFallback={onFallback}
+      onVideoFitChange={next => {
+        setVideoFit(next);
+        window.localStorage.setItem("animesoul:video-fit", next);
+      }}
+      quality={quality}
+      seasonLabel={seasonLabel}
+      videoFit={videoFit}
+    />
   );
 
   return (
@@ -1337,47 +1273,19 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         </div>
       )}
 
-      <div className="animesoul-player-top-navigation" onClick={(event: MouseEvent) => event.stopPropagation()}>
-        <button
-          type="button"
-          className="animesoul-player-context"
-          aria-label="Выбрать сезон и серию"
-          aria-expanded={quickPickerOpen}
-          onClick={() => {
-            setSettingsOpen(false);
-            setQuickPickerOpen(value => !value);
-            setControlsVisible(true);
-          }}
-        >
-          <span className="animesoul-player-context-copy">
-            <strong>{seasonLabel} · {episodeLabel}</strong>
-            <span>{title}</span>
-          </span>
-          <i aria-hidden="true">⌄</i>
-        </button>
-        <label className={`animesoul-player-voice-pill${activeDubbingOption?.warning ? " warning" : ""}`} title={activeDubbingOption?.warning || "Быстрый выбор озвучки"}>
-          <span>Озвучка{activeDubbingOption?.warning && <b>⚠ возможна сокращённая версия</b>}</span>
-          <select value={menu.dubbing} aria-label="Озвучка" onChange={event => menu.onDubbingChange(event.target.value)}>
-            {menu.dubbings.map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
-          </select>
-        </label>
-      </div>
-      {quickPickerOpen && (
-        <div className="animesoul-player-quick-picker" aria-label="Выбор сезона и серии" onClick={(event: MouseEvent) => event.stopPropagation()}>
-          <label>
-            <span>Сезон</span>
-            <select value={menu.season} onChange={event => menu.onSeasonChange(event.target.value)}>
-              {menu.seasons.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Серия</span>
-            <select value={menu.episode} onChange={event => menu.onEpisodeChange(event.target.value)}>
-              {menu.episodes.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-        </div>
-      )}
+      <PlayerTopNavigation
+        activeDubbingOption={activeDubbingOption}
+        episodeLabel={episodeLabel}
+        menu={menu}
+        onToggleQuickPicker={() => {
+          setSettingsOpen(false);
+          setQuickPickerOpen(value => !value);
+          setControlsVisible(true);
+        }}
+        quickPickerOpen={quickPickerOpen}
+        seasonLabel={seasonLabel}
+        title={title}
+      />
       {loading && !error && <div className={`animesoul-player-loader${stream && !localPlayback ? " compact" : ""}`} aria-label="Буферизация"><i /><span>{localPlayback ? "Читаем локальный файл…" : stream ? "Буферизация без сброса таймкода" : "Подготавливаем поток"}</span></div>}
       {(audioSwitching || audioSwitchError) && (
         <div className={`animesoul-player-audio-status${audioSwitchError ? " error" : ""}`} role="status">
