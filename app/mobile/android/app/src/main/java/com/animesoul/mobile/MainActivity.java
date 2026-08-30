@@ -3,10 +3,6 @@ package com.animesoul.mobile;
 import android.annotation.SuppressLint;
 import android.Manifest;
 import android.app.Activity;
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -16,9 +12,6 @@ import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
-import android.media.MediaMetadata;
-import android.media.session.MediaSession;
-import android.media.session.PlaybackState;
 import android.net.Uri;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -32,7 +25,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
-import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -65,8 +57,6 @@ public final class MainActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 42;
     private static final int VIDEO_LIBRARY_PERMISSION_REQUEST = 43;
     private static final String LOOPBACK_HOST = "127.0.0.1";
-    private static final String PLAYBACK_CHANNEL_ID = "animesoul_playback";
-    private static final int PLAYBACK_NOTIFICATION_ID = 1702;
 
     static volatile MainActivity activeInstance;
 
@@ -84,9 +74,7 @@ public final class MainActivity extends Activity {
     private boolean notificationPermissionRequested;
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback downloadNetworkCallback;
-    private MediaSession mediaSession;
-    private boolean playbackActive;
-    private boolean playbackPlaying;
+    private PlaybackSessionController playbackController;
     private boolean pictureInPictureRequested;
     private int playbackVideoWidth = 16;
     private int playbackVideoHeight = 9;
@@ -330,180 +318,20 @@ public final class MainActivity extends Activity {
     }
 
     private void configurePlaybackSession() {
-        createPlaybackNotificationChannel();
-        mediaSession = new MediaSession(this, "AnimeSoulPlayback");
-        mediaSession.setFlags(
-                MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
-                        | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
-        mediaSession.setCallback(new MediaSession.Callback() {
-            @Override
-            public void onPlay() {
-                dispatchMediaCommand("play", -1);
-            }
-
-            @Override
-            public void onPause() {
-                dispatchMediaCommand("pause", -1);
-            }
-
-            @Override
-            public void onSeekTo(long positionMs) {
-                dispatchMediaCommand("seek", positionMs / 1000d);
-            }
-
-            @Override
-            public void onRewind() {
-                dispatchMediaCommand("rewind", -1);
-            }
-
-            @Override
-            public void onFastForward() {
-                dispatchMediaCommand("forward", -1);
-            }
-        });
-    }
-
-    private void createPlaybackNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-        NotificationChannel channel = new NotificationChannel(
-                PLAYBACK_CHANNEL_ID,
-                getString(R.string.playback_notification_channel_name),
-                NotificationManager.IMPORTANCE_LOW
-        );
-        channel.setDescription(getString(R.string.playback_notification_channel_description));
-        channel.setShowBadge(false);
-        channel.setSound(null, null);
-        channel.enableVibration(false);
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager != null) manager.createNotificationChannel(channel);
-    }
-
-    private PendingIntent playbackAction(String action, int requestCode) {
-        Intent intent = new Intent(this, PlaybackControlReceiver.class).setAction(action);
-        return PendingIntent.getBroadcast(
+        playbackController = new PlaybackSessionController(
                 this,
-                requestCode,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                this::dispatchMediaCommand,
+                this::requestDownloadNotificationPermission
         );
-    }
-
-    private void updatePlaybackSession(
-            String title,
-            String subtitle,
-            boolean playing,
-            double position,
-            double duration,
-            boolean active
-    ) {
-        playbackActive = active;
-        playbackPlaying = active && playing;
-        if (playbackPlaying) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        } else {
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        }
-
-        if (!active) {
-            clearPlaybackSession();
-            return;
-        }
-
-        long positionMs = Math.max(0L, Math.round(position * 1000d));
-        long durationMs = Math.max(0L, Math.round(duration * 1000d));
-        long actions = PlaybackState.ACTION_PLAY
-                | PlaybackState.ACTION_PAUSE
-                | PlaybackState.ACTION_PLAY_PAUSE
-                | PlaybackState.ACTION_SEEK_TO
-                | PlaybackState.ACTION_REWIND
-                | PlaybackState.ACTION_FAST_FORWARD;
-        mediaSession.setMetadata(new MediaMetadata.Builder()
-                .putString(MediaMetadata.METADATA_KEY_TITLE, title)
-                .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE, subtitle)
-                .putString(MediaMetadata.METADATA_KEY_ARTIST, subtitle)
-                .putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs)
-                .build());
-        mediaSession.setPlaybackState(new PlaybackState.Builder()
-                .setActions(actions)
-                .setState(
-                        playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
-                        positionMs,
-                        playing ? 1f : 0f
-                )
-                .build());
-        mediaSession.setActive(true);
-        showPlaybackNotification(title, subtitle, playing);
-        if (playing) requestDownloadNotificationPermission();
-    }
-
-    private void showPlaybackNotification(String title, String subtitle, boolean playing) {
-        Intent openIntent = new Intent(this, MainActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent contentIntent = PendingIntent.getActivity(
-                this,
-                1701,
-                openIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, PLAYBACK_CHANNEL_ID)
-                : new Notification.Builder(this);
-        builder.setSmallIcon(R.drawable.animesoul_icon)
-                .setContentTitle(title)
-                .setContentText(subtitle)
-                .setContentIntent(contentIntent)
-                .setCategory(Notification.CATEGORY_TRANSPORT)
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setOnlyAlertOnce(true)
-                .setShowWhen(false)
-                .setOngoing(playing)
-                .addAction(new Notification.Action.Builder(
-                        android.R.drawable.ic_media_rew,
-                        getString(R.string.playback_rewind),
-                        playbackAction(PlaybackControlReceiver.ACTION_REWIND, 1710)
-                ).build())
-                .addAction(new Notification.Action.Builder(
-                        playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
-                        getString(playing ? R.string.playback_pause : R.string.playback_play),
-                        playbackAction(
-                                playing ? PlaybackControlReceiver.ACTION_PAUSE : PlaybackControlReceiver.ACTION_PLAY,
-                                1711
-                        )
-                ).build())
-                .addAction(new Notification.Action.Builder(
-                        android.R.drawable.ic_media_ff,
-                        getString(R.string.playback_forward),
-                        playbackAction(PlaybackControlReceiver.ACTION_FORWARD, 1712)
-                ).build())
-                .setStyle(new Notification.MediaStyle()
-                        .setMediaSession(mediaSession.getSessionToken())
-                        .setShowActionsInCompactView(0, 1, 2));
-        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (manager == null) return;
-        try {
-            manager.notify(PLAYBACK_NOTIFICATION_ID, builder.build());
-        } catch (SecurityException ignored) {
-            // Playback and PiP remain available if notification access is denied.
-        }
-    }
-
-    private void clearPlaybackSession() {
-        playbackActive = false;
-        playbackPlaying = false;
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (mediaSession != null) mediaSession.setActive(false);
-        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (manager != null) manager.cancel(PLAYBACK_NOTIFICATION_ID);
     }
 
     static void receivePlaybackAction(String action) {
         MainActivity activity = activeInstance;
         if (activity == null || action == null) return;
         activity.runOnUiThread(() -> {
-            if (PlaybackControlReceiver.ACTION_PLAY.equals(action)) activity.dispatchMediaCommand("play", -1);
-            else if (PlaybackControlReceiver.ACTION_PAUSE.equals(action)) activity.dispatchMediaCommand("pause", -1);
-            else if (PlaybackControlReceiver.ACTION_REWIND.equals(action)) activity.dispatchMediaCommand("rewind", -1);
-            else if (PlaybackControlReceiver.ACTION_FORWARD.equals(action)) activity.dispatchMediaCommand("forward", -1);
+            if (activity.playbackController != null) {
+                activity.playbackController.handleAction(action);
+            }
         });
     }
 
@@ -731,7 +559,9 @@ public final class MainActivity extends Activity {
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
-        if (playbackActive && playbackPlaying) {
+        if (playbackController != null
+                && playbackController.isActive()
+                && playbackController.isPlaying()) {
             requestNativePictureInPicture(playbackVideoWidth, playbackVideoHeight);
         }
     }
@@ -930,19 +760,24 @@ public final class MainActivity extends Activity {
                 double duration,
                 boolean active
         ) {
-            runOnUiThread(() -> updatePlaybackSession(
-                    title == null || title.trim().isEmpty() ? getString(R.string.app_name) : title,
-                    subtitle == null ? "" : subtitle,
-                    playing,
-                    position,
-                    duration,
-                    active
-            ));
+            runOnUiThread(() -> {
+                if (playbackController == null) return;
+                playbackController.update(
+                        title == null || title.trim().isEmpty() ? getString(R.string.app_name) : title,
+                        subtitle == null ? "" : subtitle,
+                        playing,
+                        position,
+                        duration,
+                        active
+                );
+            });
         }
 
         @JavascriptInterface
         public void clearPlayback() {
-            runOnUiThread(MainActivity.this::clearPlaybackSession);
+            runOnUiThread(() -> {
+                if (playbackController != null) playbackController.clear();
+            });
         }
 
         @JavascriptInterface
@@ -995,10 +830,9 @@ public final class MainActivity extends Activity {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backInvokedCallback);
             backInvokedCallback = null;
         }
-        clearPlaybackSession();
-        if (mediaSession != null) {
-            mediaSession.release();
-            mediaSession = null;
+        if (playbackController != null) {
+            playbackController.release();
+            playbackController = null;
         }
         if (activeInstance == this) activeInstance = null;
         startupExecutor.shutdownNow();
