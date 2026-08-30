@@ -229,6 +229,7 @@
 | `app/tools/prepare_runtime.py` | hash-based install/build только при изменении входов source runtime |
 | `app/tools/split-base-css.mjs` | механическое разбиение исторического base CSS |
 | `app/tools/format-css.mjs` | форматирование CSS через frontend script `format:css` |
+| `app/tools/audit-css.mjs` | проверка полной import-цепочки на точные дубли CSS rules/declarations |
 | `app/frontend/tests/critical-logic.test.ts` | регрессии чистой клиентской логики |
 
 ## Где вносить изменение

@@ -22,12 +22,16 @@ main.tsx
    │  ├─ base-feedback.css
    │  ├─ base-cloud.css
    │  ├─ base-branding.css
-   │  └─ base-settings-center.css
+   │  ├─ base-settings-center.css
+   │  └─ downloads.css
    ├─ styles/library.css
    ├─ styles/player.css
    ├─ styles/system-panels.css
    ├─ styles/home-redesign.css
-   └─ styles/ratings.css
+   ├─ styles/ratings.css
+   ├─ styles/player-toolbar.css
+   ├─ styles/custom-player.css
+   └─ styles/mobile-android.css
 ```
 
 Порядок является частью визуального контракта. Файл ниже по списку может
@@ -135,6 +139,7 @@ Selectors находятся в `base-personalization.css`. Значение `1`
 | `base-cloud.css` | Google Drive card, OAuth form, sync choices и cloud state | `.google-drive-settings`, `.cloud-settings-*`, `.cloud-oauth-*` |
 | `base-branding.css` | общий знак AnimeSoul и release/rewatch badges | `.brand`, `.track-ep-badge`, `.track-total-new`, `.rewatch-count` |
 | `base-settings-center.css` | новая двухколоночная навигация настроек, search и workspace overrides | `.settings-layout`, `.settings-tabs`, `.settings-search`, `.settings-workspace`, `.settings-panel-heading` |
+| `downloads.css` | offline library, очередь, карточки загрузок и download settings | `.downloads-*`, `.offline-*` |
 
 ### Feature bundles после base
 
@@ -145,6 +150,9 @@ Selectors находятся в `base-personalization.css`. Значение `1`
 | `system-panels.css` | changelog, debug console, system overlays и служебные статусы | `ChangelogModal`, `DebugPanel`; `.changelog-*`, `.debug-*` |
 | `home-redesign.css` | cinematic hero и новая композиция главной | `HomeHero`, `DashboardWidgets`, `LibrarySections`, `FAQBlock`; `.home-cinema-*`, `.home-dashboard-*`, `.home-*` |
 | `ratings.css` | page/table/tree/picker общих и личных оценок | `RatingsPage`, `RatingBoard`, `ScorePicker`; `.ratings-*`, `.rating-*`, `.score-picker` |
+| `player-toolbar.css` | окончательная раскладка toolbar и download controls вокруг video | `PlayerToolbar`; `.player-toolbar-*`, `.toolbar-*` |
+| `custom-player.css` | controls, menus, subtitles и состояния собственного HLS-плеера | `AnimeSoulPlayer`, `AnimeSoulPlayerMenus`; `.animesoul-player-*` |
+| `mobile-android.css` | поздние Android/mobile overrides и safe-area variables | Android WebView; `html[data-platform="android"]`, `.animesoul-native-pip` |
 
 ## Привязка UI → stylesheet
 
@@ -253,6 +261,7 @@ launcher, OAuth callback.
 
 ```powershell
 npm --prefix app/frontend run format:css
+npm --prefix app/frontend run audit:css
 npm --prefix app/frontend run typecheck
 npm --prefix app/frontend run build
 ```
