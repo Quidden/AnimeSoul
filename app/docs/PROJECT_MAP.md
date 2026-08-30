@@ -230,6 +230,7 @@
 | `app/tools/split-base-css.mjs` | механическое разбиение исторического base CSS |
 | `app/tools/format-css.mjs` | форматирование CSS через frontend script `format:css` |
 | `app/tools/audit-css.mjs` | проверка полной import-цепочки на точные дубли CSS rules/declarations |
+| `app/tools/audit-bundle.mjs` | бюджеты entry JS/CSS/lazy chunk и защита route/player chunks от eager preload |
 | `app/frontend/tests/critical-logic.test.ts` | регрессии чистой клиентской логики |
 
 ## Где вносить изменение

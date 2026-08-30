@@ -90,9 +90,10 @@ cd app
 npm --prefix frontend run check
 ```
 
-`npm --prefix frontend run check` последовательно запускает ESLint, строгий TypeScript typecheck,
-тесты критической логики и production-сборку. Те же проверки выполняет GitHub
-Actions для каждого push и pull request.
+`npm --prefix frontend run check` последовательно запускает ESLint, строгий
+TypeScript typecheck, CSS-аудит, тесты критической логики, production-сборку и
+проверку bundle budgets. Те же проверки выполняет GitHub Actions для каждого
+push и pull request.
 
 ## Документация для разработчика
 

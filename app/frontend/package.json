@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "audit:bundle": "node ../tools/audit-bundle.mjs dist",
     "audit:css": "node ../tools/audit-css.mjs src/globals.css",
     "format:css": "node ../tools/format-css.mjs src/styles/*.css",
     "lint": "eslint src tests vite.config.ts --max-warnings 48",
     "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/critical-logic.test.ts",
-    "check": "npm run lint && npm run typecheck:strict && npm run audit:css && npm test && npm run build"
+    "check": "npm run lint && npm run typecheck:strict && npm run audit:css && npm test && npm run build && npm run audit:bundle"
   },
   "dependencies": {
     "hls.js": "^1.7.1",
