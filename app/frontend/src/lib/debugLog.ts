@@ -1,4 +1,4 @@
-import { SourceMapConsumer, type RawSourceMap } from "source-map-js";
+import type { RawSourceMap, SourceMapConsumer } from "source-map-js";
 
 export type DebugLevel = "info" | "success" | "warning" | "error";
 
@@ -115,9 +115,14 @@ async function sourceMapFor(file: string): Promise<SourceMapConsumer | null> {
   let pending = sourceMapCache.get(mapUrl);
   if (!pending) {
     pending = rawFetch(mapUrl, { cache: "force-cache" })
-      .then(async (response) => response.ok
-        ? new SourceMapConsumer(await response.json() as RawSourceMap)
-        : null)
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const [{ SourceMapConsumer: Consumer }, sourceMap] = await Promise.all([
+          import("source-map-js"),
+          response.json() as Promise<RawSourceMap>,
+        ]);
+        return new Consumer(sourceMap);
+      })
       .catch(() => null);
     sourceMapCache.set(mapUrl, pending);
   }

@@ -1,13 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 
-import {
-    CollectionOverview,
-    type CollectionOverviewKind,
-} from "./components/CollectionOverview";
+import type { CollectionOverviewKind } from "./components/CollectionOverview";
 import { FolderPicker } from "./components/FolderPicker";
 import { AppFooter } from "./components/AppFooter";
 import { Header } from "./components/Header";
-import { Watch } from "./components/Player";
 import { useCatalogController } from "./features/catalog/useCatalogController";
 import { useCatalogPresentation } from "./features/catalog/useCatalogPresentation";
 import {
@@ -34,8 +30,6 @@ import {
     reorder,
 } from "./lib/anime";
 import { compareTrackedByRelease } from "./lib/tracking";
-import { StatisticsPage } from "./pages/StatisticsPage";
-import { FolderView } from "./pages/FolderView";
 import { CatalogPage } from "./pages/CatalogPage";
 import {
     HomePage,
@@ -43,10 +37,21 @@ import {
     type HomePageModel,
 } from "./pages/HomePage";
 import { hasUserRatings, setUserRating, type RatingTarget } from "./lib/ratings";
-import { RatingsPage } from "./pages/RatingsPage";
 import { useCommunityRatings } from "./features/ratings/useCommunityRatings";
-import { DownloadsPage } from "./features/downloads/DownloadsPage";
 import { IS_ANDROID_APP } from "./lib/platform";
+
+const CollectionOverview = lazy(() => import("./components/CollectionOverview").then(module => ({
+    default: module.CollectionOverview,
+})));
+const Watch = lazy(() => import("./components/Player").then(module => ({ default: module.Watch })));
+const DownloadsPage = lazy(() => import("./features/downloads/DownloadsPage").then(module => ({
+    default: module.DownloadsPage,
+})));
+const FolderView = lazy(() => import("./pages/FolderView").then(module => ({ default: module.FolderView })));
+const RatingsPage = lazy(() => import("./pages/RatingsPage").then(module => ({ default: module.RatingsPage })));
+const StatisticsPage = lazy(() => import("./pages/StatisticsPage").then(module => ({
+    default: module.StatisticsPage,
+})));
 
 export default function Home() {
     const catalogRef = useRef<Anime[]>([]);
@@ -362,37 +367,39 @@ export default function Home() {
         };
 
         return (
-            <Watch
-                header={watchHeader}
-                anime={active}
-                resumeRequested={resumeRequested}
-                newEpisodeRequested={newEpisodeRequested}
-                favorite={favorites.includes(active.anime_id)}
-                onFavorite={() => toggleFavorite(active.anime_id)}
-                onBack={showCatalog}
-                onLibrary={openLibrary}
-                onGenre={selectedGenre => {
-                    setGenre(selectedGenre);
-                    setQuery("");
-                    showCatalog();
-                    window.scrollTo({top: 0, behavior: "smooth"});
-                }}
-                saved={progress[active.anime_id]}
-                ratings={ratings[active.anime_id]}
-                communityRating={communityRatings[active.anime_id]}
-                onRatingChange={(target, value) => updateRating(active.anime_id, active.title, target, value)}
-                onProgress={updateActiveProgress}
-                onPlayerPrefsChange={setPlayerPrefs}
-                onFolders={() => setFolderPicker(active)}
-                tracker={activeTracker}
-                onTrack={activeWatchActions.saveTracker}
-                onUntrack={activeWatchActions.removeTracker}
-                folderPicker={folderPicker}
-                folders={folders}
-                toggleFolder={toggleFolder}
-                createFolder={createFolder}
-                closePicker={() => setFolderPicker(null)}
-            />
+            <Suspense fallback={<main className="app">{watchHeader}<p className="loading">Загружаем плеер…</p></main>}>
+                <Watch
+                    header={watchHeader}
+                    anime={active}
+                    resumeRequested={resumeRequested}
+                    newEpisodeRequested={newEpisodeRequested}
+                    favorite={favorites.includes(active.anime_id)}
+                    onFavorite={() => toggleFavorite(active.anime_id)}
+                    onBack={showCatalog}
+                    onLibrary={openLibrary}
+                    onGenre={selectedGenre => {
+                        setGenre(selectedGenre);
+                        setQuery("");
+                        showCatalog();
+                        window.scrollTo({top: 0, behavior: "smooth"});
+                    }}
+                    saved={progress[active.anime_id]}
+                    ratings={ratings[active.anime_id]}
+                    communityRating={communityRatings[active.anime_id]}
+                    onRatingChange={(target, value) => updateRating(active.anime_id, active.title, target, value)}
+                    onProgress={updateActiveProgress}
+                    onPlayerPrefsChange={setPlayerPrefs}
+                    onFolders={() => setFolderPicker(active)}
+                    tracker={activeTracker}
+                    onTrack={activeWatchActions.saveTracker}
+                    onUntrack={activeWatchActions.removeTracker}
+                    folderPicker={folderPicker}
+                    folders={folders}
+                    toggleFolder={toggleFolder}
+                    createFolder={createFolder}
+                    closePicker={() => setFolderPicker(null)}
+                />
+            </Suspense>
         );
     }
     const homePageModel: HomePageModel = {
@@ -520,138 +527,142 @@ export default function Home() {
                 onCatalog={showCatalog}
             />
 
-            {view === "home" && (
-                <HomePage model={homePageModel} actions={homePageActions} />
-            )}
-            {view === "stats" && (
-                <StatisticsPage statistics={statistics} onHome={goHome} />
-            )}
-            {view === "ratings" && (
-                <RatingsPage
-                    ratings={ratings}
-                    communityRatings={communityRatings}
-                    catalog={catalog}
-                    onHome={goHome}
-                    onOpen={openAnime}
-                    onRatingChange={updateRating}
-                />
-            )}
-            {view === "downloads" && (
-                <DownloadsPage onCatalog={showCatalog} onOpen={openAnime} progress={progress} />
-            )}
-            {view === "catalog" && (
-                <CatalogPage
-                    query={query}
-                    sort={sort}
-                    groupFilter={groupFilter}
-                    formatFilter={formatFilter}
-                    dubbingFilter={dubbingFilter}
-                    dubbings={dubbings}
-                    yearFrom={yearFrom}
-                    yearTo={yearTo}
-                    genre={genre}
-                    genres={genres}
-                    randomOpen={randomOpen}
-                    randomGenre={randomGenre}
-                    randomYearFrom={randomYearFrom}
-                    randomYearTo={randomYearTo}
-                    randomRating={randomRating}
-                    randomCandidates={randomCandidates}
-                    ratingSource={ratingSource}
-                    ratingFrom={ratingFrom}
-                    ratingSources={ratingSources}
-                    visible={visible}
-                    cardMeta={cardMeta}
-                    favorites={favorites}
-                    progress={progress}
-                    ratings={ratings}
-                    communityRatings={communityRatings}
-                    error={error}
-                    loading={loading}
-                    setSort={setSort}
-                    setGroupFilter={setGroupFilter}
-                    setFormatFilter={setFormatFilter}
-                    setDubbingFilter={setDubbingFilter}
-                    setYearFrom={setYearFrom}
-                    setYearTo={setYearTo}
-                    setGenre={setGenre}
-                    setRandomOpen={setRandomOpen}
-                    setRandomGenre={setRandomGenre}
-                    setRandomYearFrom={setRandomYearFrom}
-                    setRandomYearTo={setRandomYearTo}
-                    setRandomRating={setRandomRating}
-                    setRatingSource={setRatingSource}
-                    setRatingFrom={setRatingFrom}
-                    onHome={goHome}
-                    onOpen={openAnime}
-                    onFavorite={toggleFavorite}
-                    onFolders={setFolderPicker}
-                    onCardVisible={requestCardMeta}
-                    onLoadMore={() => void loadMore()}
-                    onRetry={() => void load(0, false, query)}
-                />
-            )}
+            <Suspense fallback={<p className="loading" role="status">Загружаем раздел…</p>}>
+                {view === "home" && (
+                    <HomePage model={homePageModel} actions={homePageActions} />
+                )}
+                {view === "stats" && (
+                    <StatisticsPage statistics={statistics} onHome={goHome} />
+                )}
+                {view === "ratings" && (
+                    <RatingsPage
+                        ratings={ratings}
+                        communityRatings={communityRatings}
+                        catalog={catalog}
+                        onHome={goHome}
+                        onOpen={openAnime}
+                        onRatingChange={updateRating}
+                    />
+                )}
+                {view === "downloads" && (
+                    <DownloadsPage onCatalog={showCatalog} onOpen={openAnime} progress={progress} />
+                )}
+                {view === "catalog" && (
+                    <CatalogPage
+                        query={query}
+                        sort={sort}
+                        groupFilter={groupFilter}
+                        formatFilter={formatFilter}
+                        dubbingFilter={dubbingFilter}
+                        dubbings={dubbings}
+                        yearFrom={yearFrom}
+                        yearTo={yearTo}
+                        genre={genre}
+                        genres={genres}
+                        randomOpen={randomOpen}
+                        randomGenre={randomGenre}
+                        randomYearFrom={randomYearFrom}
+                        randomYearTo={randomYearTo}
+                        randomRating={randomRating}
+                        randomCandidates={randomCandidates}
+                        ratingSource={ratingSource}
+                        ratingFrom={ratingFrom}
+                        ratingSources={ratingSources}
+                        visible={visible}
+                        cardMeta={cardMeta}
+                        favorites={favorites}
+                        progress={progress}
+                        ratings={ratings}
+                        communityRatings={communityRatings}
+                        error={error}
+                        loading={loading}
+                        setSort={setSort}
+                        setGroupFilter={setGroupFilter}
+                        setFormatFilter={setFormatFilter}
+                        setDubbingFilter={setDubbingFilter}
+                        setYearFrom={setYearFrom}
+                        setYearTo={setYearTo}
+                        setGenre={setGenre}
+                        setRandomOpen={setRandomOpen}
+                        setRandomGenre={setRandomGenre}
+                        setRandomYearFrom={setRandomYearFrom}
+                        setRandomYearTo={setRandomYearTo}
+                        setRandomRating={setRandomRating}
+                        setRatingSource={setRatingSource}
+                        setRatingFrom={setRatingFrom}
+                        onHome={goHome}
+                        onOpen={openAnime}
+                        onFavorite={toggleFavorite}
+                        onFolders={setFolderPicker}
+                        onCardVisible={requestCardMeta}
+                        onLoadMore={() => void loadMore()}
+                        onRetry={() => void load(0, false, query)}
+                    />
+                )}
+            </Suspense>
 
             <AppFooter />
 
-            {collectionOverview && (
-                <CollectionOverview
-                    kind={collectionOverview}
-                    favorites={favorites}
-                    folders={folders}
-                    tracked={tracked}
-                    progress={progress}
-                    cardMeta={cardMeta}
-                    known={known}
-                    onClose={() => setCollectionOverview(null)}
-                    onOpenAnime={(anime, resume) => {
-                        setCollectionOverview(null);
-                        openAnime(anime, resume);
-                    }}
-                    onOpenFolder={folder => {
-                        setCollectionOverview(null);
-                        setOpenedFolder(folder);
-                    }}
-                    onRemoveFavorite={id => saveFav(
-                        favorites.filter(item => item !== id),
-                    )}
-                    onDeleteFolder={deleteFolder}
-                    onWatchNew={anime => {
-                        setCollectionOverview(null);
-                        setResumeRequested(false);
-                        setNewEpisodeRequested(true);
-                        setActive(anime);
-                    }}
-                    onUntrack={tracker => saveTracked(
-                        tracked.filter(item => item.animeId !== tracker.animeId),
-                    )}
-                />
-            )}
-            {folderPicker && (
-                <FolderPicker
-                    anime={folderPicker}
-                    folders={folders}
-                    onToggle={toggleFolder}
-                    onCreate={createFolder}
-                    onClose={() => setFolderPicker(null)}
-                />
-            )}
-            {currentFolder && (
-                <FolderView
-                    folder={currentFolder}
-                    known={known}
-                    progress={progress}
-                    cardMeta={cardMeta}
-                    onOpen={(anime, resume) => {
-                        setOpenedFolder(null);
-                        openAnime(anime, resume);
-                    }}
-                    onNote={updateFolderNote}
-                    onReorder={reorderFolderAnime}
-                    onDelete={confirmFolderDeletion}
-                    onClose={() => setOpenedFolder(null)}
-                />
-            )}
+            <Suspense fallback={null}>
+                {collectionOverview && (
+                    <CollectionOverview
+                        kind={collectionOverview}
+                        favorites={favorites}
+                        folders={folders}
+                        tracked={tracked}
+                        progress={progress}
+                        cardMeta={cardMeta}
+                        known={known}
+                        onClose={() => setCollectionOverview(null)}
+                        onOpenAnime={(anime, resume) => {
+                            setCollectionOverview(null);
+                            openAnime(anime, resume);
+                        }}
+                        onOpenFolder={folder => {
+                            setCollectionOverview(null);
+                            setOpenedFolder(folder);
+                        }}
+                        onRemoveFavorite={id => saveFav(
+                            favorites.filter(item => item !== id),
+                        )}
+                        onDeleteFolder={deleteFolder}
+                        onWatchNew={anime => {
+                            setCollectionOverview(null);
+                            setResumeRequested(false);
+                            setNewEpisodeRequested(true);
+                            setActive(anime);
+                        }}
+                        onUntrack={tracker => saveTracked(
+                            tracked.filter(item => item.animeId !== tracker.animeId),
+                        )}
+                    />
+                )}
+                {folderPicker && (
+                    <FolderPicker
+                        anime={folderPicker}
+                        folders={folders}
+                        onToggle={toggleFolder}
+                        onCreate={createFolder}
+                        onClose={() => setFolderPicker(null)}
+                    />
+                )}
+                {currentFolder && (
+                    <FolderView
+                        folder={currentFolder}
+                        known={known}
+                        progress={progress}
+                        cardMeta={cardMeta}
+                        onOpen={(anime, resume) => {
+                            setOpenedFolder(null);
+                            openAnime(anime, resume);
+                        }}
+                        onNote={updateFolderNote}
+                        onReorder={reorderFolderAnime}
+                        onDelete={confirmFolderDeletion}
+                        onClose={() => setOpenedFolder(null)}
+                    />
+                )}
+            </Suspense>
         </main>
     );
 }

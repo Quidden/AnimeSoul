@@ -22,6 +22,9 @@ export default defineConfig(() => {
     build: {
       outDir: androidBundle ? "dist-android" : "dist",
       emptyOutDir: true,
+      // The only chunk above the default ceiling is the lazy full HLS runtime.
+      // The light build omits alternate audio and subtitles used by the player.
+      chunkSizeWarningLimit: 580,
       // The local debug journal resolves production stack frames back to the
       // original TS/TSX function, file and line. Maps remain on localhost.
       sourcemap: true,

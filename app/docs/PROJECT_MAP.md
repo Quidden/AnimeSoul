@@ -91,7 +91,7 @@
 | `app/frontend/index.html` | HTML shell, `#root`, favicon и preconnect к trailer-хостам |
 | `app/frontend/vite.config.ts` | React plugin, dev port, proxy `/api`, `/watch-party`, `/ws`, output `dist` |
 | `app/frontend/src/main.tsx` | debug capture, глобальный CSS, `createRoot(<App />)` |
-| `app/frontend/src/App.tsx` | состояние навигации и композиция feature controllers/pages/modals |
+| `app/frontend/src/App.tsx` | состояние навигации, композиция feature controllers и lazy boundaries тяжёлых pages/player/modals |
 | `app/frontend/src/version.ts` | отображаемая версия приложения |
 
 ## Frontend pages
