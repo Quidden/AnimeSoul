@@ -6,16 +6,12 @@ import android.app.Activity;
 import android.app.PictureInPictureParams;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
-import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
-import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.NetworkCapabilities;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -61,7 +57,6 @@ public final class MainActivity extends Activity {
     static volatile MainActivity activeInstance;
 
     private final ExecutorService startupExecutor = Executors.newSingleThreadExecutor();
-    private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
     private FrameLayout root;
     private WebView webView;
     private TextView splash;
@@ -72,8 +67,7 @@ public final class MainActivity extends Activity {
     private OnBackInvokedCallback backInvokedCallback;
     private boolean backRequestPending;
     private boolean notificationPermissionRequested;
-    private ConnectivityManager connectivityManager;
-    private ConnectivityManager.NetworkCallback downloadNetworkCallback;
+    private DownloadNetworkMonitor downloadNetworkMonitor;
     private PlaybackSessionController playbackController;
     private boolean pictureInPictureRequested;
     private int playbackVideoWidth = 16;
@@ -433,7 +427,7 @@ public final class MainActivity extends Activity {
             );
 
             waitForServer();
-            postDownloadNetworkState();
+            if (downloadNetworkMonitor != null) downloadNetworkMonitor.publishCurrentState();
             runOnUiThread(() -> webView.loadUrl(localBaseUrl()));
         } catch (Exception error) {
             runOnUiThread(() -> showStartupError(error));
@@ -650,66 +644,10 @@ public final class MainActivity extends Activity {
     }
 
     private void configureDownloadNetworkMonitor() {
-        connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (connectivityManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
-        downloadNetworkCallback = new ConnectivityManager.NetworkCallback() {
-            @Override
-            public void onAvailable(Network network) {
-                postDownloadNetworkState();
-            }
-
-            @Override
-            public void onCapabilitiesChanged(Network network, NetworkCapabilities capabilities) {
-                postDownloadNetworkState();
-            }
-
-            @Override
-            public void onLost(Network network) {
-                postDownloadNetworkState();
-            }
-        };
-        connectivityManager.registerDefaultNetworkCallback(downloadNetworkCallback);
+        downloadNetworkMonitor = new DownloadNetworkMonitor(this, this::localBaseUrl);
+        downloadNetworkMonitor.start();
     }
 
-    private String currentDownloadNetworkType() {
-        if (connectivityManager == null) return "unknown";
-        Network network = connectivityManager.getActiveNetwork();
-        if (network == null) return "none";
-        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
-        if (capabilities == null) return "unknown";
-        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) return "mobile";
-        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return "wifi";
-        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) return "ethernet";
-        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return "vpn";
-        return "unknown";
-    }
-
-    private void postDownloadNetworkState() {
-        String networkType = currentDownloadNetworkType();
-        networkExecutor.execute(() -> {
-            HttpURLConnection connection = null;
-            try {
-                URL url = new URL(localBaseUrl() + "api/downloads/network");
-                connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("POST");
-                connection.setConnectTimeout(800);
-                connection.setReadTimeout(1_000);
-                connection.setDoOutput(true);
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                byte[] body = ("{\"type\":\"" + networkType + "\"}")
-                        .getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                connection.setFixedLengthStreamingMode(body.length);
-                try (OutputStream output = connection.getOutputStream()) {
-                    output.write(body);
-                }
-                connection.getResponseCode();
-            } catch (Exception ignored) {
-                // The first callback may arrive before the embedded server.
-            } finally {
-                if (connection != null) connection.disconnect();
-            }
-        });
-    }
 
     private final class AndroidDownloadBridge {
         @JavascriptInterface
@@ -818,14 +756,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (connectivityManager != null && downloadNetworkCallback != null) {
-            try {
-                connectivityManager.unregisterNetworkCallback(downloadNetworkCallback);
-            } catch (IllegalArgumentException ignored) {
-                // Already unregistered by Android.
-            }
+        if (downloadNetworkMonitor != null) {
+            downloadNetworkMonitor.close();
+            downloadNetworkMonitor = null;
         }
-        networkExecutor.shutdownNow();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && backInvokedCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backInvokedCallback);
             backInvokedCallback = null;

@@ -32,6 +32,7 @@
 | `app/packaging/assets/` | общая иконка installer, launcher и runtime |
 | `app/mobile/android/app/src/main/java/com/animesoul/mobile/MainActivity.java` | Android Activity: WebView, embedded runtime, lifecycle, PiP и native bridges |
 | `app/mobile/android/app/src/main/java/com/animesoul/mobile/PlaybackSessionController.java` | MediaSession, системное playback-уведомление и transport-команды WebView |
+| `app/mobile/android/app/src/main/java/com/animesoul/mobile/DownloadNetworkMonitor.java` | наблюдение за типом Android-сети и публикация состояния embedded download API |
 
 ## Backend
 
