@@ -29,6 +29,22 @@ export type PlaybackObservation = {
 };
 
 /**
+ * Cross-origin players may change episodes without updating React while they
+ * own fullscreen, so their reported selection is authoritative there. The
+ * AnimeSoul player keeps the same app-owned shell mounted and updates React on
+ * every media change; using its old fullscreen cursor would make the second
+ * auto-next look like a duplicate of the first one.
+ */
+export function activePlaybackSelection<T>(
+  uiSelection: T,
+  embeddedSelection: T,
+  fullscreen: boolean,
+  crossOriginPlayer: boolean,
+): T {
+  return fullscreen && crossOriginPlayer ? embeddedSelection : uiSelection;
+}
+
+/**
  * Auto-next is episode navigation, not franchise navigation.
  *
  * The carousel also contains films, specials and alternate cuts. Crossing a

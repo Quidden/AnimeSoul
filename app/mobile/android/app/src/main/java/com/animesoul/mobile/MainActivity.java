@@ -2,7 +2,7 @@ package com.animesoul.mobile;
 
 import android.annotation.SuppressLint;
 import android.Manifest;
-import android.app.Activity;
+import androidx.appcompat.app.AppCompatActivity;
 import android.app.PictureInPictureParams;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -48,7 +48,7 @@ import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class MainActivity extends Activity {
+public final class MainActivity extends AppCompatActivity {
     private static final int FILE_CHOOSER_REQUEST = 41;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 42;
     private static final int VIDEO_LIBRARY_PERMISSION_REQUEST = 43;
@@ -69,6 +69,7 @@ public final class MainActivity extends Activity {
     private boolean notificationPermissionRequested;
     private DownloadNetworkMonitor downloadNetworkMonitor;
     private PlaybackSessionController playbackController;
+    private CastController castController;
     private boolean pictureInPictureRequested;
     private int playbackVideoWidth = 16;
     private int playbackVideoHeight = 9;
@@ -109,6 +110,7 @@ public final class MainActivity extends Activity {
         setContentView(root);
 
         configureWebView();
+        castController = new CastController(this, webView, localBaseUrl());
         configurePlaybackSession();
         configureBackNavigation();
         configureDownloadNetworkMonitor();
@@ -233,7 +235,7 @@ public final class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setSupportMultipleWindows(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " AnimeSoulAndroid/0.2.5");
+        settings.setUserAgentString(settings.getUserAgentString() + " AnimeSoulAndroid/" + BuildConfig.VERSION_NAME);
 
         // This deliberately exposes only two parameterless download lifecycle
         // signals. The native service reads all state from the trusted
@@ -259,7 +261,8 @@ public final class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 applyInsetsToWebView();
                 resetWebViewViewportScale();
-                if (url.startsWith(localBaseUrl())) {
+                if (castController != null) castController.publish();
+                if (url.startsWith(localBaseUrl()) && splash != null) {
                     splash.animate().alpha(0f).setDuration(180).withEndAction(() -> {
                         root.removeView(splash);
                         splash = null;
@@ -411,7 +414,7 @@ public final class MainActivity extends Activity {
 
     private void startLocalRuntime() {
         try {
-            File frontend = new File(getFilesDir(), "frontend-0.2.5");
+            File frontend = new File(getFilesDir(), "frontend-" + BuildConfig.VERSION_NAME);
             copyAssetTree(getAssets(), "frontend", frontend);
 
             Python python = Python.getInstance();
@@ -535,6 +538,7 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
+        if (castController != null) castController.publish();
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !isInPictureInPictureMode()) {
             pictureInPictureRequested = false;
             dispatchPictureInPictureChange(false);
@@ -553,7 +557,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
-        if (playbackController != null
+        if ((castController == null || !castController.isConnected()) && playbackController != null
                 && playbackController.isActive()
                 && playbackController.isPlaying()) {
             requestNativePictureInPicture(playbackVideoWidth, playbackVideoHeight);
@@ -756,6 +760,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (castController != null) {
+            castController.close();
+            castController = null;
+        }
         if (downloadNetworkMonitor != null) {
             downloadNetworkMonitor.close();
             downloadNetworkMonitor = null;

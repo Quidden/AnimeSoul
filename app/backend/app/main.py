@@ -40,7 +40,7 @@ async def lifespan(_application: FastAPI):
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.2.5",
+    version="0.2.6",
     description="FastAPI backend for the AnimeSoul desktop and web client.",
     lifespan=lifespan,
 )

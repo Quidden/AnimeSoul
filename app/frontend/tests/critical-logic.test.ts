@@ -1,5 +1,36 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { castMediaSource, castOwnsPlayback, EMPTY_CAST_STATE, registerCastControl, commandCastVideo } from "../src/lib/cast.ts";
+
+test("Cast accepts only supported remote HTTPS video, never local media", () => {
+  const hls = { quality: 720, src: "https://media.example/episode.m3u8?token=sample", type: "hls" };
+  assert.deepEqual(castMediaSource(hls), { url: hls.src, type: "application/x-mpegURL" });
+  assert.equal(castMediaSource(hls, true), null);
+  for (const src of ["/api/downloads/media/1", "http://media.example/movie.mp4", "https://127.0.0.1/video.mp4", "https://localhost/video.mp4", "https://[::1]/video.mp4", "https://user:pass@media.example/video.mp4", "file:///movie.mp4", "content://movies/1", "blob:https://media.example/id"]) {
+    assert.equal(castMediaSource({ ...hls, src }), null, src);
+  }
+  assert.equal(castMediaSource({ ...hls, src: "https://media.example/movie.mp4", type: "video/mp4" })?.type, "video/mp4");
+  assert.equal(castMediaSource({ ...hls, src: "https://media.example/embed", type: "text/html" }), null);
+});
+
+test("Cast ignores stale receiver progress while another episode is loading", () => {
+  const state = { ...EMPTY_CAST_STATE, id: "episode-1" };
+  assert.equal(castOwnsPlayback(state, "episode-1"), true);
+  assert.equal(castOwnsPlayback(state, "episode-2"), false);
+  assert.equal(castOwnsPlayback({ ...state, pendingId: "episode-2" }, "episode-1"), false);
+  assert.equal(castOwnsPlayback(EMPTY_CAST_STATE, ""), false);
+});
+
+test("Cast imperative transport detaches cleanly and preserves ordinary local playback", () => {
+  const video = {} as HTMLVideoElement;
+  const calls: unknown[] = [];
+  assert.equal(commandCastVideo(video, "play"), false);
+  const unregister = registerCastControl(video, (method, seconds) => { calls.push([method, seconds]); return true; });
+  assert.equal(commandCastVideo(video, "seek", 42), true);
+  assert.deepEqual(calls, [["seek", 42]]);
+  unregister();
+  assert.equal(commandCastVideo(video, "pause"), false);
+});
 import {
   acknowledgeTrackedEpisode,
   compareTrackedByRelease,
@@ -53,6 +84,7 @@ import {
 } from "../src/lib/kodikStream.ts";
 import { hasKodikSecretAccess } from "../src/lib/downloads.ts";
 import {
+  activePlaybackSelection,
   createPlaybackProgressTarget,
   nextEpisodeInSeason,
   recordPlaybackObservation,
@@ -575,6 +607,34 @@ test("auto-next stays inside the active season and never enters an alternate cut
   assert.deepEqual(nextEpisodeInSeason(episodes, 1, "24"), episodes[1]);
   assert.equal(nextEpisodeInSeason(episodes, 1, "25"), undefined);
   assert.equal(nextEpisodeInSeason(episodes, 7, "25"), undefined);
+});
+
+test("fullscreen AnimeSoul playback advances repeatedly after the first auto-next", () => {
+  const episodes = [
+    { season: 1, number: "1" },
+    { season: 1, number: "2" },
+    { season: 1, number: "3" },
+  ];
+  const staleFullscreenCursor = { season: 1, episode: "1" };
+  const uiAfterFirstTransition = { season: 1, episode: "2" };
+
+  const animeSoulSelection = activePlaybackSelection(
+    uiAfterFirstTransition,
+    staleFullscreenCursor,
+    true,
+    false,
+  );
+  assert.deepEqual(
+    nextEpisodeInSeason(episodes, animeSoulSelection.season, animeSoulSelection.episode),
+    episodes[2],
+  );
+
+  // A cross-origin iframe still needs its player-reported fullscreen cursor,
+  // because React intentionally waits until fullscreen closes before syncing.
+  assert.equal(
+    activePlaybackSelection(uiAfterFirstTransition, staleFullscreenCursor, true, true),
+    staleFullscreenCursor,
+  );
 });
 
 test("obsolete franchise discovery is aborted instead of retrying in the background", async () => {

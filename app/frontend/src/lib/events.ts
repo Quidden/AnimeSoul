@@ -1,6 +1,7 @@
 import type { ApiStatus, PlayerPrefs, SaveStatus, ToolbarPosition } from "./types";
 import type { SettingsTab } from "../features/settings/settingsCatalog";
 import { recordDebugEvent } from "./debugLog";
+import type { CastState } from "./cast";
 
 /**
  * Payloads for cross-feature browser events.
@@ -9,6 +10,7 @@ import { recordDebugEvent } from "./debugLog";
  * exchange stringly-typed CustomEvent instances directly.
  */
 export type AppEventMap = {
+  "cast-state": CastState;
   "save-status": SaveStatus;
   "api-status": ApiStatus;
   "kodik-api-status": ApiStatus;
@@ -56,7 +58,7 @@ export function listenAppEvent<Name extends AppEventName>(
 ): () => void {
   const eventName = browserEventName(name);
   const handleEvent = (event: Event) => {
-    recordDebugEvent(
+    if (name !== "cast-state") recordDebugEvent(
       "info",
       "Событие приложения",
       `handle:${name}`,

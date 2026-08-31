@@ -31,6 +31,12 @@ export type PlayerMenu = {
     source: string;
     onSourceChange: (value: string) => void;
     subtitles: BurnedSubtitleOption[];
+    autoSkipOpening: boolean;
+    onAutoSkipOpeningChange: (value: boolean) => void;
+    autoSkipEnding: boolean;
+    onAutoSkipEndingChange: (value: boolean) => void;
+    autoNext: boolean;
+    onAutoNextChange: (value: boolean) => void;
     externalToolbarVisible: boolean;
     onExternalToolbarVisibleChange: (value: boolean) => void;
 };
@@ -139,6 +145,24 @@ export function PlayerSettingsPanel({
                         ? `Локальный файл · ${activeQuality || quality}p`
                         : `${activeQuality || quality}p${activeBitrate ? ` · ${activeBitrate}` : ""}`}
                     </strong>
+                </div>
+                <div className="animesoul-player-automation-settings">
+                    <span>Автоматизация</span>
+                    <PlayerSettingToggle
+                        label="Автоскип опенинга"
+                        checked={menu.autoSkipOpening}
+                        onChange={menu.onAutoSkipOpeningChange}
+                    />
+                    <PlayerSettingToggle
+                        label="Автоскип эндинга"
+                        checked={menu.autoSkipEnding}
+                        onChange={menu.onAutoSkipEndingChange}
+                    />
+                    <PlayerSettingToggle
+                        label="Автосерия"
+                        checked={menu.autoNext}
+                        onChange={menu.onAutoNextChange}
+                    />
                 </div>
                 <label className="animesoul-player-toolbar-toggle">
                     <input
@@ -261,6 +285,27 @@ function MenuSelect({
                     </option>
                 ))}
             </select>
+        </label>
+    );
+}
+
+function PlayerSettingToggle({
+    checked,
+    label,
+    onChange,
+}: {
+    checked: boolean;
+    label: string;
+    onChange: (value: boolean) => void;
+}) {
+    return (
+        <label className="animesoul-player-setting-toggle">
+            <span>{label}</span>
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={event => onChange(event.target.checked)}
+            />
         </label>
     );
 }

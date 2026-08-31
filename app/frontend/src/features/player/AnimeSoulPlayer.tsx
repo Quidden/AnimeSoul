@@ -12,6 +12,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { IS_ANDROID_APP } from "../../lib/platform";
+import { useAndroidCast, type CastProgress } from "./useAndroidCast";
+import { CastIcon, CastRemotePanel } from "./CastRemotePanel";
 import {
   fetchKodikStream,
   hlsLevelForQuality,
@@ -120,6 +122,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const ambientRequestKey = useRef("");
   const requestKey = kodikStreamRequestKey(request);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const castProgress = useRef<CastProgress>({ active: false, requestKey: "", position: 0, duration: 0, playing: false });
+  const resolvedStreamRequestKey = useRef("");
   const burnedSubtitleVideoRef = useRef<HTMLVideoElement | null>(null);
   const audioCarrierRefs = useRef<[HTMLVideoElement | null, HTMLVideoElement | null]>([null, null]);
   const hlsRef = useRef<Hls | null>(null);
@@ -191,8 +195,11 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
 
   const reportTeardown = useCallback((video: HTMLVideoElement | null) => {
     if (!video || teardownReported.current) return;
-    const time = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const remote = castProgress.current;
+    const time = remote.active
+      ? remote.requestKey === activeTeardownRequestKey.current ? remote.position : 0
+      : Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    const duration = remote.active ? remote.duration : Number.isFinite(video.duration) ? video.duration : 0;
     if (time <= 0) return;
     teardownReported.current = true;
     activeTeardownCallback.current?.(time, duration);
@@ -207,6 +214,10 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   }, [forwardedRef, reportTeardown]);
 
   const rememberContinuity = () => {
+    if (castProgress.current.active) {
+      continuity.current = { time: castProgress.current.position, playing: false };
+      return;
+    }
     const video = videoRef.current;
     if (!video) return;
     continuity.current = {
@@ -589,6 +600,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     // metadata, ended or playback events while the new resolver request is in
     // flight. Desktop audio-only dubbing switches intentionally skip this.
     setStream(null);
+    resolvedStreamRequestKey.current = "";
     hlsRef.current?.destroy();
     hlsRef.current = null;
     const visibleVideo = videoRef.current;
@@ -606,6 +618,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         ? storedQuality
         : info.sources[0].quality;
       setStream(info);
+      resolvedStreamRequestKey.current = requestKey;
       setQuality(nextQuality);
       setActiveLevel({ quality: nextQuality, bitrate: 0 });
       const defaultSubtitle = info.subtitles.findIndex(track => track.default);
@@ -625,6 +638,19 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     () => stream ? sourceForQuality(stream.sources, quality) : undefined,
     [stream, quality],
   );
+  const cast = useAndroidCast({
+    enabled: IS_ANDROID_APP,
+    source: resolvedStreamRequestKey.current === requestKey ? selectedSource : undefined,
+    localPlayback, requestKey, episodeKey: kodikStreamEpisodeKey(request), title,
+    subtitle: `${seasonLabel} · ${episodeLabel} · ${menu.dubbing}`,
+    video: videoRef, progress: castProgress,
+    onReturn: position => {
+      continuity.current = { time: position, playing: false };
+      setError("");
+      setCurrentTime(position);
+    },
+    onTimeUpdate, onPlay, onPause, onEnded,
+  });
   const selectedBurnedSubtitle = subtitle.startsWith("burned:")
     ? menu.subtitles.find(option => `burned:${option.value}` === subtitle)
     : undefined;
@@ -635,6 +661,15 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !selectedSource) return;
+    if (cast.active) {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      setLoading(false);
+      return;
+    }
     activeMediaRequestKey.current = requestKey;
     endedMediaRequestKey.current = "";
     let disposed = false;
@@ -759,7 +794,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [selectedSource?.src, selectedSource?.quality, localPlayback]);
+  }, [selectedSource?.src, selectedSource?.quality, localPlayback, cast.active]);
 
   useEffect(() => {
     const video = burnedSubtitleVideoRef.current;
@@ -767,7 +802,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     burnedSubtitleHlsRef.current = null;
     setBurnedSubtitleReady(false);
     setBurnedSubtitleError("");
-    if (!video || !selectedBurnedSubtitle) {
+    if (!video || !selectedBurnedSubtitle || cast.active) {
       if (video) {
         video.removeAttribute("src");
         video.load();
@@ -834,7 +869,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       burnedSubtitleHlsRef.current?.destroy();
       burnedSubtitleHlsRef.current = null;
     };
-  }, [burnedSubtitleKey, quality]);
+  }, [burnedSubtitleKey, quality, cast.active]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -872,6 +907,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   };
 
   const togglePlayback = () => {
+    if (cast.active) { cast.command(cast.state.playing ? "pause" : "play"); return; }
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -991,6 +1027,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   useEffect(() => {
     if (!IS_ANDROID_APP) return;
     const mediaCommand = (event: Event) => {
+      if (castProgress.current.active) return;
       const detail = (event as CustomEvent<{ command?: string; position?: number }>).detail;
       const video = videoRef.current;
       if (!video || !detail?.command) return;
@@ -1022,7 +1059,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   useEffect(() => {
     if (!IS_ANDROID_APP) return;
     const now = performance.now();
-    const active = Boolean(stream && !error);
+    const active = Boolean(stream && !error && !cast.active);
     const stateChanged = nativePlaybackPlaying.current !== playing
       || nativePlaybackActive.current !== active;
     if (playing && !stateChanged && now - nativePlaybackUpdatedAt.current < 5_000) return;
@@ -1041,7 +1078,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     } catch {
       // Older APKs intentionally continue with WebView-only playback.
     }
-  }, [title, seasonLabel, episodeLabel, playing, currentTime, duration, stream, error]);
+  }, [title, seasonLabel, episodeLabel, playing, currentTime, duration, stream, error, cast.active]);
 
   useEffect(() => () => {
     if (!IS_ANDROID_APP) return;
@@ -1121,6 +1158,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   return (
     <div
       ref={shell}
+      data-casting={cast.active || undefined}
       className={`animesoul-player${localPlayback ? " is-local" : ""}${loading ? " is-loading" : ""}${loading && (!stream || localPlayback) ? " is-preparing" : ""}${controlsVisible || !playing || settingsOpen || quickPickerOpen ? " controls-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${videoFit === "ambient" && !nativePictureInPicture ? " ambient-light" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
       tabIndex={0}
       onKeyDown={keyboard}
@@ -1149,6 +1187,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         onPointerCancel={finishLongPress}
         onPointerLeave={finishLongPress}
         onLoadedMetadata={() => {
+          if (castProgress.current.active) return;
           if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video) return;
@@ -1157,6 +1196,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           onLoadedMetadata?.();
         }}
         onCanPlay={() => {
+          if (castProgress.current.active) return;
           if (localWaitingTimer.current) clearTimeout(localWaitingTimer.current);
           localWaitingTimer.current = null;
           setLoading(false);
@@ -1167,6 +1207,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           syncActiveAudio(true);
         }}
         onWaiting={() => {
+          if (castProgress.current.active) return;
           if (!localPlayback) {
             setLoading(true);
             return;
@@ -1180,6 +1221,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           setLoading(false);
         }}
         onTimeUpdate={() => {
+          if (castProgress.current.active) return;
           if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video) return;
@@ -1201,6 +1243,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           setBuffered(video.buffered.end(video.buffered.length - 1));
         }}
         onPlay={() => {
+          if (castProgress.current.active) { videoRef.current?.pause(); return; }
           if (activeMediaRequestKey.current !== requestKey) return;
           endedMediaRequestKey.current = "";
           setPlaying(true);
@@ -1209,8 +1252,9 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           syncActiveAudio(true);
           onPlay?.();
         }}
-        onPause={() => { burnedSubtitleVideoRef.current?.pause(); audioCarrierRefs.current.forEach(carrier => carrier?.pause()); setPlaying(false); setControlsVisible(true); onPause?.(); }}
+        onPause={() => { burnedSubtitleVideoRef.current?.pause(); audioCarrierRefs.current.forEach(carrier => carrier?.pause()); setPlaying(false); setControlsVisible(true); if (!castProgress.current.active) onPause?.(); }}
         onEnded={() => {
+          if (castProgress.current.active) return;
           if (activeMediaRequestKey.current !== requestKey || endedMediaRequestKey.current === requestKey) return;
           endedMediaRequestKey.current = requestKey;
           const resolvedDuration = Number.isFinite(videoRef.current?.duration) ? Number(videoRef.current?.duration) : duration;
@@ -1219,6 +1263,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           onEnded?.(resolvedDuration);
         }}
         onError={() => {
+          if (castProgress.current.active) return;
           if (hlsRef.current) return;
           setLoading(false);
           setError(localPlayback
@@ -1266,6 +1311,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         />
       ))}
 
+      {cast.active && <CastRemotePanel state={cast.state} preparing={!cast.canCast} command={cast.command} choose={cast.choose} />}
+      {!cast.active && cast.state.error && <div className="animesoul-cast-error" role="alert">{cast.state.error}</div>}
       {localPlayback && (
         <div className="animesoul-player-local-badge" role="status">
           <i aria-hidden="true" />
@@ -1301,6 +1348,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         <div className="animesoul-player-error" role="alert">
           <b>Не удалось открыть собственный плеер</b>
           <span>{error}</span>
+          {cast.supported && cast.canCast && <button type="button" onClick={cast.choose}>На телевизор</button>}
           <button type="button" onClick={() => {
             rememberContinuity();
             setError("");
@@ -1408,6 +1456,9 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
                 ))}
               </select>
             </label>
+          )}
+          {cast.supported && (
+            <button type="button" className="animesoul-cast-button" aria-label="На телевизор" title={localPlayback ? "Cast доступен только для онлайн-серий" : "На телевизор · Google Cast"} disabled={!cast.canCast} onClick={cast.choose}><CastIcon /></button>
           )}
           {pictureInPictureSupported && (
             <button type="button" aria-label="Картинка в картинке" title="Картинка в картинке" onClick={togglePictureInPicture}>▣</button>

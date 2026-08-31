@@ -39,6 +39,7 @@ import {
 import { hasUserRatings, setUserRating, type RatingTarget } from "./lib/ratings";
 import { useCommunityRatings } from "./features/ratings/useCommunityRatings";
 import { IS_ANDROID_APP } from "./lib/platform";
+import { CastSessionBar } from "./features/player/CastSessionBar";
 
 const CollectionOverview = lazy(() => import("./components/CollectionOverview").then(module => ({
     default: module.CollectionOverview,
@@ -368,6 +369,7 @@ export default function Home() {
 
         return (
             <Suspense fallback={<main className="app">{watchHeader}<p className="loading">Загружаем плеер…</p></main>}>
+                {IS_ANDROID_APP && <CastSessionBar />}
                 <Watch
                     header={watchHeader}
                     anime={active}
@@ -521,6 +523,7 @@ export default function Home() {
 
     return (
         <main className="app">
+            {IS_ANDROID_APP && <CastSessionBar />}
             <Header
                 {...sharedHeaderProps}
                 onSearch={searchCatalog}

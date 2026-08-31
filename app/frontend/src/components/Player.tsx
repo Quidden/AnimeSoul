@@ -10,6 +10,7 @@ import { FolderPicker } from "./FolderPicker";
 import { useWatchParty, WATCH_PARTY_SESSION_KEY } from "../hooks/useWatchParty";
 import { isKodikEmbed, kodikSerialIdentity, kodikSerialSource, playerDubbing, playerEpisode, playerTranslationId } from "../lib/kodik";
 import { listenAppEvent } from "../lib/events";
+import { commandCastVideo } from "../lib/cast";
 import type { WatchProps } from "../features/player/types";
 import { SeasonList } from "../features/player/SeasonList";
 import { WatchInfo } from "../features/player/WatchInfo";
@@ -36,6 +37,7 @@ import {
 import { DownloadPicker } from "../features/downloads/DownloadPicker";
 import { IS_ANDROID_APP } from "../lib/platform";
 import {
+  activePlaybackSelection,
   createPlaybackProgressTarget,
   nextEpisodeInSeason,
   recordPlaybackObservation,
@@ -169,6 +171,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const command = (method: string, extra: Record<string, unknown> & { seconds?: number } = {}) => {
     const video = localVideo.current;
     if ((current?.offline || effectivePlayer === ANIMESOUL_PLAYER) && video) {
+      if (commandCastVideo(video, method, extra.seconds)) return;
       if (method === "play") void video.play().catch(() => undefined);
       else if (method === "pause") video.pause();
       else if (method === "seek" && Number.isFinite(extra.seconds)) video.currentTime = Math.max(0, extra.seconds ?? 0);
@@ -1039,9 +1042,12 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     .sort((a, b) => (a.item.episodes?.next_date ?? 0) - (b.item.episodes?.next_date ?? 0));
   const carouselItems = displaySeasons.flatMap(group => { const list = seasonVideos[group.number] ?? [], numbers = Array.from(new Set(list.map(video => video.number))).sort((a, b) => +a - +b); return numbers.map(number => { const candidates = list.filter(video => video.number === number), video = candidates.find(item => item.data.dubbing === dub) ?? candidates[0], entry = group.entries.find(item => item.anime_id === video?.originAnimeId) ?? group.entries[0]; return { season: group.number, number, group, video, entry } ;}) ;}), carouselIndex = carouselItems.findIndex(item => item.season === selectedSeason && item.number === episode), previousCarouselItem = showUpcoming ? (carouselIndex >= 0 ? carouselItems[carouselIndex] : undefined) : (carouselIndex > 0 ? carouselItems[carouselIndex - 1] : undefined), nextCarouselItem = !showUpcoming && carouselIndex >= 0 ? carouselItems[carouselIndex + 1] : undefined, upcomingRow = !nextCarouselItem ? scheduleRows.find(row => (row.item?.episodes?.next_date ?? 0) * 1000 > Date.now() - 86400000) : undefined, upcomingEpisode = upcomingRow ? Math.max(1, (upcomingRow.item?.episodes?.aired ?? (Number(episode) || 0)) + 1) : 0, upcomingTotal = upcomingRow?.item?.episodes?.count ?? 0, upcomingSeason = upcomingRow?.group.number ?? selectedSeason;
   const activePlaybackContext = () => {
-    const selection = (fullscreenActive.current || isPlayerFullscreen())
-      ? playbackCursor.current
-      : { season: selectedSeason, episode, dub, player: effectivePlayer };
+    const selection = activePlaybackSelection(
+      { season: selectedSeason, episode, dub, player: effectivePlayer },
+      playbackCursor.current,
+      fullscreenActive.current || isPlayerFullscreen(),
+      !useAnimeSoulPlayer,
+    );
     const list = seasonVideos[selection.season] ?? [];
     const video = list.find(item => item.number === selection.episode && item.data.dubbing === selection.dub && item.data.player === selection.player)
       ?? list.find(item => item.number === selection.episode && item.data.dubbing === selection.dub && /kodik/i.test(item.data.player))
@@ -1287,9 +1293,12 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     return true;
   };
   const advanceAfterPlayback = () => {
-    const activeSelection = (fullscreenActive.current || isPlayerFullscreen())
-      ? playbackCursor.current
-      : { season: selectedSeason, episode, dub, player: effectivePlayer };
+    const activeSelection = activePlaybackSelection(
+      { season: selectedSeason, episode, dub, player: effectivePlayer },
+      playbackCursor.current,
+      fullscreenActive.current || isPlayerFullscreen(),
+      !useAnimeSoulPlayer,
+    );
     const next = nextEpisodeInSeason(carouselItems, activeSelection.season, activeSelection.episode);
     if (!next) return;
     const transitionKey = `${activeSelection.season}:${activeSelection.episode}`;
@@ -1580,6 +1589,18 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       },
     });
   };
+  const changeAutoSkipOpening = (value: boolean) => {
+    setAutoSkipState(value);
+    patchPrefs({ autoSkipOpening: value });
+  };
+  const changeAutoSkipEnding = (value: boolean) => {
+    setAutoSkipEndingState(value);
+    patchPrefs({ autoSkipEnding: value });
+  };
+  const changeAutoNext = (value: boolean) => {
+    setAutoNextState(value);
+    patchPrefs({ autoNext: value });
+  };
   const partyPanel = (
     <WatchPartyPanel
       enabled={initialPrefs.watchPartyEnabled}
@@ -1682,6 +1703,12 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
                   source: effectivePlayer,
                   onSourceChange: chooseSource,
                   subtitles: subtitleStreamOptions,
+                  autoSkipOpening: autoSkip,
+                  onAutoSkipOpeningChange: changeAutoSkipOpening,
+                  autoSkipEnding,
+                  onAutoSkipEndingChange: changeAutoSkipEnding,
+                  autoNext,
+                  onAutoNextChange: changeAutoNext,
                   externalToolbarVisible: initialPrefs.customPlayerToolbarVisible,
                   onExternalToolbarVisibleChange: customPlayerToolbarVisible => patchPrefs({ customPlayerToolbarVisible }),
                 }}
@@ -1758,20 +1785,11 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
             command("seek", { seconds: endingEnd });
           }}
           autoSkipOpening={autoSkip}
-          onAutoSkipOpeningChange={value => {
-            setAutoSkipState(value);
-            patchPrefs({ autoSkipOpening: value });
-          }}
+          onAutoSkipOpeningChange={changeAutoSkipOpening}
           autoSkipEnding={autoSkipEnding}
-          onAutoSkipEndingChange={value => {
-            setAutoSkipEndingState(value);
-            patchPrefs({ autoSkipEnding: value });
-          }}
+          onAutoSkipEndingChange={changeAutoSkipEnding}
           autoNext={autoNext}
-          onAutoNextChange={value => {
-            setAutoNextState(value);
-            patchPrefs({ autoNext: value });
-          }}
+          onAutoNextChange={changeAutoNext}
           autoScrollPlayer={autoScrollPlayer}
           onAutoScrollPlayerChange={value => {
             setAutoScrollPlayerState(value);

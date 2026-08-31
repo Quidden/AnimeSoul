@@ -45,6 +45,6 @@ $source = Join-Path $androidRoot "app/build/outputs/apk/$variant/app-$variant.ap
 $releaseDirectory = Join-Path $mobileRoot "releases"
 New-Item -ItemType Directory -Force $releaseDirectory | Out-Null
 $suffix = if ($Configuration -eq "Release") { "" } else { "-debug" }
-$destination = Join-Path $releaseDirectory "AnimeSoul-0.2.5-android-arm64$suffix.apk"
+$destination = Join-Path $releaseDirectory "AnimeSoul-0.2.6-android-arm64$suffix.apk"
 Copy-Item -LiteralPath $source -Destination $destination -Force
 Write-Host "APK: $destination"
