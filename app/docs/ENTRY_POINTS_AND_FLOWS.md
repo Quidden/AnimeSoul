@@ -155,10 +155,25 @@ index.html#root
 -> render Header + текущая Page + modals/footer
 ```
 
-`ApplicationView` принимает `home`, `catalog`, `stats`, `ratings`. Просмотр
-тайтла задаётся отдельно через `active: Anime | null`; при active рендерится
-`Watch` (`components/Player.tsx`). Открытая folder/collection/modal — также
-ортогональное состояние, а не URL router.
+`ApplicationView` принимает `home`, `catalog`, `downloads`, `stats`, `ratings`.
+Просмотр тайтла задаётся отдельно через `active: Anime | null`; при active
+рендерится `Watch` (`components/Player.tsx`). На Android переход в другой раздел
+не очищает `active`: Watch остаётся смонтированным и показывается как мини-плеер.
+Открытая folder/collection/modal — также ортогональное состояние, а не URL router.
+
+Список на главной формируется так:
+
+```text
+HomePage -> LibrarySections -> LibraryToolbar
+-> выбрать активную вкладку
+-> useHomeCardLimit сбрасывает лимит при смене вкладки
+-> HomeCardList показывает первые 10 карточек
+-> «Загрузить ещё» увеличивает лимит на 10
+```
+
+Мини-плеер Android использует тот же экземпляр `Watch`. Pointer drag ручки
+обновляет ограниченные viewport-координаты; центральная кнопка возвращает
+экран просмотра, а закрытие очищает `active` и размонтирует плеер.
 
 ## Цепочка 4: первоначальная загрузка сохранения
 
@@ -524,6 +539,8 @@ main.tsx
 -> @import styles/base.css
    -> ordered base-*.css modules
 -> library.css -> player.css -> system-panels.css -> home-redesign.css -> ratings.css
+-> player-toolbar.css -> custom-player.css -> mobile-android.css
+-> home-library.css -> header-layout.css
 -> useProfileStorage theme effect
    -> --accent / --accent-soft / --bg
    -> data-color-scheme / colorScheme / body background

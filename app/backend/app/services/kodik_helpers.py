@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import re
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 
 class OfflineLibraryError(RuntimeError):
@@ -40,8 +40,8 @@ def _private_player_link(value: str) -> str:
     """Return the exact protocol-relative player URL signed for Kodik.
 
     The private API accepts the player link, rather than a catalogue lookup.
-    Its query string is deliberately retained: Kodik embeds use it to select a
-    concrete episode inside a season.
+    Its query string is retained while parsing, but eligibility for signing is
+    decided separately: broad serial/season embeds are never candidates.
     """
 
     if not _is_kodik_url(value):
@@ -56,30 +56,32 @@ def _private_player_link(value: str) -> str:
     return f"//{host}{path}" + (f"?{parsed.query}" if parsed.query else "")
 
 
-def _kodik_player_candidates(raw_link: str | None, official_link: str | None) -> list[str]:
-    """Order private-API links without replacing an exact episode selection.
+def _is_concrete_kodik_video_link(value: str | None) -> bool:
+    """Only films and individual episodes may be signed by ``video-links``."""
 
-    ``/seria`` (and the single-video variants) already identifies the row the
-    user selected.  A catalogue lookup is useful for broad ``/serial`` and
-    ``/season`` embeds, but it can resolve another franchise entry while the
-    frontend is still loading that entry's remote ids.  Keep exact links
-    authoritative and use the lookup only as a fallback for them.
+    if not value:
+        return False
+    try:
+        link = _private_player_link(value)
+    except OfflineLibraryError:
+        return False
+    path = urlparse(_normalise_url(link)).path.casefold()
+    return path.startswith(("/seria/", "/video/", "/movie/"))
+
+
+def _kodik_player_candidates(raw_link: str | None, official_link: str | None) -> list[str]:
+    """Return only concrete film/episode links accepted by ``video-links``.
+
+    A broad ``/serial`` or ``/season`` iframe is useful only as catalogue input.
+    It must never be signed, even when it contains an ``episode`` query string.
+    The catalogue lookup is responsible for turning it into ``/seria`` first.
     """
 
-    raw_url = urlparse(_normalise_url(raw_link or ""))
-    raw_path = raw_url.path.casefold()
-    query_keys = {key.casefold() for key in parse_qs(raw_url.query)}
-    raw_is_exact = (
-        any(raw_path.startswith(prefix) for prefix in ("/seria/", "/video/", "/movie/"))
-        or "episode" in query_keys
-    )
-    ordered = (raw_link, official_link) if raw_is_exact else (official_link, raw_link)
-    candidates = [item for item in ordered if item]
-    if raw_link:
-        bare_link = raw_link.split("?", 1)[0]
-        if bare_link != raw_link:
-            candidates.append(bare_link)
-    return list(dict.fromkeys(candidates))
+    raw_is_exact = _is_concrete_kodik_video_link(raw_link)
+    ordered = (raw_link, official_link) if raw_is_exact else (official_link,)
+    return list(dict.fromkeys(
+        item for item in ordered if item and _is_concrete_kodik_video_link(item)
+    ))
 
 
 def _kodik_signature(link: str, ip: str, deadline: str, private_key: str) -> str:
@@ -110,9 +112,9 @@ def _first_kodik_player_link(value: object) -> str | None:
     return next(
         (
             link for link in candidates
-            if urlparse(_normalise_url(link)).path.casefold().startswith(("/seria/", "/video/", "/movie/"))
+            if _is_concrete_kodik_video_link(link)
         ),
-        candidates[0] if candidates else None,
+        None,
     )
 
 
@@ -467,6 +469,12 @@ def _episode_link_from_results(
         result_dubbing = _normalise_dubbing(
             translation.get("title", result.get("translation_title", result.get("dubbing", "")))
         )
+        # Missing episodes in the selected voice must not resolve to another
+        # voice just because it contains the same episode number.
+        if wanted_translation and result_translation != wanted_translation:
+            continue
+        if not wanted_translation and wanted_dubbing and result_dubbing != wanted_dubbing:
+            continue
         material = result.get("material_data")
         if not isinstance(material, dict):
             material = {}
@@ -481,6 +489,10 @@ def _episode_link_from_results(
         } - {""}
         for result_season, season_data in seasons.items():
             if not isinstance(season_data, dict):
+                continue
+            # UI group numbers include specials and may differ from Kodik's
+            # season. A single verified season is unambiguous; several aren't.
+            if len(seasons) > 1 and str(result_season) != wanted_season:
                 continue
             episodes = season_data.get("episodes")
             if not isinstance(episodes, dict):
@@ -527,4 +539,3 @@ def _search_identifier_name(source_id_type: object) -> str | None:
         "imdb": "imdb_id",
         "kodik": "id",
     }.get(kind)
-

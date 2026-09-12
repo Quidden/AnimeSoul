@@ -31,7 +31,9 @@ main.tsx
    ├─ styles/ratings.css
    ├─ styles/player-toolbar.css
    ├─ styles/custom-player.css
-   └─ styles/mobile-android.css
+   ├─ styles/mobile-android.css
+   ├─ styles/home-library.css
+   └─ styles/header-layout.css
 ```
 
 Порядок является частью визуального контракта. Файл ниже по списку может
@@ -153,15 +155,17 @@ Selectors находятся в `base-personalization.css`. Значение `1`
 | `player-toolbar.css` | окончательная раскладка toolbar и download controls вокруг video | `PlayerToolbar`; `.player-toolbar-*`, `.toolbar-*` |
 | `custom-player.css` | controls, menus, subtitles и состояния собственного HLS-плеера | `AnimeSoulPlayer`, `AnimeSoulPlayerMenus`; `.animesoul-player-*` |
 | `mobile-android.css` | поздние Android/mobile overrides и safe-area variables | Android WebView; `html[data-platform="android"]`, `.animesoul-native-pip` |
+| `home-library.css` | единые карточки и вкладки библиотеки, маска постера, пагинация и mobile-композиция | `LibrarySections`, `HomeCardList`, `LibraryToolbar`; `.home-library-*` |
+| `header-layout.css` | окончательная сетка шапки и медиазапросы против наложения поиска, меню и статусов | `Header`; `.header-*`, `.search-wrap` |
 
 ## Привязка UI → stylesheet
 
 | Что меняется | Сначала открыть |
 | --- | --- |
 | root/body/buttons/cards/modal primitive | `base-core.css` |
-| Header search/status/navigation | `base-navigation.css`, затем `base-feedback.css` и `Header.tsx` |
+| Header search/status/navigation | `base-navigation.css`, затем `base-feedback.css`, `header-layout.css` и `Header.tsx` |
 | Catalog filters/cards/light theme | `base-catalog.css`, базовые карточки также `base-core.css` |
-| Home cinematic layout | `home-redesign.css` |
+| Home cinematic layout | `home-redesign.css`; карточки и вкладки — `home-library.css` |
 | Favorites/history/tracking/statistics | `library.css`; overview modal — `base-collections.css` |
 | Player/seasons/episode preview/party | `player.css`; personalization — `base-personalization.css` |
 | Settings shell/tabs | `base-settings-base.css`, `base-settings-modal.css`, `base-settings-center.css` |
@@ -184,6 +188,8 @@ Selectors находятся в `base-personalization.css`. Значение `1`
 - `player.css` имеет `(hover:none)` для отключения hover preview на touch;
 - `player.css` учитывает `prefers-reduced-motion: reduce`;
 - `home-redesign.css` использует `100svh` для мобильной высоты hero;
+- `home-library.css` переводит широкую карточку в вертикальную композицию на телефоне, сохраняя маску перехода постера;
+- `header-layout.css` последним перераспределяет меню, поиск и индикаторы на промежуточных и мобильных ширинах;
 - settings modal имеет отдельные 860/760/600 layouts;
 - desktop minimum window — 960×640, но browser может быть уже.
 
@@ -200,6 +206,7 @@ Inline style допустим там, где значение является �
 | `AnimeCard`, `FolderView`, `CollectionOverview`, `LibrarySections`, `SeasonList`, `DashboardWidgets` | width progress bar | процент из runtime данных |
 | `StatisticsPage` | grid columns, bar width/height | вычисленная шкала графика |
 | `EpisodeHoverPreview` | `left`, `top` | pointer/viewport position |
+| `App` Android mini-player | `left`, `top` | сохранённая и ограниченная viewport позиция после pointer drag |
 | `AppearanceSettings` | preview gradient | выбранные theme colors |
 | `GoogleDriveInitialSyncModal` | overlay/dialog objects | изолированный blocking modal; кандидат на перенос в `base-cloud.css` |
 | `run.py::DESKTOP_ZOOM_SCRIPT` | zoom indicator и root zoom | код инжектируется после загрузки WebView |

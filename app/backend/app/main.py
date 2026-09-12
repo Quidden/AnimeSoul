@@ -20,6 +20,7 @@ from runtime_instance import RUNTIME_API_CAPABILITIES
 from .api.gdrive import router as gdrive_router
 from .api.community_ratings import router as community_ratings_router
 from .api.downloads import router as downloads_router
+from .api.episode_dates import gateway as episode_dates_gateway, router as episode_dates_router
 from .api.storage import router as storage_router
 from .api.watch_party import router as party_router
 from .api.kodik import close_kodik_services, router as kodik_router
@@ -35,12 +36,13 @@ async def lifespan(_application: FastAPI):
     await asyncio.gather(
         close_yummy_services(),
         close_kodik_services(),
+        episode_dates_gateway.close(),
         return_exceptions=True,
     )
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.2.6",
+    version="0.2.7",
     description="FastAPI backend for the AnimeSoul desktop and web client.",
     lifespan=lifespan,
 )
@@ -78,6 +80,7 @@ app.add_middleware(
 app.include_router(yummy_router)
 app.include_router(kodik_router)
 app.include_router(downloads_router)
+app.include_router(episode_dates_router)
 app.include_router(storage_router)
 # The standalone Android product intentionally has no Watch Party surface.
 if os.getenv("ANIMESOUL_MOBILE", "").casefold() != "android":

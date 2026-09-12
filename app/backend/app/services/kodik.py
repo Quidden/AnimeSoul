@@ -12,7 +12,9 @@ from typing import Any
 
 import httpx
 
+from .anime_identity import anime_match_score, anime_titles, normalise_title
 from .http_client import LazyAsyncClient
+from .kodik_helpers import _is_concrete_kodik_video_link
 from .response_cache import CacheRecord, PersistentJsonCache, response_cache_path
 
 
@@ -220,6 +222,13 @@ def kodik_release_to_anime(release: dict[str, Any], anime_id: int | None = None)
     return {key: value for key, value in result.items() if value not in (None, "", [], {})}
 
 
+def matching_kodik_releases(
+    releases: list[dict[str, Any]], anime: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """A search response is a candidate list, not proof of title identity."""
+    return [release for release in releases if anime_match_score(anime, kodik_release_to_anime(release)) >= 500]
+
+
 def _timestamp(value: object) -> int | None:
     if not isinstance(value, str) or not value.strip():
         return None
@@ -260,7 +269,9 @@ def kodik_releases_to_videos(releases: list[dict[str, Any]]) -> list[dict[str, A
                 episodes = season_data.get("episodes")
                 if isinstance(episodes, dict):
                     rows.extend((str(number), episode) for number, episode in episodes.items())
-        if not rows and release.get("link"):
+        # An empty serial/season is not a playable episode. Only a concrete
+        # single-video release can supply episode 1 without an episode map.
+        if not rows and isinstance(release.get("link"), str) and _is_concrete_kodik_video_link(release["link"]):
             rows.append(("1", {"link": release.get("link")}))
 
         for number, episode_value in rows:
@@ -458,7 +469,7 @@ class KodikAnimeGateway:
         if isinstance(anime, dict):
             for field in ("title", "original", "title_en"):
                 value = str(anime.get(field) or "").strip()
-                if value:
+                if value and normalise_title(value) in anime_titles(anime):
                     lookups.append({"title" if field == "title" else "title_orig": value})
         if not lookups:
             return []
@@ -471,6 +482,14 @@ class KodikAnimeGateway:
         if with_episodes:
             common["with_episodes_data"] = "true"
         first_error: BaseException | None = None
+        identity = dict(anime or {})
+        if anime_id is not None:
+            decoded = kodik_lookup_from_anime_id(anime_id)
+            if decoded:
+                identity["remote_ids"] = {
+                    **{"kodik_id" if field == "id" else field: value for field, value in decoded.items()},
+                    **(identity.get("remote_ids") or {}),
+                }
         for lookup in lookups:
             try:
                 payload = await self.request(
@@ -485,8 +504,9 @@ class KodikAnimeGateway:
                 continue
             results = payload.get("results")
             rows = [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
-            if rows:
-                return rows
+            matches = matching_kodik_releases(rows, identity)
+            if matches:
+                return matches
         if first_error:
             raise first_error
         return []

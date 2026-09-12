@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from .kodik import matching_kodik_releases
 from .kodik_helpers import (
     CredentialVerificationUnavailable,
     OfflineLibraryError,
@@ -265,7 +266,9 @@ class KodikSourceResolver:
                 )
                 candidate_links = _kodik_player_candidates(raw_link, official_link)
                 if not candidate_links:
-                    raise OfflineLibraryError("Не удалось определить ссылку Kodik для выбранной серии.")
+                    raise OfflineLibraryError(
+                        "Kodik не вернул ссылку на конкретный фильм или выбранную серию."
+                    )
                 for candidate in candidate_links:
                     params = {
                         "link": candidate,
@@ -279,9 +282,9 @@ class KodikSourceResolver:
                     response = await client.get(KODIK_VIDEO_LINKS_ENDPOINT, params=params)
                     if response.is_success:
                         break
-                    # A malformed player link can be corrected by dropping a
-                    # player-only query string. Auth and permission responses
-                    # cannot, so avoid sending an unnecessary second request.
+                    # A second candidate is allowed only when it is another
+                    # concrete film/episode link. Broad serial/season embeds
+                    # are filtered before this loop.
                     if response.status_code not in {400, 404, 422}:
                         break
         except httpx.HTTPError as error:
@@ -351,8 +354,21 @@ class KodikSourceResolver:
                 continue
             if not isinstance(payload, dict):
                 continue
+            results = payload.get("results")
+            rows = [row for row in results if isinstance(row, dict)] if isinstance(results, list) else []
+            if parameter in {"shikimori_id", "id"}:
+                # An exact title/release lookup can use localized titles. A
+                # contradictory ID still disqualifies a returned candidate.
+                rows = [row for row in rows if str(row.get(parameter, value)) == value]
+            else:
+                remote_key = {"shikimori_id": "shikimori_id", "kinopoisk_id": "kp_id", "imdb_id": "imdb_id", "id": "kodik_id"}.get(identifier_name)
+                rows = matching_kodik_releases(rows, {
+                    "title": title,
+                    "original": original_title,
+                    "remote_ids": {remote_key: identifier} if remote_key and identifier else {},
+                })
             candidate = _episode_link_from_results(
-                payload.get("results"),
+                rows,
                 season,
                 episode,
                 translation_id,
@@ -403,4 +419,3 @@ class KodikSourceResolver:
         self._public_ip = address
         self._public_ip_expires_at = time.monotonic() + 300
         return address
-

@@ -207,7 +207,7 @@ html[data-platform="android"] .app > .app-header > .app-navigation {
   bottom: 0;
   left: 0;
   display: grid!important;
-  grid-template-columns: repeat(6,minmax(0,1fr));
+  grid-template-columns: repeat(5,minmax(0,1fr));
   gap: 0;
   height: calc(62px + var(--android-safe-bottom));
   padding: 3px max(4px, var(--android-safe-right)) var(--android-safe-bottom) max(4px, var(--android-safe-left));
@@ -236,8 +236,18 @@ html[data-platform="android"] .app > .app-header .settings-center-trigger {
 }
 
 html[data-platform="android"] .app > .app-header > .app-navigation .mobile-nav-only,
+html[data-platform="android"] .app > .app-header > .app-navigation .android-nav-only,
 html[data-platform="android"] .app > .app-header > .app-navigation .nav-icon {
   display: grid;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation .desktop-section-nav {
+  display: none;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation > button:disabled {
+  color: #756d7c;
+  opacity: .58;
 }
 
 html[data-platform="android"] .app > .app-header > .app-navigation .nav-label {
@@ -264,6 +274,207 @@ html[data-platform="android"] .app > .app-header .settings-center-trigger[aria-e
 html[data-platform="android"] .app > .app-header > .app-navigation > button.is-active .nav-icon {
   color: var(--accent);
   transform: translateY(-1px);
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation .nav-icon-watch {
+  position: relative;
+}
+
+html[data-platform="android"] .app > .app-header > .app-navigation button:not(:disabled) .nav-icon-watch::after {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 6px;
+  height: 6px;
+  border: 2px solid #0d0a11;
+  border-radius: 50%;
+  background: #56d891;
+  content: "";
+}
+
+/* Paired mobile destinations keep the bottom bar compact while the local
+   switcher makes both screens directly reachable. */
+html[data-platform="android"] .mobile-section-tabs {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 4px;
+  width: min(420px,calc(100% - 28px));
+  margin: calc(var(--android-safe-top) + var(--floating-header-offset) + 10px) auto 0;
+  padding: 4px;
+  border: 1px solid #ffffff14;
+  border-radius: 16px;
+  background: color-mix(in srgb,var(--panel) 92%,transparent);
+  box-shadow: 0 12px 32px #0005;
+  backdrop-filter: blur(18px);
+}
+
+html[data-platform="android"] .app > .app-header.search-hidden + .mobile-section-tabs {
+  margin-top: calc(var(--android-safe-top) + 10px);
+}
+
+html[data-platform="android"] .mobile-section-tabs > button {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #b8afc1;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+html[data-platform="android"] .mobile-section-tabs > button.active {
+  background: color-mix(in srgb,var(--accent) 18%,#ffffff08);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--accent) 36%,transparent);
+}
+
+html[data-platform="android"] .app > .mobile-section-tabs + #catalog.catalog-page,
+html[data-platform="android"] .app > .mobile-section-tabs + .downloads-page,
+html[data-platform="android"] .app > .mobile-section-tabs + .statistics-page,
+html[data-platform="android"] .app > .mobile-section-tabs + .ratings-page {
+  padding-top: 18px;
+}
+
+html[data-platform="android"] .app > .mobile-section-tabs + .catalog-page > .section-head > .outline,
+html[data-platform="android"] .app > .mobile-section-tabs + .statistics-page > .section-head > .outline,
+html[data-platform="android"] .app > .mobile-section-tabs + .ratings-page > .section-head > .outline,
+html[data-platform="android"] .app > .mobile-section-tabs + .downloads-page .downloads-hero .downloads-back-button {
+  display: none;
+}
+
+/* In-app mini player. The watch component stays mounted; only its video frame
+   is lifted over the selected section, so playback and episode state survive. */
+html[data-platform="android"] .active-watch-layer.is-foreground {
+  display: contents;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini {
+  position: fixed;
+  z-index: 240;
+  right: max(12px,var(--android-safe-right));
+  bottom: calc(72px + var(--android-safe-bottom));
+  width: min(58vw,240px);
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 1px solid #ffffff26;
+  border-radius: 14px;
+  background: #050408;
+  box-shadow: 0 18px 48px #000c,0 0 0 1px #0008;
+  pointer-events: none;
+  isolation: isolate;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini > .app,
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .watch-shell,
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .episode-carousel,
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .video-layout {
+  display: contents!important;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini > .app > :not(.watch-shell),
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .watch-shell > :not(.episode-carousel),
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .episode-carousel > :not(.video-layout),
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .video-layout > :not(.player-frame) {
+  display: none!important;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .player-frame {
+  position: absolute!important;
+  z-index: 1!important;
+  inset: 0!important;
+  width: 100%!important;
+  height: 100%!important;
+  min-height: 0!important;
+  margin: 0!important;
+  border: 0!important;
+  border-radius: inherit!important;
+  transform: none!important;
+  pointer-events: auto;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .active-watch-mini-bar {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: 32px minmax(0,1fr) 34px;
+  align-items: center;
+  background: linear-gradient(180deg,#08070be8 0%,#08070ba8 68%,transparent 100%);
+  pointer-events: auto;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .active-watch-mini-bar > button {
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  box-shadow: none;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .active-watch-drag {
+  display: grid;
+  place-items: center;
+  color: #d4c9da;
+  cursor: grab;
+  font-size: 17px;
+  line-height: 1;
+  touch-action: none;
+  user-select: none;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .active-watch-drag:active {
+  cursor: grabbing;
+  color: #fff;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .active-watch-return {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .active-watch-close {
+  display: grid;
+  place-items: center;
+  color: #f5dfe5;
+  font-size: 22px;
+  line-height: 1;
+}
+
+html[data-platform="android"]:not(.animesoul-native-pip) .active-watch-layer.is-mini .active-watch-close:active {
+  background: color-mix(in srgb,var(--accent) 32%,transparent);
+  color: #fff;
+}
+
+html[data-platform="android"] .active-watch-return > span {
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+html[data-platform="android"] .active-watch-return > strong {
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-platform="android"] .active-watch-return > i {
+  font-size: 14px;
+  font-style: normal;
 }
 
 html[data-platform="android"] .app > .app-header .navigation-settings-slot {

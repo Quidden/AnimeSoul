@@ -43,6 +43,7 @@ export function useEpisodeTracking({
               snapshot.episodeDates,
               now,
               snapshot.allDubEpisodeDates,
+              snapshot.identityCheckedAnimeIds,
             );
             const next = current.map((entry) =>
               entry.animeId === item.animeId ? nextItem : entry,

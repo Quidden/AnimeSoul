@@ -18,7 +18,7 @@ import {
     type OfflineAnime,
 } from "../../lib/downloads";
 import {isKodikEmbed} from "../../lib/kodik";
-import type {KodikStreamInfo} from "../../lib/kodikStream";
+import type {KodikStreamSummary} from "../../lib/kodikStream";
 import {writeLocal} from "../../lib/storage";
 import type {Anime, SeasonGroup, Video} from "../../lib/types";
 
@@ -29,7 +29,7 @@ type UseDownloadManagerOptions = {
     anime: Anime;
     currentDubbing: string;
     directPlaybackKey: string;
-    directStreamInfo: {key: string; info: KodikStreamInfo} | null;
+    directStreamSummary: {key: string; info: KodikStreamSummary} | null;
     displaySeasons: SeasonGroup[];
     downloadJobs: DownloadJob[];
     downloadQuality: number;
@@ -60,7 +60,7 @@ export function useDownloadManager({
     anime,
     currentDubbing,
     directPlaybackKey,
-    directStreamInfo,
+    directStreamSummary,
     displaySeasons,
     downloadJobs,
     downloadQuality,
@@ -177,13 +177,13 @@ export function useDownloadManager({
     }, [activeDownloadJobs, displaySeasons, downloadEpisodeKeys, downloadQuality, downloadVideoChoices, effectiveDownloadDubbing, offlineAnime]);
 
     const downloadQualityOptions = useMemo(() => {
-        const resolved = directStreamInfo?.key === directPlaybackKey && effectiveDownloadDubbing === currentDubbing
-            ? directStreamInfo.info.sources.map(source => source.quality)
+        const resolved = directStreamSummary?.key === directPlaybackKey && effectiveDownloadDubbing === currentDubbing
+            ? directStreamSummary.info.qualities
             : [];
         return [...new Set(resolved.length ? resolved : [360, 480, 720])]
             .filter(value => Number.isFinite(value) && value > 0)
             .sort((left, right) => left - right);
-    }, [currentDubbing, directPlaybackKey, directStreamInfo, effectiveDownloadDubbing]);
+    }, [currentDubbing, directPlaybackKey, directStreamSummary, effectiveDownloadDubbing]);
 
     const changeDownloadQuality = useCallback((value: number) => {
         setDownloadQuality(value);

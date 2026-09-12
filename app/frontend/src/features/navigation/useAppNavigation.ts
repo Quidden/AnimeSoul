@@ -11,6 +11,8 @@ import type {Anime} from "../../lib/types";
 
 type UseAppNavigationOptions = {
     active: Anime | null;
+    keepActiveOnNavigation?: boolean;
+    watchForeground: boolean;
     view: ApplicationView;
     setActive: Dispatch<SetStateAction<Anime | null>>;
     setCatalog: Dispatch<SetStateAction<Anime[]>>;
@@ -18,6 +20,7 @@ type UseAppNavigationOptions = {
     setQuery: Dispatch<SetStateAction<string>>;
     setResumeRequested: Dispatch<SetStateAction<boolean>>;
     setView: Dispatch<SetStateAction<ApplicationView>>;
+    setWatchForeground: Dispatch<SetStateAction<boolean>>;
 };
 
 function scrollToTop(behavior?: ScrollBehavior) {
@@ -27,6 +30,8 @@ function scrollToTop(behavior?: ScrollBehavior) {
 /** Provides stable screen transitions and owns Android/native back navigation. */
 export function useAppNavigation({
     active,
+    keepActiveOnNavigation = false,
+    watchForeground,
     view,
     setActive,
     setCatalog,
@@ -34,14 +39,16 @@ export function useAppNavigation({
     setQuery,
     setResumeRequested,
     setView,
+    setWatchForeground,
 }: UseAppNavigationOptions) {
     const resetToView = useCallback((nextView: ApplicationView, behavior?: ScrollBehavior) => {
-        setActive(null);
+        if (keepActiveOnNavigation && active) setWatchForeground(false);
+        else setActive(null);
         setResumeRequested(false);
         setNewEpisodeRequested(false);
         setView(nextView);
         scrollToTop(behavior);
-    }, [setActive, setNewEpisodeRequested, setResumeRequested, setView]);
+    }, [active, keepActiveOnNavigation, setActive, setNewEpisodeRequested, setResumeRequested, setView, setWatchForeground]);
 
     const openAnime = useCallback((anime: Anime, resume = false) => {
         // Offline-library cards remain playable even when the remote catalog
@@ -52,8 +59,9 @@ export function useAppNavigation({
         setResumeRequested(resume);
         setNewEpisodeRequested(false);
         setActive(anime);
+        setWatchForeground(true);
         scrollToTop();
-    }, [setActive, setCatalog, setNewEpisodeRequested, setResumeRequested]);
+    }, [setActive, setCatalog, setNewEpisodeRequested, setResumeRequested, setWatchForeground]);
 
     const openLibrary = useCallback(
         () => resetToView("stats", "smooth"),
@@ -75,20 +83,26 @@ export function useAppNavigation({
         () => resetToView("home", "smooth"),
         [resetToView],
     );
+    const showCurrent = useCallback(() => {
+        if (!active) return;
+        setWatchForeground(true);
+        scrollToTop("smooth");
+    }, [active, setWatchForeground]);
 
     const openSuggestion = useCallback((anime: Anime) => {
         setQuery(anime.title);
         setActive(anime);
         setResumeRequested(false);
         setNewEpisodeRequested(false);
-    }, [setActive, setNewEpisodeRequested, setQuery, setResumeRequested]);
+        setWatchForeground(true);
+    }, [setActive, setNewEpisodeRequested, setQuery, setResumeRequested, setWatchForeground]);
 
     useEffect(() => {
         const handleNativeBack = (event: Event) => {
             // Dialog hooks close only the visually topmost modal. App-level
             // navigation must wait for them instead of closing two layers.
             if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
-            if (active) {
+            if (active && (!keepActiveOnNavigation || watchForeground)) {
                 event.preventDefault();
                 showCatalog();
                 return;
@@ -100,7 +114,7 @@ export function useAppNavigation({
         };
         window.addEventListener(NATIVE_BACK_EVENT, handleNativeBack);
         return () => window.removeEventListener(NATIVE_BACK_EVENT, handleNativeBack);
-    }, [active, goHome, showCatalog, view]);
+    }, [active, goHome, keepActiveOnNavigation, showCatalog, view, watchForeground]);
 
     return {
         goHome,
@@ -108,6 +122,7 @@ export function useAppNavigation({
         openLibrary,
         openSuggestion,
         showCatalog,
+        showCurrent,
         showDownloads,
         showRatings,
     };

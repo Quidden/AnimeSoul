@@ -1,0 +1,58 @@
+/* Search participates in desktop layout instead of covering navigation. */
+@media (min-width: 801px) {
+  html:not([data-platform="android"]) .app > .app-header {
+    --header-gutter: clamp(20px, 3vw, 48px);
+    display: grid;
+    grid-template-columns: auto auto minmax(180px, 1fr) auto;
+    align-items: center;
+    gap: 20px;
+    height: auto;
+    min-height: 76px;
+    padding: 12px var(--header-gutter);
+  }
+  html:not([data-platform="android"]) .app-header > .brand { padding: 0; white-space: nowrap; }
+  html:not([data-platform="android"]) .app-header > .app-navigation { min-width: 0; gap: 16px; flex-wrap: wrap; }
+  html:not([data-platform="android"]) .app-header > .app-navigation > button { padding: 10px 0; white-space: nowrap; }
+  html:not([data-platform="android"]) .app-header > .search-wrap {
+    position: relative!important;
+    inset: auto;
+    translate: none;
+    width: 100%;
+    min-width: 0;
+  }
+  html:not([data-platform="android"]) .app-header .header-search { position: static; width: 100%; min-width: 0; min-height: 42px; }
+  html:not([data-platform="android"]) .app-header .header-search input { width: 100%; color: var(--ink); font-size: 14px; }
+  html:not([data-platform="android"]) .app-header .header-search button { flex: 0 0 42px; }
+  html:not([data-platform="android"]) .app-header .header-search .nav-icon { color: var(--muted); }
+  html:not([data-platform="android"]) .app-header > .header-actions { min-width: 12px; margin: 0 52px 0 0; }
+  html:not([data-platform="android"]) .app-header .navigation-settings-slot { right: var(--header-gutter); }
+  html:not([data-platform="android"]) .app-header .settings-center-trigger { width: 40px; height: 40px; color: var(--ink); }
+  html:not([data-platform="android"]) .app-header .suggestions { top: calc(100% + 8px); }
+  html:not([data-platform="android"]) .app-header .header-statuses { position: static; }
+  html:not([data-platform="android"]) .app-header .status-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: var(--header-gutter);
+    bottom: auto;
+    left: auto;
+    translate: none;
+    max-width: min(360px, calc(100vw - 2 * var(--header-gutter)));
+    white-space: normal;
+    pointer-events: none;
+    animation: none;
+  }
+}
+
+/* Give search its own row before the full navigation becomes cramped. */
+@media (min-width: 801px) and (max-width: 1360px) {
+  html:not([data-platform="android"]) .app > .app-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 24px; }
+  html:not([data-platform="android"]) .app-header > .search-wrap { grid-column: 1 / -1; grid-row: 2; }
+  html:not([data-platform="android"]) .app-header > .header-actions { grid-column: 3; grid-row: 1; }
+  html:not([data-platform="android"]) .app-header .navigation-settings-slot { top: 12px; translate: none; }
+  html:not([data-platform="android"]) .app-header .save-indicator { font-size: 0; }
+}
+
+@media (max-width: 800px) {
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  html:not([data-platform="android"]) .app > .app-header > .app-navigation > .android-nav-only { display: none; }
+}

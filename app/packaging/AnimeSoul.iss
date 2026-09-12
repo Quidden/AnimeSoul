@@ -1,5 +1,5 @@
 #define AppName "AnimeSoul"
-#define AppVersion "0.2.6"
+#define AppVersion "0.2.7"
 #define AppPublisher "Quidden"
 #define AppExeName "AnimeSoul Launcher.exe"
 

@@ -5,15 +5,18 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
 
+from .anime_identity import anime_match_score
 from .kodik import (
     KodikAnimeGateway,
     KodikNotConfiguredError,
     kodik_release_to_anime,
     kodik_releases_to_videos,
+    matching_kodik_releases,
 )
 from .yummy import YummyAnimeGateway
 
@@ -73,46 +76,6 @@ def _translation_kind(data: dict[str, Any]) -> str:
 
 def _is_kodik_player(value: object) -> bool:
     return "kodik" in _normalise(value)
-
-
-def _remote_ids(anime: dict[str, Any]) -> dict[str, str]:
-    raw = anime.get("remote_ids")
-    if not isinstance(raw, dict):
-        return {}
-    return {
-        key: str(value).casefold().strip()
-        for key, value in raw.items()
-        if value not in (None, "")
-    }
-
-
-def _titles(anime: dict[str, Any]) -> set[str]:
-    values: list[object] = [
-        anime.get("title"), anime.get("original"), anime.get("title_ru"), anime.get("title_en"),
-    ]
-    other = anime.get("other_titles")
-    if isinstance(other, list):
-        values.extend(other)
-    elif isinstance(other, str):
-        values.extend(re.split(r"\s*(?:/|\||;)\s*", other))
-    return {_normalise(value) for value in values if _normalise(value)}
-
-
-def anime_match_score(left: dict[str, Any], right: dict[str, Any]) -> int:
-    left_ids = _remote_ids(left)
-    right_ids = _remote_ids(right)
-    score = 0
-    for key in ("shikimori_id", "kp_id", "imdb_id", "kodik_id"):
-        if left_ids.get(key) and left_ids.get(key) == right_ids.get(key):
-            score = max(score, 1000)
-    common_titles = _titles(left) & _titles(right)
-    if common_titles:
-        left_year = left.get("year")
-        right_year = right.get("year")
-        if left_year and right_year and str(left_year) != str(right_year):
-            return score
-        score = max(score, 500 + (50 if left_year and right_year else 0))
-    return score
 
 
 def _collapse_anime(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -240,11 +203,11 @@ class AnimeIdentityRegistry:
                     continue
                 identity = {
                     key: copy.deepcopy(item[key])
-                    for key in ("anime_id", "title", "original", "title_en", "title_ru", "year", "remote_ids")
+                    for key in ("anime_id", "title", "original", "other_titles", "title_en", "title_ru", "year", "type", "remote_ids")
                     if key in item and not is_missing_field(item[key])
                 }
                 key = str(anime_id)
-                merged = merge_missing_fields(self._rows.get(key, {}), identity)
+                merged = merge_missing_fields(identity, self._rows.get(key, {}))
                 if merged != self._rows.get(key):
                     self._rows[key] = merged
                     changed = True
@@ -470,8 +433,23 @@ class HybridCatalogueService:
         }
         yummy_video_rows = [item for item in yummy_videos if isinstance(item, dict)] if isinstance(yummy_videos, list) else []
         releases = [item for item in kodik_value if isinstance(item, dict)] if isinstance(kodik_value, list) else []
+        if isinstance(yummy_details, dict):
+            # A persisted identity may predate corrected catalogue metadata.
+            releases = matching_kodik_releases(releases, yummy_details)
         kodik_video_rows = kodik_releases_to_videos(releases)
         videos = merge_videos(yummy_video_rows, kodik_video_rows)
+        # Yummy dates describe individual uploads. Keep their earliest known
+        # date separate from Kodik's release-wide `updated_at` and from air dates.
+        added_dates: dict[str, int | float] = {}
+        for row in yummy_video_rows:
+            added = row.get("date")
+            number = str(row.get("number", ""))
+            if isinstance(added, (int, float)) and not isinstance(added, bool) and math.isfinite(added) and added > 0:
+                added_dates[number] = min(added_dates.get(number, added), added)
+        for video in videos:
+            added = added_dates.get(str(video.get("number", "")))
+            if added is not None:
+                video["episode_added_at"] = added
 
         kodik_cards = _collapse_anime([kodik_release_to_anime(item, anime_id=anime_id) for item in releases])
         kodik_anime = kodik_cards[0] if kodik_cards else None
@@ -489,4 +467,4 @@ class HybridCatalogueService:
             raise CatalogueUnavailableError("Серии недоступны в YummyAnime и Kodik", sources)
         if anime:
             await self.registry.remember([anime])
-        return {"anime": anime or {}, "videos": videos}, sources
+        return {"anime": anime or {}, "videos": videos, "episode_identity_version": 1}, sources

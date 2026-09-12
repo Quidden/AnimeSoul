@@ -6,6 +6,7 @@ export type TrackingSnapshot = {
   episodeDates: Map<string, number>;
   allDubEpisodeDates: Map<string, number>;
   successfulRequests: number;
+  identityCheckedAnimeIds: number[];
 };
 
 const REQUEST_PAUSE_MS = 220;
@@ -63,15 +64,15 @@ export async function fetchTrackingSnapshot(
   const episodeDates = new Map<string, number>();
   const allDubEpisodeDates = new Map<string, number>();
   let successfulRequests = 0;
+  const identityCheckedAnimeIds: number[] = [];
 
   for (const animeId of animeIds) {
     if (isCancelled()) return null;
     try {
       const response = await fetch(`/api/yummy?mode=videos&id=${animeId}`);
       const payload = await response.json();
-      if (response.ok) {
-        successfulRequests += 1;
-        const videos = (payload.videos ?? []) as Video[];
+      if (response.ok && Array.isArray(payload.videos)) {
+        const videos = payload.videos as Video[];
         mergeEpisodeDates(
           episodeDates,
           collectPlayableEpisodeDates(animeId, videos, tracker.dubs ?? []),
@@ -80,6 +81,11 @@ export async function fetchTrackingSnapshot(
           allDubEpisodeDates,
           collectPlayableEpisodeDates(animeId, videos),
         );
+        successfulRequests += 1;
+        if (payload.episode_identity_version === 1
+          && payload._sources?.yummy === "ok" && payload._sources?.kodik === "ok") {
+          identityCheckedAnimeIds.push(animeId);
+        }
       }
     } catch {
       // A single season may be temporarily unavailable. Other seasons still
@@ -93,5 +99,6 @@ export async function fetchTrackingSnapshot(
     episodeDates,
     allDubEpisodeDates,
     successfulRequests,
+    identityCheckedAnimeIds,
   };
 }

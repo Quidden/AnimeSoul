@@ -37,6 +37,41 @@ import {
   collectPlayableEpisodeDates,
   reconcileTrackedEpisodes,
 } from "../src/lib/tracking.ts";
+import { fetchTrackingSnapshot } from "../src/features/tracking/api.ts";
+import { animeMyAnimeListId, episodeAddedDate, episodeAirDate, fetchEpisodeAirDates, formatAirDate } from "../src/lib/episodeDates.ts";
+
+test("episode air dates use original part numbering and never provider update timestamps", () => {
+  const video = { video_id: 1, number: "13", originNumber: "1", date: 1788537229,
+    iframe_url: "https://player/1", data: { dubbing: "A", player: "Kodik" } };
+  assert.equal(episodeAirDate(video, { "1": "2021-07-06", "13": "2026-09-04" }), "2021-07-06");
+  assert.equal(formatAirDate("2021-07-06"), "06.07.2021");
+  assert.equal(episodeAirDate(video, { "1": "2026-02-30" }), undefined);
+  assert.equal(episodeAirDate(video), undefined);
+  assert.equal(episodeAddedDate(video), undefined);
+  assert.equal(episodeAddedDate({ ...video, episode_added_at: 1788537229 }), "2026-09-04");
+  assert.equal(animeMyAnimeListId({ anime_id: 1, title: "Test", remote_ids: { myanimelist_id: "77" } }), 77);
+  assert.equal(animeMyAnimeListId({ anime_id: 1, title: "Test", remote_ids: { kp_id: 77 } }), undefined);
+});
+
+test("episode dates load later pages, reuse requests and keep earlier pages on an outage", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  try {
+    globalThis.fetch = async input => {
+      const url = String(input);
+      calls.push(url);
+      const page = Number(new URL(url, "http://localhost").searchParams.get("page"));
+      if (page === 3) return new Response("{}", { status: 503 });
+      return new Response(JSON.stringify({ dates: { [page === 1 ? "1" : "101"]: "2026-09-04" }, hasNextPage: true }));
+    };
+    const [left, right] = await Promise.all([fetchEpisodeAirDates(98765), fetchEpisodeAirDates(98765)]);
+    assert.deepEqual(left, { "1": "2026-09-04", "101": "2026-09-04" });
+    assert.deepEqual(right, left);
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 import {
   animeSearchQueryVariants,
   animeSearchScore,
@@ -528,6 +563,37 @@ test("Kodik stream identity changes when late family resolver metadata is correc
   }
 });
 
+test("online Kodik playback resolves a fresh temporary URL for every launch", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_input, init) => {
+    calls += 1;
+    assert.equal(init?.cache, "no-store");
+    return new Response(JSON.stringify({
+      sources: [{ quality: 720, src: `https://cdn.example/fresh-${calls}.m3u8`, type: "hls" }],
+      subtitles: [],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  const request = {
+    videoId: "fresh-link-regression",
+    season: 1,
+    episode: "3",
+    dubbing: "Test",
+    iframeUrl: "https://kodik.example/seria/3/hash/720p",
+  };
+
+  try {
+    const first = await fetchKodikStream(request);
+    const second = await fetchKodikStream(request);
+    assert.equal(calls, 2);
+    assert.equal(first.sources[0].src, "https://cdn.example/fresh-1.m3u8");
+    assert.equal(second.sources[0].src, "https://cdn.example/fresh-2.m3u8");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("downloaded episodes use a direct local stream without calling Kodik", async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
@@ -841,6 +907,56 @@ test("tracking filters unavailable videos and non-selected dubbings", () => {
     ["A"],
   );
   assert.deepEqual([...dates.keys()], ["7:1"]);
+});
+
+test("tracking repairs phantom baselines once and detects the real release later", () => {
+  const legacy = {
+    animeId: 15066, animeIds: [15066, 25629, 30021], title: "Slime", dubs: ["A"],
+    knownEpisodes: 4, knownEpisodeKeys: ["15066:21", "25629:1", "25629:2", "30021:25"],
+    knownAnyEpisodeKeys: ["15066:21", "25629:1", "25629:2", "30021:25"],
+    pendingEpisodeKeys: ["25629:1"], newEpisodes: 1,
+    pendingOtherDubEpisodeKeys: ["25629:2"], otherDubEpisodes: 1, lastCheckedAt: 100,
+  };
+  const current = new Map([["15066:21", 1]]);
+  const repaired = reconcileTrackedEpisodes(legacy, legacy.animeIds, current, 200, current, [15066, 25629]);
+  assert.deepEqual(repaired.knownEpisodeKeys, ["15066:21", "30021:25"]);
+  assert.deepEqual(repaired.knownAnyEpisodeKeys, ["15066:21", "30021:25"]);
+  assert.equal(repaired.newEpisodes, 0);
+  assert.equal(repaired.otherDubEpisodes, 0);
+  assert.deepEqual(repaired.episodeIdentityCheckedIds, [15066, 25629]);
+  // Unavailable titles keep their history; subsequent partial results keep
+  // the repaired baseline monotonic even with a healthy-source marker.
+  const partial = reconcileTrackedEpisodes(repaired, legacy.animeIds, new Map(), 300, new Map(), [15066, 25629]);
+  assert.deepEqual(partial.knownEpisodeKeys, repaired.knownEpisodeKeys);
+  const otherVoice = new Map([...current, ["25629:1", 2] as const]);
+  const released = reconcileTrackedEpisodes(partial, legacy.animeIds, current, 400, otherVoice, [15066, 25629]);
+  assert.equal(released.newEpisodes, 0);
+  assert.equal(released.otherDubEpisodes, 1);
+  const dubbed = reconcileTrackedEpisodes(released, legacy.animeIds, otherVoice, 500, otherVoice, [15066, 25629]);
+  assert.deepEqual(dubbed.pendingEpisodeKeys, ["25629:1"]);
+  assert.equal(dubbed.otherDubEpisodes, 0);
+});
+
+test("tracking repairs only snapshots from the corrected backend with both sources available", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async input => {
+      const url = String(input);
+      if (url.includes("mode=details")) return new Response(JSON.stringify({ anime: [] }));
+      const id = Number(new URL(url, "http://localhost").searchParams.get("id"));
+      return new Response(JSON.stringify({
+        videos: id === 4 ? null : [], episode_identity_version: id === 3 ? undefined : 1,
+        _sources: { yummy: "ok", kodik: id === 2 ? "error" : "ok" },
+      }));
+    };
+    const snapshot = await fetchTrackingSnapshot({
+      animeId: 1, animeIds: [1, 2, 3, 4], title: "Test", knownEpisodes: 1, newEpisodes: 0,
+    });
+    assert.equal(snapshot?.successfulRequests, 3);
+    assert.deepEqual(snapshot?.identityCheckedAnimeIds, [1]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("tracking keeps baseline quiet and orders pending releases newest first", () => {

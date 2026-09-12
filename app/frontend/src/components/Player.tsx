@@ -22,7 +22,7 @@ import { useDownloadManager } from "../features/player/useDownloadManager";
 import { useOfflinePlayback } from "../features/player/useOfflinePlayback";
 import { RatingBoard } from "./RatingBoard";
 import { ScorePicker } from "./ScorePicker";
-import type { KodikStreamInfo, KodikStreamRequest } from "../lib/kodikStream";
+import type { KodikStreamRequest, KodikStreamSummary } from "../lib/kodikStream";
 import {
   dubbingDurationDeficit,
   dubbingHasEpisode,
@@ -108,7 +108,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const [showSourceLoadIssues, setShowSourceLoadIssues] = useState(false);
   const [downloadQuality, setDownloadQuality] = useState<number>(read("animesoul:download-quality", 720));
   const [remoteSourcesUnavailable, setRemoteSourcesUnavailable] = useState(false);
-  const [directStreamInfo, setDirectStreamInfo] = useState<{ key: string; info: KodikStreamInfo } | null>(null);
+  const [directStreamSummary, setDirectStreamSummary] = useState<{ key: string; info: KodikStreamSummary } | null>(null);
   const [partyOnlineOnly, setPartyOnlineOnly] = useState(() => Boolean(
     initialPrefs.watchPartyEnabled && read<{ roomId?: string } | null>(WATCH_PARTY_SESSION_KEY, null)?.roomId,
   ));
@@ -258,7 +258,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   useEffect(() => {
     videoLoadId.current += 1;
     setRemoteSourcesUnavailable(false);
-    setDirectStreamInfo(null);
+    setDirectStreamSummary(null);
     setSeasonVideos({});
     setSeasons([{ number: 1, entries: [anime] }]);
     setSourceLoadIssues([]);
@@ -692,7 +692,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     anime,
     currentDubbing: dub,
     directPlaybackKey,
-    directStreamInfo,
+    directStreamSummary,
     displaySeasons,
     downloadJobs,
     downloadQuality,
@@ -704,7 +704,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     setDownloadJobs,
     setDownloadQuality,
   });
-  const resolvedDirectSkips = directStreamInfo?.key === directPlaybackKey ? directStreamInfo.info.skips : undefined;
+  const resolvedDirectSkips = directStreamSummary?.key === directPlaybackKey ? directStreamSummary.info.skips : undefined;
   const playbackSkips = {
     opening: resolvedDirectSkips?.opening ?? current?.skips?.opening,
     ending: resolvedDirectSkips?.ending ?? current?.skips?.ending,
@@ -1726,7 +1726,13 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
                 onPlay={() => setPartyPlaying(true)}
                 onPause={() => setPartyPlaying(false)}
                 onEnded={localEnded}
-                onStreamInfo={info => setDirectStreamInfo({ key: directPlaybackKey, info })}
+                onStreamInfo={info => setDirectStreamSummary({
+                  key: directPlaybackKey,
+                  info: {
+                    qualities: [...new Set(info.sources.map(source => source.quality))],
+                    skips: info.skips,
+                  },
+                })}
                 onFallback={current?.offline ? undefined : () => {
                   const fallback = kodikSource?.data.player ?? providerPlayers[0] ?? "";
                   setPlayer(fallback);

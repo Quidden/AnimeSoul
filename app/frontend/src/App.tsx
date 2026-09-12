@@ -1,4 +1,13 @@
-import { lazy, Suspense, useMemo, useRef, useState } from "react";
+import {
+    lazy,
+    Suspense,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type PointerEvent as ReactPointerEvent,
+    type ReactNode,
+} from "react";
 
 import type { CollectionOverviewKind } from "./components/CollectionOverview";
 import { FolderPicker } from "./components/FolderPicker";
@@ -166,6 +175,54 @@ export default function Home() {
 
     const [collectionOverview, setCollectionOverview] =
         useState<CollectionOverviewKind | null>(null);
+    const [watchForeground, setWatchForeground] = useState(true);
+    const [miniPlayerPosition, setMiniPlayerPosition] = useState<{left: number; top: number} | null>(null);
+    const miniPlayerDrag = useRef<{
+        pointerId: number;
+        offsetX: number;
+        offsetY: number;
+        width: number;
+        height: number;
+    } | null>(null);
+    useEffect(() => {
+        if (active?.anime_id) setWatchForeground(true);
+    }, [active?.anime_id]);
+
+    const startMiniPlayerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+        const layer = event.currentTarget.closest<HTMLElement>(".active-watch-layer");
+        if (!layer) return;
+        const rect = layer.getBoundingClientRect();
+        miniPlayerDrag.current = {
+            pointerId: event.pointerId,
+            offsetX: event.clientX - rect.left,
+            offsetY: event.clientY - rect.top,
+            width: rect.width,
+            height: rect.height,
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        event.stopPropagation();
+    };
+    const moveMiniPlayer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+        const drag = miniPlayerDrag.current;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const edge = 8;
+        const bottomNavigation = 76;
+        const maxLeft = Math.max(edge, window.innerWidth - drag.width - edge);
+        const maxTop = Math.max(edge, window.innerHeight - drag.height - bottomNavigation);
+        setMiniPlayerPosition({
+            left: Math.min(maxLeft, Math.max(edge, event.clientX - drag.offsetX)),
+            top: Math.min(maxTop, Math.max(edge, event.clientY - drag.offsetY)),
+        });
+        event.preventDefault();
+    };
+    const finishMiniPlayerDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (miniPlayerDrag.current?.pointerId !== event.pointerId) return;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        miniPlayerDrag.current = null;
+    };
     const partyPresence = useWatchPartyPresence({
         enabled: !IS_ANDROID_APP && view === "home" && playerPrefs.watchPartyEnabled,
         server: playerPrefs.watchPartyServer
@@ -278,10 +335,13 @@ export default function Home() {
         openLibrary,
         openSuggestion,
         showCatalog,
+        showCurrent,
         showDownloads,
         showRatings,
     } = useAppNavigation({
         active,
+        keepActiveOnNavigation: IS_ANDROID_APP,
+        watchForeground,
         view,
         setActive,
         setCatalog,
@@ -289,6 +349,7 @@ export default function Home() {
         setQuery,
         setResumeRequested,
         setView,
+        setWatchForeground,
     });
     const updateRating = (
         animeId: number,
@@ -310,14 +371,26 @@ export default function Home() {
         showCatalog();
         void load(0, false, query);
     };
+    const showMobileCatalogSection = () => {
+        if (IS_ANDROID_APP && view === "downloads") showDownloads();
+        else showCatalog();
+    };
+    const showMobileStatisticsSection = () => {
+        if (IS_ANDROID_APP && view === "ratings") showRatings();
+        else openLibrary();
+    };
     const sharedHeaderProps = {
         query,
         setQuery,
-        activeView: active ? "catalog" as const : view,
+        activeView: active && watchForeground
+            ? (IS_ANDROID_APP ? "watch" as const : "catalog" as const)
+            : view,
         onHome: goHome,
-        onLibrary: openLibrary,
+        onLibrary: showMobileStatisticsSection,
         onRatings: showRatings,
         onDownloads: showDownloads,
+        onCurrent: showCurrent,
+        hasCurrent: Boolean(active),
         theme,
         setTheme,
         playerPrefs,
@@ -333,6 +406,7 @@ export default function Home() {
         onImport: importConfig,
         onStorageReload: reloadStorage,
     };
+    let activeWatch: ReactNode = null;
     if (active) {
         const activeTracker = tracked.find(tracker => (
             tracker.animeId === active.anime_id
@@ -342,7 +416,7 @@ export default function Home() {
             <Header
                 {...sharedHeaderProps}
                 onSearch={searchCatalog}
-                onCatalog={showCatalog}
+                onCatalog={IS_ANDROID_APP ? showMobileCatalogSection : showCatalog}
             />
         );
         const activeWatchActions = createActiveWatchActions({
@@ -367,9 +441,18 @@ export default function Home() {
             }
         };
 
-        return (
-            <Suspense fallback={<main className="app">{watchHeader}<p className="loading">Загружаем плеер…</p></main>}>
-                {IS_ANDROID_APP && <CastSessionBar />}
+        activeWatch = (
+            <div
+                className={`active-watch-layer${watchForeground ? " is-foreground" : " is-mini"}`}
+                style={!watchForeground && miniPlayerPosition ? {
+                    left: `${miniPlayerPosition.left}px`,
+                    top: `${miniPlayerPosition.top}px`,
+                    right: "auto",
+                    bottom: "auto",
+                } : undefined}
+            >
+              <Suspense fallback={<main className="app">{watchForeground && watchHeader}<p className="loading">Загружаем плеер…</p></main>}>
+                {IS_ANDROID_APP && watchForeground && <CastSessionBar />}
                 <Watch
                     header={watchHeader}
                     anime={active}
@@ -401,9 +484,48 @@ export default function Home() {
                     createFolder={createFolder}
                     closePicker={() => setFolderPicker(null)}
                 />
-            </Suspense>
+                {!watchForeground && (
+                    <div className="active-watch-mini-bar">
+                        <button
+                            type="button"
+                            className="active-watch-drag"
+                            aria-label="Перетащить мини-плеер"
+                            onPointerDown={startMiniPlayerDrag}
+                            onPointerMove={moveMiniPlayer}
+                            onPointerUp={finishMiniPlayerDrag}
+                            onPointerCancel={finishMiniPlayerDrag}
+                        >
+                            <span aria-hidden="true">⠿</span>
+                        </button>
+                        <button
+                            type="button"
+                            className="active-watch-return"
+                            onClick={showCurrent}
+                            aria-label={`Вернуться к просмотру: ${active.title}`}
+                        >
+                            <span>Сейчас</span>
+                            <strong>{active.title}</strong>
+                            <i aria-hidden="true">↗</i>
+                        </button>
+                        <button
+                            type="button"
+                            className="active-watch-close"
+                            aria-label="Закрыть мини-плеер"
+                            onClick={() => {
+                                miniPlayerDrag.current = null;
+                                setMiniPlayerPosition(null);
+                                setActive(null);
+                            }}
+                        >
+                            <span aria-hidden="true">×</span>
+                        </button>
+                    </div>
+                )}
+              </Suspense>
+            </div>
         );
     }
+    if (active && !IS_ANDROID_APP) return activeWatch;
     const homePageModel: HomePageModel = {
         party: {
             session: partyPresence.session,
@@ -522,13 +644,56 @@ export default function Home() {
     };
 
     return (
-        <main className="app">
+      <>
+        {activeWatch}
+        {(!active || !watchForeground) && <main className="app">
             {IS_ANDROID_APP && <CastSessionBar />}
             <Header
                 {...sharedHeaderProps}
                 onSearch={searchCatalog}
-                onCatalog={showCatalog}
+                onCatalog={IS_ANDROID_APP ? showMobileCatalogSection : showCatalog}
             />
+
+            {IS_ANDROID_APP && (view === "catalog" || view === "downloads") && (
+                <nav className="mobile-section-tabs" aria-label="Каталог и скачанное">
+                    <button
+                        type="button"
+                        className={view === "catalog" ? "active" : undefined}
+                        aria-current={view === "catalog" ? "page" : undefined}
+                        onClick={showCatalog}
+                    >
+                        Каталог
+                    </button>
+                    <button
+                        type="button"
+                        className={view === "downloads" ? "active" : undefined}
+                        aria-current={view === "downloads" ? "page" : undefined}
+                        onClick={showDownloads}
+                    >
+                        Скачано
+                    </button>
+                </nav>
+            )}
+            {IS_ANDROID_APP && (view === "stats" || view === "ratings") && (
+                <nav className="mobile-section-tabs" aria-label="Статистика и оценки">
+                    <button
+                        type="button"
+                        className={view === "stats" ? "active" : undefined}
+                        aria-current={view === "stats" ? "page" : undefined}
+                        onClick={openLibrary}
+                    >
+                        Статистика
+                    </button>
+                    <button
+                        type="button"
+                        className={view === "ratings" ? "active" : undefined}
+                        aria-current={view === "ratings" ? "page" : undefined}
+                        onClick={showRatings}
+                    >
+                        Оценки
+                    </button>
+                </nav>
+            )}
 
             <Suspense fallback={<p className="loading" role="status">Загружаем раздел…</p>}>
                 {view === "home" && (
@@ -666,6 +831,7 @@ export default function Home() {
                     />
                 )}
             </Suspense>
-        </main>
+        </main>}
+      </>
     );
 }

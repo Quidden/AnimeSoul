@@ -482,6 +482,7 @@ header nav {
 }
 
 .app-navigation .mobile-nav-only,
+.app-navigation .android-nav-only,
 .app-navigation .nav-icon {
   display: none;
 }

@@ -31,6 +31,7 @@ import {
   type PlayerMenu,
   type VideoFit,
 } from "./AnimeSoulPlayerMenus";
+import { PlayerTimelinePreview } from "./PlayerTimelinePreview";
 
 type SkipSegment = { time: number; length: number };
 type HlsSubtitleOption = { index: number; label: string; language: string };
@@ -181,6 +182,9 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     return IS_ANDROID_APP ? "cover" : "contain";
   });
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [controlsHovered, setControlsHovered] = useState(false);
+  const [controlsFocused, setControlsFocused] = useState(false);
+  const [controlsInteracting, setControlsInteracting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickPickerOpen, setQuickPickerOpen] = useState(false);
   const [audioSwitching, setAudioSwitching] = useState(false);
@@ -190,6 +194,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const [fullscreenActive, setFullscreenActive] = useState(false);
   const [nativePictureInPicture, setNativePictureInPicture] = useState(false);
   const [gestureFeedback, setGestureFeedback] = useState<{ side: "left" | "center" | "right"; text: string } | null>(null);
+  const [timelinePreview, setTimelinePreview] = useState({ visible: false, position: 0, time: 0 });
 
   latestTeardownCallback.current = onBeforeTeardown;
 
@@ -550,6 +555,15 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     }
     activeTeardownCallback.current = latestTeardownCallback.current;
     const controller = new AbortController();
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    tapTimer.current = null;
+    longPressTimer.current = null;
+    lastTap.current = null;
+    if (longPressActive.current) applyPlaybackRate(rate);
+    longPressActive.current = false;
+    suppressNextTap.current = false;
+    setTimelinePreview(value => ({ ...value, visible: false }));
     const requestToken = ++streamRequestToken.current;
     const nextEpisodeIdentity = kodikStreamEpisodeKey(request);
     // A seamless switch keeps the old video decoder running and starts a
@@ -565,7 +579,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     previousRequest.current = request;
     if (audioOnlySwitch) {
       activeMediaRequestKey.current = requestKey;
-      rememberContinuity();
+      // The visible video keeps running; no source resume should be armed.
       cancelAudioFade();
       applyAudioOutput(muted, volume);
       const token = ++audioSwitchToken.current;
@@ -637,6 +651,10 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const selectedSource = useMemo(
     () => stream ? sourceForQuality(stream.sources, quality) : undefined,
     [stream, quality],
+  );
+  const timelinePreviewSource = useMemo(
+    () => stream ? lowestQualitySource(stream.sources) : undefined,
+    [stream],
   );
   const cast = useAndroidCast({
     enabled: IS_ANDROID_APP,
@@ -898,11 +916,21 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     audioCarrierHlsRefs.current.forEach(hls => hls?.destroy());
   }, [reportTeardown]);
 
-  const showControls = (forceAutoHide = false) => {
+  const controlsPinned = settingsOpen || quickPickerOpen || controlsHovered
+    || controlsFocused || controlsInteracting || Boolean(error) || cast.active;
+  const controlsShown = controlsVisible || !playing || controlsPinned;
+
+  const hideControls = useCallback(() => {
+    setControlsVisible(false);
+    setTimelinePreview(value => ({ ...value, visible: false }));
+  }, []);
+
+  const showControls = () => {
     setControlsVisible(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    if ((playing || forceAutoHide) && !settingsOpen && !quickPickerOpen) {
-      hideTimer.current = setTimeout(() => setControlsVisible(false), 2600);
+    hideTimer.current = null;
+    if (playing && !controlsPinned) {
+      hideTimer.current = setTimeout(hideControls, 2600);
     }
   };
 
@@ -965,12 +993,12 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       const delta = x < bounds.width / 2 ? -5 : 5;
       video.currentTime = Math.max(0, Math.min(video.duration || Infinity, video.currentTime + delta));
       showGestureFeedback(delta < 0 ? "left" : "right", delta < 0 ? "−5 сек" : "+5 сек");
-      showControls(true);
+      showControls();
       return;
     }
     lastTap.current = { at: now, x };
-    if (!controlsVisible) {
-      showControls(true);
+    if (!controlsShown) {
+      showControls();
       return;
     }
     if (tapTimer.current) clearTimeout(tapTimer.current);
@@ -1002,13 +1030,26 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
 
   useEffect(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    if (playing && !settingsOpen && !quickPickerOpen && controlsVisible) {
-      hideTimer.current = setTimeout(() => setControlsVisible(false), 2600);
+    hideTimer.current = null;
+    if (playing && !controlsPinned && controlsVisible) {
+      hideTimer.current = setTimeout(hideControls, 2600);
     }
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [playing, settingsOpen, quickPickerOpen, controlsVisible]);
+  }, [playing, controlsPinned, controlsVisible, hideControls]);
+
+  useEffect(() => {
+    const finishInteraction = () => setControlsInteracting(false);
+    window.addEventListener("pointerup", finishInteraction);
+    window.addEventListener("pointercancel", finishInteraction);
+    window.addEventListener("blur", finishInteraction);
+    return () => {
+      window.removeEventListener("pointerup", finishInteraction);
+      window.removeEventListener("pointercancel", finishInteraction);
+      window.removeEventListener("blur", finishInteraction);
+    };
+  }, []);
 
   useEffect(() => {
     const updateFullscreen = () => {
@@ -1105,10 +1146,11 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     if (key === "escape" && (settingsOpen || quickPickerOpen)) { setSettingsOpen(false); setQuickPickerOpen(false); return; }
     if (
       !video
+      || event.altKey || event.ctrlKey || event.metaKey
       || (event.target instanceof Element
         && event.target.closest("button,input,select,textarea,[contenteditable=true]"))
     ) return;
-    if ([" ", "k"].includes(key)) { event.preventDefault(); togglePlayback(); }
+    if ([" ", "k"].includes(key)) togglePlayback();
     else if (key === "arrowleft") video.currentTime = Math.max(0, video.currentTime - 10);
     else if (key === "arrowright") video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
     else if (key === "m") { const next = !muted; setMuted(next); applyAudioOutput(next, volume); }
@@ -1117,7 +1159,22 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       setSubtitle(value => value === "off"
         ? stream?.subtitles.length ? "api:0" : hlsSubtitles.length ? "hls:0" : `burned:${menu.subtitles[0].value}`
         : "off");
-    }
+    } else return;
+    event.preventDefault();
+    showControls();
+  };
+
+  const updateTimelinePreview = (element: HTMLDivElement, clientX: number) => {
+    if (!selectedSource || cast.active || duration <= 0) return;
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    const position = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width));
+    setTimelinePreview({ visible: true, position, time: position * duration });
+  };
+
+  const handleTimelinePointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch" && event.type === "pointermove" && event.buttons === 0) return;
+    updateTimelinePreview(event.currentTarget, event.clientX);
   };
 
   const mergedOpening = stream?.skips?.opening ?? opening ?? undefined;
@@ -1159,11 +1216,34 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     <div
       ref={shell}
       data-casting={cast.active || undefined}
-      className={`animesoul-player${localPlayback ? " is-local" : ""}${loading ? " is-loading" : ""}${loading && (!stream || localPlayback) ? " is-preparing" : ""}${controlsVisible || !playing || settingsOpen || quickPickerOpen ? " controls-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${videoFit === "ambient" && !nativePictureInPicture ? " ambient-light" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
+      className={`animesoul-player${localPlayback ? " is-local" : ""}${loading ? " is-loading" : ""}${loading && (!stream || localPlayback) ? " is-preparing" : ""}${controlsShown ? " controls-visible" : ""}${timelinePreview.visible ? " timeline-preview-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${videoFit === "ambient" && !nativePictureInPicture ? " ambient-light" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
       tabIndex={0}
       onKeyDown={keyboard}
-      onMouseMove={() => showControls()}
-      onMouseLeave={() => playing && !settingsOpen && !quickPickerOpen && setControlsVisible(false)}
+      onPointerMove={event => {
+        if (event.pointerType === "touch") return;
+        setControlsHovered(event.target instanceof Element
+          && Boolean(event.target.closest("button,input,select,.animesoul-player-controls,.animesoul-player-top-navigation")));
+        showControls();
+      }}
+      onPointerDownCapture={event => {
+        setControlsFocused(false);
+        if (event.target instanceof Element && event.target.closest("button,input,select")) {
+          setControlsInteracting(true);
+          showControls();
+        }
+      }}
+      onFocusCapture={event => {
+        const keyboardFocus = event.target.matches(":focus-visible");
+        setControlsFocused(event.target !== event.currentTarget && keyboardFocus);
+        if (keyboardFocus) showControls();
+      }}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setControlsFocused(false);
+      }}
+      onMouseLeave={() => {
+        setControlsHovered(false);
+        if (playing && !settingsOpen && !quickPickerOpen && !controlsFocused && !controlsInteracting && !error && !cast.active) hideControls();
+      }}
       aria-label={`Плеер AnimeSoul: ${title}${localPlayback ? ", локальное видео" : ""}`}
     >
       {videoFit === "ambient" && !nativePictureInPicture && (
@@ -1191,18 +1271,27 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video) return;
-          if (continuity.current.time > 0) video.currentTime = Math.min(continuity.current.time, Math.max(0, video.duration - .25));
+          if (continuity.current.time > 0) {
+            video.currentTime = Math.min(continuity.current.time, Math.max(0, video.duration - .25));
+            continuity.current.time = 0;
+          }
+          applyPlaybackRate(rate);
           setDuration(Number.isFinite(video.duration) ? video.duration : 0);
           onLoadedMetadata?.();
         }}
         onCanPlay={() => {
           if (castProgress.current.active) return;
+          if (activeMediaRequestKey.current !== requestKey) return;
           if (localWaitingTimer.current) clearTimeout(localWaitingTimer.current);
           localWaitingTimer.current = null;
           setLoading(false);
           setError("");
           applyAudioOutput(muted, volume);
-          if (continuity.current.playing) void videoRef.current?.play().catch(() => undefined);
+          // Source continuity is a one-shot resume. Later canplay events also
+          // occur after seeking/buffering and must respect a user's pause.
+          const resumePlayback = continuity.current.playing;
+          continuity.current.playing = false;
+          if (resumePlayback) void videoRef.current?.play().catch(() => undefined);
           syncBurnedSubtitle(true);
           syncActiveAudio(true);
         }}
@@ -1247,7 +1336,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           if (activeMediaRequestKey.current !== requestKey) return;
           endedMediaRequestKey.current = "";
           setPlaying(true);
-          showControls(true);
+          showControls();
           syncBurnedSubtitle(true);
           syncActiveAudio(true);
           onPlay?.();
@@ -1374,8 +1463,28 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           style={{
             "--player-progress": `${progress}%`,
             "--player-buffered": `${bufferedProgress}%`,
+            "--player-preview-position": `${timelinePreview.position * 100}%`,
           } as React.CSSProperties}
+          onPointerEnter={event => {
+            if (event.pointerType !== "touch") handleTimelinePointer(event);
+          }}
+          onPointerMove={handleTimelinePointer}
+          onPointerDown={handleTimelinePointer}
+          onPointerLeave={event => {
+            if (event.pointerType !== "touch") setTimelinePreview(value => ({ ...value, visible: false }));
+          }}
+          onPointerUp={event => {
+            if (event.pointerType === "touch") setTimelinePreview(value => ({ ...value, visible: false }));
+          }}
+          onPointerCancel={() => setTimelinePreview(value => ({ ...value, visible: false }))}
         >
+          <PlayerTimelinePreview
+            localPlayback={localPlayback}
+            source={timelinePreviewSource}
+            time={timelinePreview.time}
+            timeLabel={clock(timelinePreview.time)}
+            visible={timelinePreview.visible && duration > 0 && !cast.active}
+          />
           <div className="animesoul-player-timeline-rail" aria-hidden="true">
             <span className="buffered" />
             <span className="played" />

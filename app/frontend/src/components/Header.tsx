@@ -23,6 +23,8 @@ type HeaderProps = {
   onLibrary: () => void;
   onRatings: () => void;
   onDownloads: () => void;
+  onCurrent: () => void;
+  hasCurrent: boolean;
   theme?: Theme;
   setTheme?: (theme: Theme) => void;
   playerPrefs?: PlayerPrefs;
@@ -38,10 +40,10 @@ type HeaderProps = {
   onExport?: () => void;
   onImport?: (file: File) => void;
   onStorageReload?: () => void;
-  activeView: "home" | "catalog" | "stats" | "ratings" | "downloads";
+  activeView: "home" | "catalog" | "stats" | "ratings" | "downloads" | "watch";
 };
 
-type NavigationIcon = "home" | "catalog" | "downloads" | "stats" | "ratings" | "search" | "settings";
+type NavigationIcon = "home" | "catalog" | "downloads" | "stats" | "ratings" | "watch" | "search" | "settings";
 
 function NavIcon({ name }: { name: NavigationIcon }) {
   const paths: Record<NavigationIcon, ReactNode> = {
@@ -50,6 +52,7 @@ function NavIcon({ name }: { name: NavigationIcon }) {
     downloads: <><path d="M12 3v11" /><path d="m7.5 10 4.5 4.5 4.5-4.5" /><path d="M4 17.5V21h16v-3.5" /></>,
     stats: <><path d="M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7" /></>,
     ratings: <path d="m12 3 2.65 5.37 5.93.86-4.29 4.18 1.01 5.91L12 16.53l-5.3 2.79 1.01-5.91-4.29-4.18 5.93-.86L12 3Z" />,
+    watch: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m10 9 5 3-5 3Z" /></>,
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.07A1.7 1.7 0 0 0 8.94 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.53-1H3v-4h.07A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.53V3h4v.07A1.7 1.7 0 0 0 15.06 4.6a1.7 1.7 0 0 0 1.88-.34L17 4.2 19.8 7l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.58.8.97 1.43 1H21v4h-.07c-.63.03-1.19.42-1.53 1Z" /></>,
   };
@@ -81,6 +84,8 @@ export function Header({
   onLibrary,
   onRatings,
   onDownloads,
+  onCurrent,
+  hasCurrent,
   theme,
   setTheme,
   playerPrefs,
@@ -309,7 +314,35 @@ export function Header({
       </button>
       <button
         type="button"
-        className={activeView === "catalog" ? "is-active" : undefined}
+        className={`android-nav-only${activeView === "catalog" || activeView === "downloads" ? " is-active" : ""}`}
+        aria-label="Каталог и скачанное"
+        aria-current={activeView === "catalog" || activeView === "downloads" ? "page" : undefined}
+        onClick={() => navigateFromBottomBar(onCatalog)}
+      >
+        <NavIcon name="catalog" /><span className="nav-label" data-mobile-label="Каталог" aria-hidden="true">Каталог</span>
+      </button>
+      <button
+        type="button"
+        className={`android-nav-only${activeView === "watch" ? " is-active" : ""}`}
+        aria-label={hasCurrent ? "Сейчас смотрю" : "Нет активного просмотра"}
+        aria-current={activeView === "watch" ? "page" : undefined}
+        disabled={!hasCurrent}
+        onClick={() => navigateFromBottomBar(onCurrent)}
+      >
+        <NavIcon name="watch" /><span className="nav-label" data-mobile-label="Сейчас" aria-hidden="true">Сейчас</span>
+      </button>
+      <button
+        type="button"
+        className={`android-nav-only${activeView === "stats" || activeView === "ratings" ? " is-active" : ""}`}
+        aria-label="Статистика и оценки"
+        aria-current={activeView === "stats" || activeView === "ratings" ? "page" : undefined}
+        onClick={() => navigateFromBottomBar(onLibrary)}
+      >
+        <NavIcon name="stats" /><span className="nav-label" data-mobile-label="Статистика" aria-hidden="true">Статистика</span>
+      </button>
+      <button
+        type="button"
+        className={`desktop-section-nav${activeView === "catalog" ? " is-active" : ""}`}
         aria-label="Каталог"
         aria-current={activeView === "catalog" ? "page" : undefined}
         onClick={() => navigateFromBottomBar(onCatalog)}
@@ -318,7 +351,7 @@ export function Header({
       </button>
       <button
         type="button"
-        className={activeView === "downloads" ? "is-active" : undefined}
+        className={`desktop-section-nav${activeView === "downloads" ? " is-active" : ""}`}
         aria-label="Скачанные"
         aria-current={activeView === "downloads" ? "page" : undefined}
         onClick={() => navigateFromBottomBar(onDownloads)}
@@ -327,7 +360,7 @@ export function Header({
       </button>
       <button
         type="button"
-        className={activeView === "stats" ? "is-active" : undefined}
+        className={`desktop-section-nav${activeView === "stats" ? " is-active" : ""}`}
         aria-label="Статистика"
         aria-current={activeView === "stats" ? "page" : undefined}
         onClick={() => navigateFromBottomBar(onLibrary)}
@@ -336,7 +369,7 @@ export function Header({
       </button>
       <button
         type="button"
-        className={activeView === "ratings" ? "is-active" : undefined}
+        className={`desktop-section-nav${activeView === "ratings" ? " is-active" : ""}`}
         aria-label="Оценки"
         aria-current={activeView === "ratings" ? "page" : undefined}
         onClick={() => navigateFromBottomBar(onRatings)}

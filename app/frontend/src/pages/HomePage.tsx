@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef, useState, type KeyboardEvent } from "react";
+import { FAQBlock } from "../components/FAQBlock";
 import { HomeDashboardPanels } from "./home/DashboardWidgets";
 import { HomeHero, PartyNow } from "./home/HomeHero";
 import { LibrarySections } from "./home/LibrarySections";
@@ -13,54 +15,101 @@ export type {
   HomePageProps,
 } from "./home/types";
 
-/** Home dashboard composition. Feature modules own the individual sections. */
+type LibraryView = "watching" | "tracking" | "folders" | "history";
+
+/** Keep the cinema above one focused library surface. */
 export function HomePage({ model, actions }: HomePageProps) {
+  const [view, setView] = useState<LibraryView>("watching");
+  const tabRefs = useRef<Partial<Record<LibraryView, HTMLButtonElement | null>>>({});
+  const tabs: { id: LibraryView; label: string; count: number }[] = [
+    { id: "watching", label: "Смотрю сейчас", count: model.watchingItems.length },
+    { id: "tracking", label: "Отслеживаю", count: model.tracked.length },
+    { id: "folders", label: "Папки и избранное", count: model.folders.length + 1 },
+    { id: "history", label: "История", count: model.historyItems.length },
+  ];
+
+  const navigateTabs = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let next: number;
+    if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    setView(tabs[next].id);
+    tabRefs.current[tabs[next].id]?.focus();
+  };
+
   return (
     <>
       <HomeHero model={model} actions={actions} />
-      <LibraryUpdatesNotice model={model} />
-      <main className="home-dashboard-flow">
-        <HomeDashboardPanels model={model} actions={actions} />
+      <main className="home-library-workspace" id="my-library">
         <PartyNow party={model.party} onOpen={actions.openAnime} />
+        <div className="home-library-heading">
+          <h1>Моя медиатека</h1>
+          <LibraryUpdatesNotice model={model} onOpen={() => {
+            setView("tracking");
+            tabRefs.current.tracking?.focus({ preventScroll: true });
+          }} />
+        </div>
+        <div className="home-library-tabs" role="tablist" aria-label="Медиатека">
+          {tabs.map((tab, index) => (
+            <button
+              key={tab.id}
+              ref={element => { tabRefs.current[tab.id] = element; }}
+              type="button"
+              role="tab"
+              id={`home-tab-${tab.id}`}
+              aria-selected={view === tab.id}
+              aria-controls={`home-view-${tab.id}`}
+              tabIndex={view === tab.id ? 0 : -1}
+              onClick={() => setView(tab.id)}
+              onKeyDown={event => navigateTabs(event, index)}
+            >
+              {tab.label}<span>{tab.count}</span>
+            </button>
+          ))}
+        </div>
+        {tabs.map(tab => (
+          <div
+            key={tab.id}
+            id={`home-view-${tab.id}`}
+            className="home-library-view"
+            role="tabpanel"
+            aria-labelledby={`home-tab-${tab.id}`}
+            hidden={view !== tab.id}
+            tabIndex={0}
+          >
+            {(tab.id === "tracking" || tab.id === "folders") ? (
+              <HomeDashboardPanels model={model} actions={actions} view={tab.id} />
+            ) : (
+              <LibrarySections model={model} actions={actions} view={tab.id} />
+            )}
+          </div>
+        ))}
+        <FAQBlock />
       </main>
-      <LibrarySections model={model} actions={actions} />
     </>
   );
 }
 
-function LibraryUpdatesNotice({ model }: Pick<HomePageProps, "model">) {
+function LibraryUpdatesNotice({ model, onOpen }: Pick<HomePageProps, "model"> & { onOpen: () => void }) {
   if (model.totalNewEpisodes <= 0) return null;
 
   const updatedTitles = model.tracked.filter(tracker => tracker.newEpisodes > 0).length;
   const episodeLabel = russianPlural(model.totalNewEpisodes, "новая серия", "новые серии", "новых серий");
 
   return (
-    <section className="home-library-updates-wrap" aria-label="Обновления медиатеки">
       <button
         type="button"
-        className="home-library-updates"
+        className="home-updates-link"
         aria-label={`Обновления медиатеки. ${model.totalNewEpisodes} ${episodeLabel}. Тайтлов с обновлениями: ${updatedTitles}. Перейти к отслеживаемым.`}
-        onClick={() => document
-          .getElementById("home-tracking-panel")
-          ?.scrollIntoView({ behavior: "smooth", block: "center" })}
+        onClick={onOpen}
       >
-        <span className="home-library-updates-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.7M20 4v4.7h-4.7M20 12a8 8 0 0 1-13.7 5.6L4 15.3M4 20v-4.7h4.7" />
-          </svg>
-        </span>
-        <span className="home-library-updates-copy">
-          <small>ОБНОВЛЕНИЯ МЕДИАТЕКИ</small>
-          <b>Новые серии в отслеживаемых тайтлах</b>
-          <span>Тайтлов с обновлениями: {updatedTitles}</span>
-        </span>
-        <strong className="home-library-updates-count">
-          <b>+{model.totalNewEpisodes}</b>
-          <small>{episodeLabel}</small>
-        </strong>
-        <span className="home-library-updates-arrow" aria-hidden="true">→</span>
+        <i aria-hidden="true" />
+        <span>{model.totalNewEpisodes} {episodeLabel}</span>
+        <span aria-hidden="true">↗</span>
       </button>
-    </section>
   );
 }
 

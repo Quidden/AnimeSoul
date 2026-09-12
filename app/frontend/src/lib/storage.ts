@@ -134,6 +134,9 @@ export function migrateSnapshot(
               knownEpisodeKeys: Array.isArray(item.knownEpisodeKeys)
                 ? [...new Set(item.knownEpisodeKeys.filter((key) => typeof key === "string"))]
                 : undefined,
+              episodeIdentityCheckedIds: Array.isArray(item.episodeIdentityCheckedIds)
+                ? [...new Set(item.episodeIdentityCheckedIds.filter(Number.isFinite))]
+                : undefined,
               pendingEpisodeKeys,
               newEpisodes: pendingEpisodeKeys.length || Math.max(0, Number(item.newEpisodes) || 0),
               knownAnyEpisodeKeys: Array.isArray(item.knownAnyEpisodeKeys)

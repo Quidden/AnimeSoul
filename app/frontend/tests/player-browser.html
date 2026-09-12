@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Player browser regressions</title>
+    <style>
+      body { margin: 24px; font: 15px system-ui; background: #17151e; color: white; }
+      #fixture { position: relative; width: 900px; height: 506px; }
+      li { margin: 8px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Player browser regressions</h1>
+    <p>Actual React component and CSS with controlled media events; no external video or credentials.</p>
+    <p id="status" role="status">Running…</p>
+    <ol id="results"></ol>
+    <div id="fixture"></div>
+    <script type="module" src="./player-browser.tsx"></script>
+  </body>
+</html>

@@ -37,7 +37,11 @@ export type KodikStreamInfo = {
   };
 };
 
-const streamCache = new Map<string, { expiresAt: number; info: KodikStreamInfo }>();
+/** Non-sensitive playback details which may outlive the active media element. */
+export type KodikStreamSummary = {
+  qualities: number[];
+  skips?: KodikStreamInfo["skips"];
+};
 
 /** Pick a fixed HLS level instead of leaving a requested quality on auto ABR. */
 export function hlsLevelForQuality(levels: Array<{ height?: number }>, quality: number) {
@@ -117,12 +121,10 @@ export async function fetchKodikStream(
     }
     return request.directStream;
   }
-  const cacheKey = kodikStreamRequestKey(request);
-  const cached = streamCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.info;
   const response = await fetch("/api/kodik/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    cache: "no-store",
     body: JSON.stringify(request),
     signal,
   });
@@ -141,10 +143,5 @@ export async function fetchKodikStream(
     subtitles: Array.isArray(payload.subtitles) ? payload.subtitles : [],
     skips: payload.skips,
   };
-  streamCache.set(cacheKey, { expiresAt: Date.now() + 30 * 60_000, info });
-  if (streamCache.size > 80) {
-    const oldest = streamCache.keys().next().value;
-    if (oldest) streamCache.delete(oldest);
-  }
   return info;
 }

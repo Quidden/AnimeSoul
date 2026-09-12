@@ -27,6 +27,7 @@ export type Anime = {
   viewing_order?: Anime[];
   remote_ids?: {
     shikimori_id?: number | string;
+    myanimelist_id?: number | string;
     kp_id?: number | string;
     imdb_id?: number | string;
     worldart_id?: number | string;
@@ -88,6 +89,8 @@ export type Video = {
   iframe_url: string;
   number: string;
   date?: number;
+  /** Earliest known upload of this episode; distinct from its broadcast date. */
+  episode_added_at?: number;
   duration?: number;
   originAnimeId?: number;
   originNumber?: string;
@@ -192,6 +195,8 @@ export type Tracker = {
   title: string;
   knownEpisodes: number;
   knownEpisodeKeys?: string[];
+  /** Titles whose legacy baseline was checked after strict identity matching. */
+  episodeIdentityCheckedIds?: number[];
   pendingEpisodeKeys?: string[];
   newEpisodes: number;
   /** Monotonic baseline across every dubbing, used for availability hints. */

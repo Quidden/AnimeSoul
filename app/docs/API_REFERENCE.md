@@ -1,6 +1,6 @@
 # API AnimeSoul и используемые внешние поля
 
-Справочник описывает фактические контракты версии 0.2.6. Все внутренние URL
+Справочник описывает фактические контракты версии 0.2.7. Все внутренние URL
 относительные: в production их обслуживает тот же FastAPI origin, в разработке
 Vite проксирует их на `http://127.0.0.1:8000`.
 
@@ -29,6 +29,7 @@ Vite проксирует их на `http://127.0.0.1:8000`.
 | `PUT` | `/api/storage` | атомарная запись и optional autosync | `api/storage.py` | `saveStorageDocument` |
 | `GET` | `/api/yummy` | proxy catalog/details/videos/trailers/schedule/ping | `api/yummy.py` | catalog/tracking/player/header |
 | `GET` | `/api/kodik` | проверка доступности Kodik | `api/kodik.py` | settings/diagnostics |
+| `GET` | `/api/episode-dates/{mal_id}` | календарные даты выхода эпизодов | `api/episode_dates.py` | карточки серий |
 | `POST` | `/api/kodik/stream` | прямые качества, субтитры и skip-сегменты | `api/kodik.py` | `AnimeSoulPlayer` |
 | `GET` | `/api/community-ratings` | пакет/публичная страница агрегатов | `api/community_ratings.py` | ratings feature |
 | `GET` | `/api/community-ratings/{anime_id}` | один агрегат | `api/community_ratings.py` | внешний клиент/диагностика |
@@ -58,7 +59,7 @@ Vite проксирует их на `http://127.0.0.1:8000`.
 {
   "ok": true,
   "stack": "FastAPI + React",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "runtimeInstanceId": "optional-instance-id"
 }
 ```
@@ -170,11 +171,20 @@ TTL запись ещё доступна как stale-if-error: краткий �
 in-flight запросы объединяются.
 
 ```json
-{"anime": {}, "videos": []}
+{"anime": {}, "videos": [], "episode_identity_version": 1}
 ```
 
 Текущий typed frontend helper `fetchAnimeVideos` использует `videos`, а
 `anime` в составном ответе доступен другим/старым потребителям.
+
+Kodik lookup проверяет принадлежность результатов конкретному тайтлу:
+разные Shikimori ID не объединяются, общий Kinopoisk/IMDb ID франшизы
+недостаточен, резервный поиск по названию требует точного совпадения с
+проверкой доступных года и типа. Поле Yummy `original`, если оно обозначает
+«Ранобэ»/«Манга», не используется как название. Пустой сериал без серий
+не превращается в серию 1. `episode_identity_version: 1` вместе с успешными
+`_sources.yummy` и `_sources.kodik` позволяет tracking однократно исправить
+старую базу номеров для этого тайтла.
 
 #### `mode=trailers`
 
@@ -224,6 +234,27 @@ Upstream headers формируются только на backend:
 Gateway извлекает поле upstream `response` и рекурсивно превращает строки,
 начинающиеся с `//`, в `https://...`.
 
+## Даты выхода серий
+
+`GET /api/episode-dates/{mal_id}?page=1` возвращает
+`{"dates":{"1":"2026-04-03"},"hasNextPage":false}`. Используется явный
+`remote_ids.myanimelist_id` конкретной части; номер серии берётся из
+`originNumber`, до объединения частей в сезон. Даты поступают из поля `aired`
+[Jikan / MyAnimeList](https://docs.api.jikan.moe/#tag/anime/operation/getAnimeEpisodes),
+сохраняются как календарные `YYYY-MM-DD`, без сдвига на часовой пояс устройства.
+Пагинация: `page` от 1 до 100. Ошибка источника без сохранённых данных — `503`.
+
+Запросы дат выполняются отдельно от загрузки видео, только для раскрытых
+сезонов с сериями. Одинаковые запросы объединяются; частота ограничена одним
+запросом в 1,05 секунды, кэш действителен час и сохраняется при временном сбое.
+Повторная попытка после ошибки — не чаще раза в минуту.
+
+Ответ `mode=videos` также может содержать у каждого видео `episode_added_at`:
+раннюю известную дату добавления этой серии в Yummy (Unix seconds, одинаковую
+для разных озвучек). Она используется только с подписью «Добавлена», когда нет
+даты выхода. Kodik `updated_at` не используется как дата серии. При отсутствии
+обеих дат карточка показывает «Дата выхода неизвестна».
+
 ## Kodik direct playback
 
 ### `POST /api/kodik/stream`
@@ -268,6 +299,13 @@ Body описывает уже выбранную серию и озвучку. 
 `sources` всегда непустой при успехе и отсортирован от большего качества к
 меньшему. `subtitles` и `skips` могут быть пустыми. Закрытый ключ читается из
 защищённого локального файла Kodik settings; если пара ключей отсутствует или
+не удалось получить точный `/seria/`, `/video/` или `/movie/` URL, запрос
+завершается ошибкой: ссылки `/serial/` и `/season/` никогда не передаются в
+`/api/video-links`. Каждый запуск онлайн-плеера заново получает временные
+`sources`; frontend не кэширует и не сохраняет их. Запрос всегда включает
+`auto_proxy=true` и `skip_segments=true`, поэтому Kodik может выбрать
+прокси-ссылку по IP пользователя и вернуть сегменты опенинга/эндинга. `force_proxy`
+не используется.
 upstream отклоняет подпись, маршрут возвращает `422` с безопасным `detail`.
 
 ### `GET /api/kodik?mode=ping`

@@ -10,6 +10,19 @@ AnimeSoul — локальное приложение для каталога, �
 | [`app/`](app/) | актуальный | Python + FastAPI + React + Vite + PyWebView |
 | [`legacy-old-stack/`](legacy-old-stack/) | архив | прежний Vinext/Electron-стек, оставленный для миграции сохранений и справки |
 
+## Интерфейс
+
+### Windows
+
+![Главная библиотека AnimeSoul на Windows](app/docs/screenshots/desktop-library.png)
+
+### Android
+
+<p align="center">
+  <img src="app/docs/screenshots/android-home.png" alt="Главная AnimeSoul на Android" width="320">
+  <img src="app/docs/screenshots/android-mini-player.png" alt="Мини-плеер AnimeSoul на Android" width="320">
+</p>
+
 Новая функциональность разрабатывается только в `app/`. Изменять
 `legacy-old-stack/` следует лишь ради совместимости или исправления критической
 уязвимости старой версии.
@@ -38,6 +51,7 @@ AnimeSoul отдельно указываются публичный и прив
 - [`app/docs/PROJECT_MAP.md`](app/docs/PROJECT_MAP.md) — назначение каталогов и файлов;
 - [`app/docs/DATA_MODEL.md`](app/docs/DATA_MODEL.md) — схема сохранения, локальное состояние и миграции;
 - [`app/docs/STYLES.md`](app/docs/STYLES.md) — каскад CSS, токены, владельцы стилей и динамическое оформление.
+- [`app/docs/PLATFORMS.md`](app/docs/PLATFORMS.md) — особенности, сборка и проверка Windows и Android.
 
 Документы внутри `legacy-old-stack/` описывают только архивную реализацию и не
 являются руководством по текущему коду.

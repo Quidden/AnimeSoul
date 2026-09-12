@@ -17,6 +17,7 @@ from unittest import mock
 from backend.app.services.offline_library import (
     OfflineLibraryError,
     OfflineLibraryService,
+    KodikSourceResolver,
     CredentialVerificationUnavailable,
     _android_video_record,
     _anime_folder_name,
@@ -394,11 +395,14 @@ class OfflineLibraryTests(unittest.TestCase):
                 "//kodikplayer.com/season/selected/hash/720p?episode=9",
                 "//kodikplayer.com/seria/exact/hash/720p",
             ),
-            [
-                "//kodikplayer.com/season/selected/hash/720p?episode=9",
-                "//kodikplayer.com/seria/exact/hash/720p",
-                "//kodikplayer.com/season/selected/hash/720p",
-            ],
+            ["//kodikplayer.com/seria/exact/hash/720p"],
+        )
+        self.assertEqual(
+            _kodik_player_candidates(
+                "//kodikplayer.com/serial/selected/hash/720p",
+                None,
+            ),
+            [],
         )
         self.assertEqual(
             _kodik_signature("//kodikplayer.com/video/1/hash/720p", "1.1.1.1", "2026082100", "private-test"),
@@ -476,6 +480,78 @@ class OfflineLibraryTests(unittest.TestCase):
             ),
             {"ending": {"time": 1471.0, "length": 14.0}},
         )
+
+    def test_private_playback_signs_only_exact_video_with_proxy_and_segments(self) -> None:
+        async def scenario() -> None:
+            resolver = KodikSourceResolver()
+            requested: list[dict[str, object]] = []
+
+            async def current_ip() -> str:
+                return "1.1.1.1"
+
+            resolver._current_public_ipv4 = current_ip  # type: ignore[method-assign]
+
+            def response(payload: dict[str, object]):
+                value = mock.MagicMock()
+                value.is_success = True
+                value.raise_for_status.return_value = None
+                value.json.return_value = payload
+                return value
+
+            class FakeClient:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *_args: object) -> None:
+                    return None
+
+                async def post(self, _url: str, *, params: dict[str, object]):
+                    self.assert_catalogue_params(params)
+                    return response({
+                        "results": [{
+                            "translation": {"id": 7, "title": "AniLibria"},
+                            "seasons": {"1": {"episodes": {
+                                "7": {"link": "//kodikplayer.com/seria/exact/hash/720p"},
+                            }}},
+                        }],
+                    })
+
+                @staticmethod
+                def assert_catalogue_params(params: dict[str, object]) -> None:
+                    assert params["with_episodes_data"] == "true"
+
+                async def get(self, _url: str, *, params: dict[str, object]):
+                    requested.append(params)
+                    return response({
+                        "links": {"720": {"Src": "//cdn.example/fresh.m3u8", "Type": "hls"}},
+                        "segments": {"skip": [[12, 97], [1320, 1400]]},
+                    })
+
+            with mock.patch(
+                "backend.app.services.kodik_resolver.httpx.AsyncClient",
+                return_value=FakeClient(),
+            ):
+                result = await resolver.resolve_playback_api(
+                    "//kodikplayer.com/season/broad/hash/720p?episode=7",
+                    "public-test-key",
+                    "private-test-key",
+                    source_id="77",
+                    source_id_type="shikimori",
+                    season=1,
+                    episode="7",
+                    translation_id=7,
+                    dubbing="AniLibria",
+                )
+
+            self.assertEqual(len(requested), 1)
+            self.assertEqual(requested[0]["link"], "//kodikplayer.com/seria/exact/hash/720p")
+            self.assertEqual(requested[0]["auto_proxy"], "true")
+            self.assertEqual(requested[0]["skip_segments"], "true")
+            self.assertNotIn("force_proxy", requested[0])
+            self.assertEqual(result["sources"][0]["src"], "https://cdn.example/fresh.m3u8")
+            self.assertEqual(result["skips"]["opening"], {"time": 12.0, "length": 85.0})
+
+        asyncio.run(scenario())
 
     def test_queue_persists_media_and_deletion_removes_all_library_files(self) -> None:
         async def scenario(root: Path) -> None:

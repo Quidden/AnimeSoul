@@ -55,6 +55,7 @@
 | `api/watch_party.py` | `/watch-party/*`, `/ws/watch-party/*`, `/health` | переводит JSON в команды комнаты и стабильные ошибки |
 | `api/gdrive.py` | `/api/gdrive/*` | OAuth callback, credentials, status и явная sync-координация |
 | `api/community_ratings.py` | `/api/community-ratings*` | валидация оценок, anonymous cookie и публичные агрегаты |
+| `api/episode_dates.py` | `GET /api/episode-dates/{anime_id}` | принимает идентификаторы тайтла и отдаёт нормализованные даты серий |
 
 ### Services и чистые правила
 
@@ -70,6 +71,8 @@
 | `services/community_ratings.py` | `CommunityRatingStore`, SQLite WAL, replace/delete vote и aggregate |
 | `services/kodik_helpers.py` | чистая валидация ссылок Kodik, подписи private API и нормализация sources/subtitles/skip-маркеров |
 | `services/kodik_resolver.py` | проверка ключей и подписанный клиент Kodik private API для playback/download sources |
+| `services/anime_identity.py` | нормализация и проверка идентичности тайтла, сезона, озвучки и набора эпизодов |
+| `services/episode_dates.py` | best-effort сопоставление тайтла с Jikan/MAL и кеш дат выхода эпизодов |
 | `services/offline_library.py` | очередь загрузок, локальный индекс, HLS/MP4 transfer и Android MediaStore integration |
 
 ### Backend tests
@@ -83,6 +86,8 @@
 | `backend/tests/test_run_startup.py` | выбор занятого/свободного порта и startup branches |
 | `backend/tests/test_runtime_instance.py` | runtime state, instance ownership и атомарность |
 | `backend/tests/test_offline_library.py` | Kodik helper-контракт, очередь/отмена загрузок, локальный индекс, HLS и Android MediaStore |
+| `backend/tests/test_episode_identity.py` | отбрасывание чужих сезонов, озвучек и ещё не вышедших эпизодов |
+| `backend/tests/test_episode_dates.py` | нормализация и резервное поведение сервиса дат выхода |
 
 ## Frontend bootstrap
 
@@ -105,8 +110,11 @@
 | `pages/FolderView.tsx` | содержимое одной пользовательской папки, заметки и сортировка |
 | `pages/home/types.ts` | `HomePageModel` и `HomePageActions` — контракт главной страницы |
 | `pages/home/HomeHero.tsx` | cinematic hero, продолжение и активная Watch Party |
-| `pages/home/DashboardWidgets.tsx` | панели отслеживания, папок и кратких показателей |
-| `pages/home/LibrarySections.tsx` | избранное, «смотрю», история и раскрытие секций |
+| `pages/home/DashboardWidgets.tsx` | компактные показатели главной страницы |
+| `pages/home/LibrarySections.tsx` | вкладки «смотрю», отслеживание, папки и история без внутреннего скролла |
+| `pages/home/LibraryToolbar.tsx` | единая навигация и счётчики разделов библиотеки |
+| `pages/home/HomeCardList.tsx` | широкие карточки с постером, прогрессом, метаданными и действиями |
+| `pages/home/useHomeCardLimit.ts` | раскрытие длинного списка порциями по 10 элементов |
 
 ## Frontend features
 
@@ -132,10 +140,13 @@
 | `features/player/useDownloadManager.ts` | выбор серий/озвучки/качества, availability-check, очередь и отмена offline-загрузок |
 | `features/player/PlayerToolbar.tsx` | настройки источника, озвучки и действий плеера |
 | `features/player/SeasonList.tsx` | сезоны, серии, прогресс и ручные отметки |
+| `features/player/PlayerTimelinePreview.tsx` | кадр и отметка времени над шкалой собственного плеера |
+| `features/player/useEpisodeAirDates.ts` | загрузка и объединение исходных и резервных дат серий |
 | `features/player/ReleaseSchedule.tsx` | сведения о следующем/предыдущем выпуске |
 | `features/player/WatchInfo.tsx` | метаданные и информация о выбранном тайтле |
 | `features/player/WatchPartyPanel.tsx` | UI комнаты и участников |
 | `features/tracking/api.ts` | детали франшизы и последовательная загрузка videos для tracking snapshot |
+| `lib/episodeDates.ts` | нормализация frontend-контракта дат выхода серий |
 
 ### Storage и settings
 
