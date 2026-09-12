@@ -1,4 +1,5 @@
 import type { AnimeUserRatings, CommunityAnimeRating, CommunityRatings } from "../../lib/types";
+import { requestJson } from "../../lib/http";
 
 type CommunityRatingsPayload = {
   ratings?: Record<string, CommunityAnimeRating>;
@@ -45,10 +46,9 @@ export async function publishCommunityRating(
 }
 
 async function requestCommunityRatings(url: string, init?: RequestInit) {
-  const response = await fetch(url, { credentials: "include", ...init });
-  const payload = await response.json() as CommunityRatingsPayload;
-  if (!response.ok) {
-    throw new Error(payload.detail || `Community ratings request failed: ${response.status}`);
-  }
-  return payload;
+  return requestJson<CommunityRatingsPayload>(url, {
+    credentials: "include",
+    ...init,
+    errorMessage: status => `Community ratings request failed: ${status}`,
+  });
 }

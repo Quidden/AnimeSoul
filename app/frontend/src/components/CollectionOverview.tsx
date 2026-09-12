@@ -1,5 +1,7 @@
+import { useRef } from "react";
 import type { Anime, AnimeProgress, CardMeta, Folder, Progress, Tracker } from "../lib/types";
 import { isEpisodeWatched, watchTimeProgress } from "../lib/anime";
+import { useModalAccessibility } from "../lib/modalAccessibility";
 import { ReleaseMark } from "./ReleaseMark";
 
 export type CollectionOverviewKind = "favorites" | "folders" | "tracking";
@@ -60,6 +62,7 @@ export function CollectionOverview({
   onWatchNew,
   onUntrack,
 }: Props) {
+  const dialogRef = useRef<HTMLElement>(null);
   const title =
     kind === "favorites" ? "Избранное" : kind === "folders" ? "Папки" : "Отслеживание новых серий";
   const subtitle =
@@ -69,13 +72,17 @@ export function CollectionOverview({
         ? `${folders.length} папок с общей статистикой`
         : `${tracked.length} активных подписок`;
 
+  useModalAccessibility(true, onClose, dialogRef);
+
   return (
     <div className="modal-backdrop collection-overview-backdrop" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="modal collection-overview"
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         onMouseDown={event => event.stopPropagation()}
       >
         <button className="modal-close" type="button" onClick={onClose} aria-label="Закрыть">

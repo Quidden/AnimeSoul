@@ -6,7 +6,10 @@ real-time WebSocket server, and static production bundle serving.
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 import os
+import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,17 +20,47 @@ from runtime_instance import RUNTIME_API_CAPABILITIES
 from .api.gdrive import router as gdrive_router
 from .api.community_ratings import router as community_ratings_router
 from .api.downloads import router as downloads_router
+from .api.episode_dates import gateway as episode_dates_gateway, router as episode_dates_router
 from .api.storage import router as storage_router
 from .api.watch_party import router as party_router
-from .api.kodik import router as kodik_router
-from .api.yummy import router as yummy_router
+from .api.kodik import close_kodik_services, router as kodik_router
+from .api.yummy import close_yummy_services, router as yummy_router
 from .config import settings
+
+
+@asynccontextmanager
+async def lifespan(_application: FastAPI):
+    """Keep upstream pools alive for the process and close them predictably."""
+
+    yield
+    await asyncio.gather(
+        close_yummy_services(),
+        close_kodik_services(),
+        episode_dates_gateway.close(),
+        return_exceptions=True,
+    )
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.2.2",
+    version="0.2.7",
     description="FastAPI backend for the AnimeSoul desktop and web client.",
+    lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def response_performance_headers(request, call_next):
+    """Expose local backend time and safely cache fingerprinted UI assets."""
+
+    started_at = time.perf_counter()
+    response = await call_next(request)
+    duration = (time.perf_counter() - started_at) * 1000
+    response.headers["Server-Timing"] = f"animesoul;dur={duration:.1f}"
+    if request.url.path.startswith("/assets/"):
+        response.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
+    elif not request.url.path.startswith("/api/downloads/media/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 # Enable CORS for local Vite dev server (port 5173). Production uses same-origin.
 app.add_middleware(
@@ -36,15 +69,22 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-AnimeSoul-Yummy-Status", "X-AnimeSoul-Kodik-Status"],
+    expose_headers=[
+        "Server-Timing",
+        "X-AnimeSoul-Yummy-Status",
+        "X-AnimeSoul-Kodik-Status",
+    ],
 )
 
 # Register API routers
 app.include_router(yummy_router)
 app.include_router(kodik_router)
 app.include_router(downloads_router)
+app.include_router(episode_dates_router)
 app.include_router(storage_router)
-app.include_router(party_router)
+# The standalone Android product intentionally has no Watch Party surface.
+if os.getenv("ANIMESOUL_MOBILE", "").casefold() != "android":
+    app.include_router(party_router)
 app.include_router(gdrive_router)
 app.include_router(community_ratings_router)
 

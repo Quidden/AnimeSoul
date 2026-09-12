@@ -21,7 +21,31 @@ export function reconcileTrackedEpisodes(
   episodeDates: Map<string, number>,
   now = Date.now(),
   allDubEpisodeDates: Map<string, number> = episodeDates,
+  identityCheckedAnimeIds: number[] = [],
 ): Tracker {
+  const previouslyChecked = new Set(tracker.episodeIdentityCheckedIds ?? []);
+  const repairIds = new Set(identityCheckedAnimeIds.filter(id => !previouslyChecked.has(id)));
+  if (repairIds.size) {
+    // The old fuzzy catalogue lookup persisted movie/old-season numbers under
+    // upcoming titles. Repair each title once, only after both sources answer
+    // through the corrected backend. Failed titles retain their full baseline.
+    const keep = (key: string, dates: Map<string, number>) =>
+      !repairIds.has(Number(key.split(":", 1)[0])) || dates.has(key);
+    const knownEpisodeKeys = tracker.knownEpisodeKeys?.filter(key => keep(key, episodeDates));
+    const pendingEpisodeKeys = tracker.pendingEpisodeKeys?.filter(key => keep(key, episodeDates));
+    const pendingOtherDubEpisodeKeys = tracker.pendingOtherDubEpisodeKeys?.filter(key => keep(key, allDubEpisodeDates));
+    tracker = {
+      ...tracker,
+      knownEpisodeKeys,
+      knownEpisodes: knownEpisodeKeys?.length ?? tracker.knownEpisodes,
+      knownAnyEpisodeKeys: tracker.knownAnyEpisodeKeys?.filter(key => keep(key, allDubEpisodeDates)),
+      pendingEpisodeKeys,
+      newEpisodes: pendingEpisodeKeys?.length ?? tracker.newEpisodes,
+      pendingOtherDubEpisodeKeys,
+      otherDubEpisodes: pendingOtherDubEpisodeKeys?.length ?? tracker.otherDubEpisodes,
+      episodeIdentityCheckedIds: [...new Set([...previouslyChecked, ...repairIds])],
+    };
+  }
   const currentKeys = [...episodeDates.keys()];
   const previousKeys = new Set(tracker.knownEpisodeKeys ?? []);
   const sortedCurrentKeys = [...currentKeys].sort(

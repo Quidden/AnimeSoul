@@ -1,7 +1,14 @@
 import type {Anime, HeroTrailer, ScheduleEntry, Video} from "../../lib/types";
+import {requestJson} from "../../lib/http";
 
 type AnimePayload = {anime?: Anime[]; error?: string};
-type VideoPayload = {videos?: Video[]; error?: string};
+type VideoPayload = {
+    anime?: Anime;
+    videos?: Video[];
+    error?: string;
+    detail?: string;
+    _sources?: Record<string, string>;
+};
 type SchedulePayload = {schedule?: ScheduleEntry[]; error?: string};
 type TrailerPayload = {trailers?: unknown; error?: string};
 
@@ -19,15 +26,28 @@ type CatalogCacheEntry = {
 const CATALOG_SEARCH_CACHE_TTL = 5 * 60_000;
 const CATALOG_SEARCH_CACHE_LIMIT = 40;
 const catalogSearchCache = new Map<string, CatalogCacheEntry>();
+const DETAILS_CACHE_TTL = 12 * 60 * 60_000;
+const VIDEO_CACHE_TTL = 10 * 60_000;
+export type AnimeVideoResult = {
+    anime?: Anime;
+    videos: Video[];
+    sources: Record<string, string>;
+};
 
-async function requestJson<T extends {error?: string}>(url: string): Promise<T> {
-    const response = await fetch(url);
-    const payload = await response.json() as T;
-    if (!response.ok) {
-        throw new Error(payload.error || `API request failed with status ${response.status}`);
+export class CatalogVideoRequestError extends Error {
+    readonly sources: Record<string, string>;
+    readonly status: number;
+
+    constructor(message: string, status: number, sources: Record<string, string>) {
+        super(message);
+        this.name = "CatalogVideoRequestError";
+        this.status = status;
+        this.sources = sources;
     }
-    return payload;
 }
+
+const videoCache = new Map<number, { expiresAt: number; request: Promise<AnimeVideoResult> }>();
+const detailsCache = new Map<number, { expiresAt: number; request: Promise<Anime | undefined> }>();
 
 /** Load one catalog page. Filtering and franchise grouping stay in selectors/UI code. */
 export async function fetchCatalogPage({limit, offset, query}: CatalogPageOptions): Promise<Anime[]> {
@@ -89,20 +109,131 @@ async function requestCatalogPage({limit, offset, query}: CatalogPageOptions) {
 }
 
 /** Load full metadata for known anime identifiers. */
-export async function fetchAnimeDetails(ids: number[]): Promise<Anime[]> {
-    if (!ids.length) return [];
-    const payload = await requestJson<AnimePayload>(
-        `/api/yummy?mode=details&ids=${ids.join(",")}`,
-    );
-    return payload.anime ?? [];
+export async function fetchAnimeDetails(
+    ids: number[],
+    options: { refresh?: boolean } = {},
+): Promise<Anime[]> {
+    const requested = [...new Set(ids)].filter(Number.isFinite);
+    if (!requested.length) return [];
+    const now = Date.now();
+    const missing = requested.filter(animeId => {
+        const cached = detailsCache.get(animeId);
+        if (!options.refresh && cached && cached.expiresAt > now) return false;
+        if (cached) detailsCache.delete(animeId);
+        return true;
+    });
+
+    if (missing.length) {
+        for (let start = 0; start < missing.length; start += 50) {
+            const batchIds = missing.slice(start, start + 50);
+            const params = new URLSearchParams({
+                mode: "details",
+                ids: batchIds.join(","),
+            });
+            if (options.refresh) params.set("refresh", "true");
+            const batch = requestJson<AnimePayload>(`/api/yummy?${params.toString()}`)
+                .then(payload => payload.anime ?? []);
+            for (const animeId of batchIds) {
+                const request = batch
+                    .then(anime => anime.find(item => item.anime_id === animeId))
+                    .then(anime => {
+                        if (!anime) detailsCache.delete(animeId);
+                        return anime;
+                    })
+                    .catch(error => {
+                        detailsCache.delete(animeId);
+                        throw error;
+                    });
+                detailsCache.set(animeId, {
+                    expiresAt: now + DETAILS_CACHE_TTL,
+                    request,
+                });
+            }
+        }
+    }
+
+    const resolved = await Promise.all(requested.map(animeId =>
+        detailsCache.get(animeId)?.request ?? Promise.resolve(undefined),
+    ));
+    return resolved.filter((anime): anime is Anime => Boolean(anime));
 }
 
 /** Load all player variants and episodes exposed for one API anime record. */
 export async function fetchAnimeVideos(animeId: number): Promise<Video[]> {
-    const payload = await requestJson<VideoPayload>(
-        `/api/yummy?mode=videos&id=${animeId}`,
+    return (await fetchAnimeVideoResult(animeId)).videos;
+}
+
+/**
+ * Load videos together with per-provider status information.
+ *
+ * The in-flight cache is important on the watch page: discovering the full
+ * franchise can request the already selected title a second time. Reusing the
+ * first request keeps that enrichment from restarting local or online loading.
+ */
+export async function fetchAnimeVideoResult(
+    animeId: number,
+    options: { refresh?: boolean } = {},
+): Promise<AnimeVideoResult> {
+    const now = Date.now();
+    const cached = videoCache.get(animeId);
+    if (!options.refresh && cached && cached.expiresAt > now) return cached.request;
+    if (cached) videoCache.delete(animeId);
+    const request = requestAnimeVideos(animeId, Boolean(options.refresh))
+        .catch(error => {
+            videoCache.delete(animeId);
+            throw error;
+        });
+    videoCache.set(animeId, { expiresAt: now + VIDEO_CACHE_TTL, request });
+    return request;
+}
+
+async function requestAnimeVideos(
+    animeId: number,
+    refresh: boolean,
+): Promise<AnimeVideoResult> {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+        () => controller.abort(new DOMException("Request timed out", "TimeoutError")),
+        15_000,
     );
-    return payload.videos ?? [];
+    try {
+        const params = new URLSearchParams({mode: "videos", id: String(animeId)});
+        if (refresh) params.set("refresh", "true");
+        const response = await fetch(`/api/yummy?${params.toString()}`, {
+            signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => ({})) as VideoPayload;
+        const sources = payload._sources ?? sourceStatesFromHeaders(response.headers);
+        if (!response.ok) {
+            throw new CatalogVideoRequestError(
+                payload.detail || payload.error || `API request failed with status ${response.status}`,
+                response.status,
+                sources,
+            );
+        }
+        return {
+            anime: payload.anime,
+            videos: Array.isArray(payload.videos) ? payload.videos : [],
+            sources,
+        };
+    } catch (error) {
+        if (error instanceof CatalogVideoRequestError) throw error;
+        const message = error instanceof DOMException && error.name === "TimeoutError"
+            ? "Источники не ответили за 15 секунд."
+            : error instanceof Error ? error.message : "Не удалось загрузить серии.";
+        throw new CatalogVideoRequestError(message, 0, {});
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function sourceStatesFromHeaders(headers: Headers): Record<string, string> {
+    const sources: Record<string, string> = {};
+    const yummy = headers.get("X-AnimeSoul-Yummy-Status");
+    const kodik = headers.get("X-AnimeSoul-Kodik-Status");
+    if (yummy) sources.yummy = yummy;
+    if (kodik) sources.kodik = kodik;
+    return sources;
 }
 
 /** Load and normalize trailer sources exposed by YummyAnime for one title. */

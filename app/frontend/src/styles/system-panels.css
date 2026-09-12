@@ -294,6 +294,48 @@
   color: #e68a96;
 }
 
+.changelog-group.important h3 {
+  color: #edbd68;
+}
+
+.settings-changelog-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-changelog-intro {
+  border: 1px solid color-mix(in srgb,var(--accent) 28%,#302a35);
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: linear-gradient(120deg,color-mix(in srgb,var(--accent) 10%,#151218),#151218);
+}
+
+.settings-changelog-intro span {
+  color: var(--accent);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+
+.settings-changelog-intro h4 {
+  margin: 5px 0 4px;
+  color: #f3edf5;
+  font-size: 17px;
+}
+
+.settings-changelog-intro p {
+  margin: 0;
+  color: #958c99;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.settings-changelog-panel>.changelog-list {
+  padding: 0;
+  overflow: visible;
+}
+
 .settings-debug-group {
   display: grid;
 }
@@ -388,6 +430,21 @@
   scrollbar-color: var(--accent) #171319;
 }
 
+.debug-show-more {
+  align-self: center;
+  min-height: 38px;
+  padding: 9px 16px;
+  border: 1px solid #3a3341;
+  border-radius: 10px;
+  background: #19151e;
+  color: #d8d0dc;
+}
+
+.debug-show-more:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .debug-console-line {
   display: grid;
   grid-template-columns: 8px 62px minmax(0,1fr);
@@ -431,6 +488,8 @@
 }
 
 .debug-console-text {
+  display: grid;
+  gap: 2px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -443,6 +502,11 @@
 .debug-console-text small {
   color: #756d79;
   font: inherit;
+}
+
+.debug-location {
+  color: color-mix(in srgb,var(--accent) 72%,#8d8491);
+  font: 8px/1.45 Consolas,"Cascadia Mono",monospace;
 }
 
 .debug-empty {
@@ -479,11 +543,12 @@
   }
   .changelog-modal {
     width: 100%;
-    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
     border-radius: 16px;
   }
   .changelog-modal>header {
-    padding: 20px;
+    min-height: 0;
+    padding: 18px 20px;
   }
   .changelog-version-body.open>.changelog-version-content {
     max-height: min(360px,calc(100vh - 270px));

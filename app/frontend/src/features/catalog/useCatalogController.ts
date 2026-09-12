@@ -58,6 +58,7 @@ export function useCatalogController({
     const [yearTo, setYearTo] = useState("");
     const [groupFilter, setGroupFilter] = useState("all");
     const [formatFilter, setFormatFilter] = useState("all");
+    const [dubbingFilter, setDubbingFilter] = useState("all");
     const [ratingSource, setRatingSource] = useState("average");
     const [ratingFrom, setRatingFrom] = useState("");
 
@@ -96,7 +97,7 @@ export function useCatalogController({
                 if (search.trim()) return uniqueAnime([...anime, ...current]);
                 return anime;
             });
-            setOffset(next);
+            if (!search.trim()) setOffset(next + anime.length);
         } catch (loadError) {
             if (requestId !== loadRequestRef.current) return;
             setError(loadError instanceof Error
@@ -118,7 +119,7 @@ export function useCatalogController({
                     setCatalog(current => uniqueAnime([...anime, ...current]));
                 }
             }).catch(() => undefined);
-        }, 120);
+        }, 300);
 
         return () => {
             cancelled = true;
@@ -138,20 +139,26 @@ export function useCatalogController({
                     .map(anime => franchiseKey(anime.title)),
             );
 
-            let cursor = offset + 24;
-            let fresh: Anime[] = [];
+            let cursor = offset;
+            const fresh: Anime[] = [];
             let addedCards = 0;
 
             for (let attempt = 0; attempt < 5 && addedCards < 12; attempt += 1) {
                 const page = await fetchCatalogPage({limit: 48, offset: cursor});
+                const pageFresh: Anime[] = [];
 
                 for (const anime of page) {
                     if (existingIds.has(anime.anime_id)) continue;
                     existingIds.add(anime.anime_id);
                     fresh.push(anime);
+                    pageFresh.push(anime);
                 }
 
-                cursor += 48;
+                if (pageFresh.length) {
+                    setCatalog(current => uniqueAnime([...current, ...pageFresh]));
+                }
+
+                cursor += page.length;
                 addedCards = groupFranchises([...catalog, ...fresh])
                     .filter(matchesActiveFilters)
                     .filter(anime => !previousFranchises.has(franchiseKey(anime.title)))
@@ -164,7 +171,7 @@ export function useCatalogController({
             }
 
             setCatalog(current => uniqueAnime([...current, ...fresh]));
-            setOffset(cursor - 24);
+            setOffset(cursor);
             if (!fresh.length) {
                 setError("Больше новых аниме в каталоге не найдено");
             }
@@ -285,9 +292,21 @@ export function useCatalogController({
             });
         }
 
-        void hydrateEpisodeStatistics();
+        const idleWindow = window as typeof window & {
+            requestIdleCallback?: (callback: () => void, options?: {timeout: number}) => number;
+            cancelIdleCallback?: (handle: number) => void;
+        };
+        const idleHandle = idleWindow.requestIdleCallback?.(
+            () => void hydrateEpisodeStatistics(),
+            {timeout: 1800},
+        );
+        const fallbackTimer = idleHandle === undefined
+            ? window.setTimeout(() => void hydrateEpisodeStatistics(), 900)
+            : undefined;
         return () => {
             cancelled = true;
+            if (idleHandle !== undefined) idleWindow.cancelIdleCallback?.(idleHandle);
+            if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
         };
     }, [idsNeedingStats.join(","), view, active]);
 
@@ -295,6 +314,7 @@ export function useCatalogController({
         active,
         catalog,
         error,
+        dubbingFilter,
         formatFilter,
         genre,
         groupFilter,
@@ -318,6 +338,7 @@ export function useCatalogController({
         loadMore,
         setActive,
         setCatalog,
+        setDubbingFilter,
         setFormatFilter,
         setGenre,
         setGroupFilter,

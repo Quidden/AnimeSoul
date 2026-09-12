@@ -27,6 +27,7 @@ export type Anime = {
   viewing_order?: Anime[];
   remote_ids?: {
     shikimori_id?: number | string;
+    myanimelist_id?: number | string;
     kp_id?: number | string;
     imdb_id?: number | string;
     worldart_id?: number | string;
@@ -88,6 +89,8 @@ export type Video = {
   iframe_url: string;
   number: string;
   date?: number;
+  /** Earliest known upload of this episode; distinct from its broadcast date. */
+  episode_added_at?: number;
   duration?: number;
   originAnimeId?: number;
   originNumber?: string;
@@ -110,7 +113,12 @@ export type Video = {
     episodeId: string;
     quality: number;
     mediaUrl: string;
+    mediaType?: "video/mp4" | "application/vnd.apple.mpegurl";
     previewUrl?: string;
+    skips?: {
+      opening?: { time: number; length: number };
+      ending?: { time: number; length: number };
+    };
   };
 };
 
@@ -170,6 +178,8 @@ export type AnimeProgress = {
   seasonLabel?: string;
   originAnimeId?: number;
   originEpisode?: string;
+  /** Tombstone preventing an older cloud copy from resurrecting reset episodes. */
+  resetAt?: number;
 };
 
 /** Map of anime ID to its corresponding progress record. */
@@ -185,6 +195,8 @@ export type Tracker = {
   title: string;
   knownEpisodes: number;
   knownEpisodeKeys?: string[];
+  /** Titles whose legacy baseline was checked after strict identity matching. */
+  episodeIdentityCheckedIds?: number[];
   pendingEpisodeKeys?: string[];
   newEpisodes: number;
   /** Monotonic baseline across every dubbing, used for availability hints. */
@@ -212,6 +224,8 @@ export type PlayerPrefs = {
   homePreviewMode: "screenshots" | "poster";
   playerEpisodeCarousel: boolean;
   episodeHoverPreview: boolean;
+  /** Use denser episode cards below the player without removing their actions. */
+  compactEpisodeList: boolean;
   toolbarIconOnly: boolean;
   /** Keep the legacy toolbar around the custom AnimeSoul player. */
   customPlayerToolbarVisible: boolean;
@@ -222,8 +236,12 @@ export type PlayerPrefs = {
   previewScale: number;
   /** Ordered global voice favourites used as the fallback preference list. */
   favoriteDubbings: string[];
-  /** Explicit default voice selected for individual anime titles. */
+  /** One global preferred voice, selected with the heart action. */
+  preferredDubbing: string;
+  /** Explicit manual voice overrides selected for individual anime titles. */
   titleDubbings: Record<string, string>;
+  /** Separates old per-title heart values from explicit manual overrides. */
+  dubbingPreferenceVersion: 2;
   /** Player/provider selected for individual anime titles. */
   titlePlayers: Record<string, string>;
   watchPartyEnabled: boolean;
@@ -281,6 +299,8 @@ export type CardMeta = {
   durationMin: number;
   durationMax: number;
   status: { label: string; kind: string };
+  /** Voice translations available in at least one member of the franchise. */
+  dubbings: string[];
 };
 
 /** Color theme definition. */
@@ -313,6 +333,8 @@ export type ConfigSnapshot = {
   watchingExpanded?: boolean;
   historyExpanded?: boolean;
   watchingHidden?: number[];
+  /** Per-field revisions used for safe multi-device cloud conflict resolution. */
+  fieldUpdatedAt?: Record<string, number>;
 };
 
 /** Storage profile container. */

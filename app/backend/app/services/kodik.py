@@ -12,6 +12,11 @@ from typing import Any
 
 import httpx
 
+from .anime_identity import anime_match_score, anime_titles, normalise_title
+from .http_client import LazyAsyncClient
+from .kodik_helpers import _is_concrete_kodik_video_link
+from .response_cache import CacheRecord, PersistentJsonCache, response_cache_path
+
 
 KODIK_SEARCH_ENDPOINT = "https://kodik-api.com/search"
 KODIK_LIST_ENDPOINT = "https://kodik-api.com/list"
@@ -217,6 +222,13 @@ def kodik_release_to_anime(release: dict[str, Any], anime_id: int | None = None)
     return {key: value for key, value in result.items() if value not in (None, "", [], {})}
 
 
+def matching_kodik_releases(
+    releases: list[dict[str, Any]], anime: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """A search response is a candidate list, not proof of title identity."""
+    return [release for release in releases if anime_match_score(anime, kodik_release_to_anime(release)) >= 500]
+
+
 def _timestamp(value: object) -> int | None:
     if not isinstance(value, str) or not value.strip():
         return None
@@ -257,7 +269,9 @@ def kodik_releases_to_videos(releases: list[dict[str, Any]]) -> list[dict[str, A
                 episodes = season_data.get("episodes")
                 if isinstance(episodes, dict):
                     rows.extend((str(number), episode) for number, episode in episodes.items())
-        if not rows and release.get("link"):
+        # An empty serial/season is not a playable episode. Only a concrete
+        # single-video release can supply episode 1 without an episode map.
+        if not rows and isinstance(release.get("link"), str) and _is_concrete_kodik_video_link(release["link"]):
             rows.append(("1", {"link": release.get("link")}))
 
         for number, episode_value in rows:
@@ -296,6 +310,21 @@ class KodikAnimeGateway:
     def __init__(self, data_dir: Path) -> None:
         self.settings_file = data_dir / OFFLINE_SETTINGS_FILE
         self._request_slots = asyncio.Semaphore(6)
+        self._request_inflight: dict[str, asyncio.Task[dict[str, Any]]] = {}
+        self._response_cache = PersistentJsonCache(
+            response_cache_path(data_dir),
+            "kodik",
+        )
+        self._http = LazyAsyncClient(
+            timeout=httpx.Timeout(10.0, read=20.0),
+            follow_redirects=True,
+            headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+            limits=httpx.Limits(
+                max_connections=10,
+                max_keepalive_connections=6,
+                keepalive_expiry=30.0,
+            ),
+        )
 
     async def public_key(self) -> str:
         try:
@@ -308,28 +337,95 @@ class KodikAnimeGateway:
             raise KodikNotConfiguredError("Публичный ключ Kodik не настроен")
         return key
 
-    async def request(self, endpoint: str, params: dict[str, object]) -> dict[str, Any]:
+    async def request(
+        self,
+        endpoint: str,
+        params: dict[str, object],
+        *,
+        refresh: bool = False,
+    ) -> dict[str, Any]:
         key = await self.public_key()
         request_params = {"token": key, **params}
-        async with self._request_slots:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(15.0, read=25.0),
-                follow_redirects=True,
-                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-            ) as client:
-                response = await client.post(endpoint, params=request_params)
+        cache_key = self._cache_key(endpoint, params, key)
+        cached = await self._response_cache.get(cache_key)
+        if cached and cached.fresh and not refresh:
+            return cached.value
+
+        existing = self._request_inflight.get(cache_key)
+        if existing:
+            return await asyncio.shield(existing)
+        task = asyncio.create_task(
+            self._request_and_cache(cache_key, endpoint, request_params, params, cached)
+        )
+        self._request_inflight[cache_key] = task
+
+        def release(completed: asyncio.Task[dict[str, Any]]) -> None:
+            if self._request_inflight.get(cache_key) is completed:
+                self._request_inflight.pop(cache_key, None)
+
+        task.add_done_callback(release)
+        return await asyncio.shield(task)
+
+    async def _request_and_cache(
+        self,
+        cache_key: str,
+        endpoint: str,
+        request_params: dict[str, object],
+        policy_params: dict[str, object],
+        cached: CacheRecord | None,
+    ) -> dict[str, Any]:
+        try:
+            async with self._request_slots:
+                response = await (await self._http.get()).post(
+                    endpoint,
+                    params=request_params,
+                )
                 response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise RuntimeError("Kodik returned a non-object response")
-        if payload.get("error"):
-            raise RuntimeError(str(payload["error"]))
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise RuntimeError("Kodik returned a non-object response")
+            if payload.get("error"):
+                raise RuntimeError(str(payload["error"]))
+        except Exception:
+            if cached is not None:
+                return cached.value
+            raise
+        ttl = 20 * 60 if str(policy_params.get("with_episodes_data", "")).lower() == "true" else 10 * 60
+        await self._response_cache.set(
+            cache_key,
+            payload,
+            ttl=ttl,
+            stale_ttl=24 * 60 * 60,
+        )
         return payload
 
-    async def ping(self) -> None:
-        await self.request(KODIK_SEARCH_ENDPOINT, {"title": "Naruto", "limit": 1})
+    async def close(self) -> None:
+        await self._http.close()
 
-    async def catalogue(self, query: str, limit: int, offset: int = 0) -> list[dict[str, Any]]:
+    async def clear_cache(self) -> None:
+        await self._response_cache.clear()
+
+    @staticmethod
+    def _cache_key(endpoint: str, params: dict[str, object], token: str) -> str:
+        token_key = hashlib.sha256(token.encode("utf-8")).hexdigest()[:12]
+        encoded = json.dumps(params, ensure_ascii=False, sort_keys=True, default=str)
+        return f"{token_key}:{endpoint}:{encoded}"
+
+    async def ping(self) -> None:
+        await self.request(
+            KODIK_SEARCH_ENDPOINT,
+            {"title": "Naruto", "limit": 1},
+            refresh=True,
+        )
+
+    async def catalogue(
+        self,
+        query: str,
+        limit: int,
+        offset: int = 0,
+        *,
+        refresh: bool = False,
+    ) -> list[dict[str, Any]]:
         requested = min(100, max(1, offset + limit))
         params: dict[str, object] = {
             "limit": requested,
@@ -341,7 +437,7 @@ class KodikAnimeGateway:
             params["title"] = query.strip()
         else:
             params.update({"sort": "updated_at", "order": "desc"})
-        payload = await self.request(endpoint, params)
+        payload = await self.request(endpoint, params, refresh=refresh)
         results = payload.get("results")
         rows = [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
         return rows[offset:offset + limit]
@@ -352,6 +448,7 @@ class KodikAnimeGateway:
         *,
         anime_id: int | None = None,
         with_episodes: bool = False,
+        refresh: bool = False,
     ) -> list[dict[str, Any]]:
         lookups: list[dict[str, str]] = []
         remote = anime.get("remote_ids") if isinstance(anime, dict) else None
@@ -372,7 +469,7 @@ class KodikAnimeGateway:
         if isinstance(anime, dict):
             for field in ("title", "original", "title_en"):
                 value = str(anime.get(field) or "").strip()
-                if value:
+                if value and normalise_title(value) in anime_titles(anime):
                     lookups.append({"title" if field == "title" else "title_orig": value})
         if not lookups:
             return []
@@ -385,9 +482,21 @@ class KodikAnimeGateway:
         if with_episodes:
             common["with_episodes_data"] = "true"
         first_error: BaseException | None = None
+        identity = dict(anime or {})
+        if anime_id is not None:
+            decoded = kodik_lookup_from_anime_id(anime_id)
+            if decoded:
+                identity["remote_ids"] = {
+                    **{"kodik_id" if field == "id" else field: value for field, value in decoded.items()},
+                    **(identity.get("remote_ids") or {}),
+                }
         for lookup in lookups:
             try:
-                payload = await self.request(KODIK_SEARCH_ENDPOINT, {**common, **lookup})
+                payload = await self.request(
+                    KODIK_SEARCH_ENDPOINT,
+                    {**common, **lookup},
+                    refresh=refresh,
+                )
             except KodikNotConfiguredError:
                 raise
             except Exception as error:
@@ -395,8 +504,9 @@ class KodikAnimeGateway:
                 continue
             results = payload.get("results")
             rows = [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
-            if rows:
-                return rows
+            matches = matching_kodik_releases(rows, identity)
+            if matches:
+                return matches
         if first_error:
             raise first_error
         return []

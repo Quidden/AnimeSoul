@@ -1,5 +1,9 @@
 import { DEFAULT_PLAYER_PREFS, SCHEMA_VERSION } from "../../lib/settings";
-import { migrateDocument, migrateSnapshot } from "../../lib/storage";
+import {
+  migrateDocument,
+  migrateSnapshot,
+} from "../../lib/storage";
+import { changedFieldRevisions } from "../../lib/storageSafety";
 import type {
   Anime,
   ConfigProfile,
@@ -88,6 +92,42 @@ export function buildProfileSnapshot(input: ProfileSnapshotInput): ConfigSnapsho
     resolveAnimeTitle,
   } = input;
 
+  const progressWithTitles = Object.fromEntries(
+    Object.entries(progress).map(([animeId, item]) => [
+      animeId,
+      {
+        ...item,
+        title:
+          item.title ??
+          resolveAnimeTitle(Number(animeId)) ??
+          previous?.animeTitles?.[Number(animeId)],
+      },
+    ]),
+  );
+  const nextFields = {
+    favorites,
+    folders,
+    progress: progressWithTitles,
+    ratings,
+    tracked,
+    theme,
+    toolbar,
+    playerPrefs: { ...DEFAULT_PLAYER_PREFS, ...playerPrefs },
+    historyClearedAt,
+    historyEnabled,
+    libraryExpanded,
+    watchingExpanded,
+    historyExpanded,
+    watchingHidden,
+  };
+  const now = Date.now();
+  const fieldUpdatedAt = changedFieldRevisions(
+    previous,
+    nextFields,
+    previous?.fieldUpdatedAt,
+    now,
+  );
+
   return migrateSnapshot(
     {
       // Unknown fields from newer builds must survive a round trip.
@@ -95,37 +135,14 @@ export function buildProfileSnapshot(input: ProfileSnapshotInput): ConfigSnapsho
       version: SCHEMA_VERSION,
       name,
       createdAt: previous?.createdAt ?? new Date().toISOString(),
-      favorites,
-      folders,
-      progress: Object.fromEntries(
-        Object.entries(progress).map(([animeId, item]) => [
-          animeId,
-          {
-            ...item,
-            title:
-              item.title ??
-              resolveAnimeTitle(Number(animeId)) ??
-              previous?.animeTitles?.[Number(animeId)],
-          },
-        ]),
-      ),
-      ratings,
+      ...nextFields,
+      fieldUpdatedAt,
       // Titles are redundant on purpose: they keep exported JSON readable.
       animeTitles: {
         ...(previous?.animeTitles ?? {}),
         ...Object.fromEntries(catalog.map((anime) => [anime.anime_id, anime.title])),
         ...Object.fromEntries(tracked.map((item) => [item.animeId, item.title])),
       },
-      tracked,
-      theme,
-      toolbar,
-      playerPrefs: { ...DEFAULT_PLAYER_PREFS, ...playerPrefs },
-      historyClearedAt,
-      historyEnabled,
-      libraryExpanded,
-      watchingExpanded,
-      historyExpanded,
-      watchingHidden,
     },
     name,
   );

@@ -32,12 +32,17 @@
 - Profile lifecycle, migration, mirror и persistence находятся в
   `features/storage/useProfileStorage.ts`.
 - Ratings transport/retry находятся в `features/ratings/`.
-- Settings разбиты на catalog, common row, appearance, profiles и cloud.
-- Player presentation частично разбит на toolbar, season list, schedule,
-  metadata и Watch Party panel.
+- Settings разбиты на catalog/common row, appearance, playback, Watch Party,
+  profiles, offline и cloud; shell хранит только modal orchestration.
+- Player presentation разбит на toolbar, season list, schedule, metadata,
+  Watch Party panel, offline/download hooks и меню собственного плеера.
 - Home, catalog, ratings, statistics и folder имеют page boundaries.
+- Folder/navigation, profile autosave и header cloud lifecycle вынесены в
+  отдельные hooks.
 - Typed browser events определены в `lib/events.ts`.
 - CSS base разделён на ordered `base-*` modules; feature bundles сохранены.
+- Точные CSS-дубли запрещает `audit:css`; тяжёлые pages/player/modals и
+  source-map parser загружаются лениво под контролем bundle budgets.
 
 `App.tsx`, `Player.tsx` и `SettingsCenter.tsx` остаются orchestration shells.
 Это осознанно: их следует уменьшать по одной проверяемой ответственности.
@@ -49,6 +54,9 @@
 - Drive merge выделен в pure `gdrive_merge.py` и тестируется без сети.
 - Community ratings отделены в SQLite store и aggregate API.
 - Runtime instance ownership отделён от launcher/runtime UI.
+- Kodik normalization и private API resolver отделены от очереди/индекса в
+  `kodik_helpers.py` и `kodik_resolver.py`.
+- Android MediaSession и network monitor отделены от `MainActivity`.
 
 ## Целевое направление
 
@@ -102,13 +110,11 @@ FastAPI routes   -> use-case coordination      -> services/pure policy -> I/O
 - remote party command не публикуется обратно;
 - provider без postMessage по-прежнему встраивается.
 
-## Этап 3: завершить SettingsCenter
+## Этап 3: удерживать SettingsCenter тонким shell
 
-`SettingsCenter.tsx` уже делегирует appearance, profiles и Drive. Оставить в
-shell только modal navigation, search и composition, вынеся:
+`SettingsCenter.tsx` уже делегирует feature-группы. При дальнейшем росте
+оставлять в shell только modal navigation, search и composition, вынося:
 
-- watching/player setting groups;
-- Watch Party settings/guide;
 - reset command;
 - focus/overlay lifecycle при необходимости в modal hook.
 
@@ -214,11 +220,14 @@ persistence boundary пишет документ.
 
 ```powershell
 cd app
+.\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
-npm --prefix frontend run typecheck
-npm --prefix frontend test
-npm --prefix frontend run build
+npm --prefix frontend run check
 ```
+
+Frontend gate включает strict TypeScript, ESLint warning ceiling, 50
+characterization tests, CSS duplicate audit, production build и бюджеты:
+entry JS 300 KiB, entry CSS 315 KiB, любой lazy/vendor chunk 580 KiB.
 
 Для затронутой подсистемы дополнительно:
 

@@ -10,6 +10,7 @@ import {
 import {
     migrateDocument,
     migrateSnapshot,
+    isStorageDocument,
     readLocal as read,
     resolveStoredBoolean,
     saveStorageDocument,
@@ -34,13 +35,20 @@ import {
     buildProfileSnapshot,
     buildStorageDocument,
     resolveActiveProfileDocument,
-    upsertProfile,
 } from "./profileDocument";
+import {useProfileAutosave} from "./useProfileAutosave";
 
 type ProfileStorageOptions = {
     getCatalog: () => Anime[];
     resolveAnimeTitle: (animeId: number) => string | undefined;
 };
+
+type ApplyStorageProfile = (
+    document: StorageDocument,
+    profile: ConfigProfile,
+    snapshot: ConfigSnapshot,
+    suppressAutosave?: boolean,
+) => void;
 
 /**
  * Owns every persisted user preference and profile operation.
@@ -77,6 +85,9 @@ export function useProfileStorage({
 
     // Unknown fields are retained so newer and older builds can exchange saves.
     const storageEnvelopeRef = useRef<Partial<StorageDocument>>({});
+    const profilesRef = useRef<ConfigProfile[]>([]);
+    const skipNextAutosaveRef = useRef(true);
+    const applyStorageProfileRef = useRef<ApplyStorageProfile>(() => undefined);
     usePublishedSaveStatus(saveStatus);
 
     useEffect(() => {
@@ -137,6 +148,7 @@ export function useProfileStorage({
         setRatings(loadedRatings);
         setTracked(loadedTracked);
         setTheme(loadedTheme);
+        profilesRef.current = loadedProfiles;
         setProfiles(loadedProfiles);
         setActiveProfile(active);
         setHistoryClearedAt(loadedHistoryClearedAt);
@@ -145,18 +157,24 @@ export function useProfileStorage({
 
     useEffect(() => {
         let cancelled = false;
+        let retryTimer: number | undefined;
 
         async function hydrateFileStorage() {
             try {
                 const response = await fetch(STORAGE_URL, { cache: "no-store" });
 
                 if (response.ok) {
-                    const resolved = resolveActiveProfileDocument(await response.json());
+                    const payload: unknown = await response.json();
+                    if (!isStorageDocument(payload)) {
+                        throw new Error("Storage server returned an invalid document");
+                    }
+                    const resolved = resolveActiveProfileDocument(payload);
                     if (!cancelled) {
-                        applyStorageProfile(
+                        applyStorageProfileRef.current(
                             resolved.document,
                             resolved.profile,
                             resolved.snapshot,
+                            true,
                         );
                     }
                 } else if (response.status === 404) {
@@ -164,25 +182,34 @@ export function useProfileStorage({
                     storageEnvelopeRef.current = document;
                     const saved = await saveStorageDocument(document);
                     if (!saved.ok) throw Error("Storage unavailable");
+                } else {
+                    throw new Error(`Storage server returned HTTP ${response.status}`);
                 }
 
                 if (!cancelled) {
+                    skipNextAutosaveRef.current = true;
                     setSaveStatus({ state: "saved", at: Date.now() });
+                    setStorageReady(true);
                 }
             } catch (error) {
                 console.warn(
-                    "Локальное файловое хранилище недоступно, используется резервная копия браузера",
+                    "Локальное файловое хранилище недоступно. Автосохранение заблокировано до безопасной повторной загрузки.",
                     error,
                 );
-                if (!cancelled) setSaveStatus({ state: "error" });
-            } finally {
-                if (!cancelled) setStorageReady(true);
+                if (!cancelled) {
+                    setSaveStatus({ state: "error" });
+                    // Never enable autosave after a 500, invalid JSON, or a
+                    // malformed 200 response. Retry read-only until the server
+                    // is healthy, so a browser fallback cannot overwrite it.
+                    retryTimer = window.setTimeout(hydrateFileStorage, 5_000);
+                }
             }
         }
 
         void hydrateFileStorage();
         return () => {
             cancelled = true;
+            if (retryTimer !== undefined) window.clearTimeout(retryTimer);
         };
     }, []);
 
@@ -223,51 +250,29 @@ export function useProfileStorage({
         }));
     }, []);
 
-    useEffect(() => {
-        if (!storageReady) return;
-        setSaveStatus({ state: "saving" });
-
-        const timer = window.setTimeout(async () => {
-            const existing = profiles.find(profile => profile.id === activeProfile);
-            const name = existing?.name ?? "Основной";
-            const snapshot = makeSnapshot(name);
-            const nextProfiles = upsertProfile(
-                profiles,
-                activeProfile,
-                name,
-                snapshot,
-            );
-            const document = makeDocument(nextProfiles);
-            write(K.profiles, nextProfiles);
-
-            try {
-                const response = await saveStorageDocument(document);
-                if (!response.ok) throw Error("Storage unavailable");
-                setSaveStatus({ state: "saved", at: Date.now() });
-            } catch (error) {
-                console.warn("Не удалось сохранить данные на диск", error);
-                setSaveStatus({ state: "error" });
-            }
-        }, 400);
-
-        return () => window.clearTimeout(timer);
-    }, [
-        storageReady,
+    useProfileAutosave({
+        activeProfile,
         favorites,
         folders,
-        progress,
-        ratings,
-        tracked,
-        theme,
-        playerPrefs,
         historyClearedAt,
         historyEnabled,
-        libraryExpanded,
-        watchingExpanded,
         historyExpanded,
+        libraryExpanded,
+        makeDocument,
+        makeSnapshot,
+        playerPrefs,
+        profiles,
+        profilesRef,
+        progress,
+        ratings,
+        setSaveStatus,
+        skipNextAutosaveRef,
+        storageReady,
+        theme,
+        tracked,
+        watchingExpanded,
         watchingHidden,
-        activeProfile,
-    ]);
+    });
 
     function createDocumentFromBrowserBackup(): StorageDocument {
         const localSnapshot = migrateSnapshot({
@@ -298,7 +303,7 @@ export function useProfileStorage({
     }
 
     function makeSnapshot(name: string): ConfigSnapshot {
-        const previous = profiles.find(
+        const previous = profilesRef.current.find(
             profile => profile.id === activeProfile,
         )?.snapshot;
 
@@ -403,24 +408,34 @@ export function useProfileStorage({
         document: StorageDocument,
         profile: ConfigProfile,
         snapshot: ConfigSnapshot,
+        suppressAutosave = false,
     ) {
+        if (suppressAutosave) skipNextAutosaveRef.current = true;
         storageEnvelopeRef.current = document;
-        applySnapshot(snapshot);
+        // The file/cloud document is the authoritative portable profile.
+        // Using browser-only layout flags here would silently undo an explicit
+        // cloud restore and then publish that stale layout on the next save.
+        applySnapshot(snapshot, true);
+        profilesRef.current = document.profiles;
         setProfiles(document.profiles);
         setActiveProfile(profile.id);
         write(K.profiles, document.profiles);
         localStorage.setItem(K.activeProfile, profile.id);
     }
+    applyStorageProfileRef.current = applyStorageProfile;
 
     async function reloadStorage() {
         try {
             const response = await fetch(STORAGE_URL, { cache: "no-store" });
             if (!response.ok) return;
-            const resolved = resolveActiveProfileDocument(await response.json());
+            const payload: unknown = await response.json();
+            if (!isStorageDocument(payload)) throw new Error("Invalid storage document");
+            const resolved = resolveActiveProfileDocument(payload);
             applyStorageProfile(
                 resolved.document,
                 resolved.profile,
                 resolved.snapshot,
+                true,
             );
         } catch (error) {
             console.warn("Failed to reload storage", error);
@@ -445,7 +460,8 @@ export function useProfileStorage({
 
     async function switchProfile(id: string) {
         if (id === activeProfile) return;
-        const existing = profiles.find(profile => profile.id === activeProfile);
+        const currentProfiles = profilesRef.current;
+        const existing = currentProfiles.find(profile => profile.id === activeProfile);
         const currentName =
             existing?.name ?? (activeProfile === "default" ? "Основной" : "Профиль");
         const savedCurrent: ConfigProfile = {
@@ -455,7 +471,7 @@ export function useProfileStorage({
             snapshot: makeSnapshot(currentName),
         };
         const updated = [
-            ...profiles.filter(profile => profile.id !== activeProfile),
+            ...currentProfiles.filter(profile => profile.id !== activeProfile),
             savedCurrent,
         ];
         const target = updated.find(profile => profile.id === id);
@@ -491,7 +507,8 @@ export function useProfileStorage({
             )?.trim();
             if (!name) return;
 
-            const existing = profiles.find(profile => profile.id === activeProfile);
+            const currentProfiles = profilesRef.current;
+            const existing = currentProfiles.find(profile => profile.id === activeProfile);
             const currentName =
                 existing?.name
                 ?? (activeProfile === "default" ? "Основной" : "Профиль");
@@ -507,10 +524,12 @@ export function useProfileStorage({
                 snapshot: migrateSnapshot({ ...parsed, name }, name),
             };
             const next = [
-                ...profiles.filter(item => item.id !== activeProfile),
+                ...currentProfiles.filter(item => item.id !== activeProfile),
                 currentProfile,
                 profile,
             ];
+            skipNextAutosaveRef.current = true;
+            profilesRef.current = next;
             setProfiles(next);
             write(K.profiles, next);
 
@@ -597,6 +616,7 @@ export function useProfileStorage({
         setWatchingExpanded,
         historyExpanded,
         setHistoryExpanded,
+        storageReady,
         reloadStorage,
         exportConfig,
         switchProfile,

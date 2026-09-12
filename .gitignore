@@ -62,6 +62,15 @@ next-env.d.ts
 /legacy-old-stack/data/animesoul-storage.json
 /legacy-old-stack/data/animesoul-storage.tmp.json
 /app/frontend/dist/
+/app/frontend/dist-android/
+/app/mobile/.toolchains/
+/app/mobile/android/.gradle/
+/app/mobile/android/build/
+/app/mobile/android/local.properties
+/app/mobile/android/app/build/
+/app/mobile/releases/
+/app/mobile/android/signing/
+/app/mobile/android/keystore.properties
 /app/.venv/
 /app/data/
 /app/__pycache__/

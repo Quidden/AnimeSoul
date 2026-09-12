@@ -1,6 +1,8 @@
 import { EpisodeHoverPreview } from "../../components/EpisodeHoverPreview";
 import { episodePreviewImages } from "../../components/EpisodeSlideshow";
 import { ScorePicker } from "../../components/ScorePicker";
+import { animeMyAnimeListId, episodeAddedDate, episodeAirDate, formatAirDate } from "../../lib/episodeDates";
+import { useEpisodeAirDates } from "./useEpisodeAirDates";
 import { formatRating, seasonCombinedAverage, seasonEpisodeAverage } from "../../lib/ratings";
 import {
   episodeDuration,
@@ -24,6 +26,7 @@ interface SeasonListProps {
   selectedEpisode: string;
   previewAnimeById: Record<number, Anime>;
   episodeHoverPreview: boolean;
+  compactEpisodeList: boolean;
   newEpisodeKeys: Set<string>;
   onToggleSeason: (season: number) => void;
   onToggleSeasonWatched: (season: number, episodes: string[], videos: Video[]) => void;
@@ -51,6 +54,7 @@ export function SeasonList({
   selectedEpisode,
   previewAnimeById,
   episodeHoverPreview,
+  compactEpisodeList,
   newEpisodeKeys,
   onToggleSeason,
   onToggleSeasonWatched,
@@ -59,8 +63,9 @@ export function SeasonList({
   onSeasonRatingChange,
   onEpisodeRatingChange,
 }: SeasonListProps) {
+  const airDates = useEpisodeAirDates(seasons, seasonVideos, previewAnimeById, collapsedSeasons);
   return (
-    <div className="all-seasons">
+    <div className={`all-seasons${compactEpisodeList ? " compact-episodes" : ""}`}>
       {seasons.map((group) => {
         const videos = seasonVideos[group.number] ?? [];
         const episodeNumbers = Array.from(new Set(videos.map((video) => video.number))).sort(
@@ -157,6 +162,9 @@ export function SeasonList({
                     const video = videos.find((item) => item.number === number);
                     const originEntry = group.entries.find((item) => item.anime_id === video?.originAnimeId) ?? entry;
                     const previewAnime = previewAnimeById[originEntry.anime_id] ?? originEntry;
+                    const malId = animeMyAnimeListId(previewAnime) ?? animeMyAnimeListId(originEntry);
+                    const airDate = episodeAirDate(video, malId ? airDates[malId] : undefined);
+                    const shownDate = airDate ?? episodeAddedDate(video);
                     const unit = video?.contentKind ?? (group.kind === "movie" ? "Фильм" : "Серия");
 
                     return (
@@ -186,6 +194,14 @@ export function SeasonList({
                                 {communityRating?.episodes[key]
                                   ? ` · AnimeSoul ${formatRating(communityRating.episodes[key].average)}`
                                   : ""}
+                              </small>
+                              <small className="episode-release-date" title={airDate
+                                ? "Дата выхода серии по MyAnimeList (через Jikan)"
+                                : shownDate ? "Дата выхода не указана; показана дата первого добавления серии в каталог"
+                                : "Источник не указал дату выхода этой серии"}>
+                                {shownDate
+                                  ? <>{airDate ? "Выход" : "Добавлена"}: <time dateTime={shownDate}>{formatAirDate(shownDate)}</time></>
+                                  : "Дата выхода неизвестна"}
                               </small>
                             </span>
                           </button>

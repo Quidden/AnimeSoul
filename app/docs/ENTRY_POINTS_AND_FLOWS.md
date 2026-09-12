@@ -8,7 +8,7 @@
 | Точка | Файл/символ | Когда используется | Выход |
 | --- | --- | --- | --- |
 | корневой BAT | `Start AnimeSoul.bat` | обычный source-запуск из корня | вызывает `app/Start AnimeSoul.bat` |
-| основной BAT | `app/Start AnimeSoul.bat` | source runtime | venv → pip → npm → build → `run.py` |
+| основной BAT | `app/Start AnimeSoul.bat` | source runtime | venv → changed-only prepare → `run.py` |
 | browser BAT | `app/Start AnimeSoul in Browser.bat` | принудительный browser | `run.py --mode browser` |
 | desktop BAT | `app/Start AnimeSoul Desktop.bat` | принудительный PyWebView | `run.py --mode desktop` |
 | configure BAT | `app/Configure AnimeSoul.bat` | повторная настройка | `run.py --configure` |
@@ -155,10 +155,25 @@ index.html#root
 -> render Header + текущая Page + modals/footer
 ```
 
-`ApplicationView` принимает `home`, `catalog`, `stats`, `ratings`. Просмотр
-тайтла задаётся отдельно через `active: Anime | null`; при active рендерится
-`Watch` (`components/Player.tsx`). Открытая folder/collection/modal — также
-ортогональное состояние, а не URL router.
+`ApplicationView` принимает `home`, `catalog`, `downloads`, `stats`, `ratings`.
+Просмотр тайтла задаётся отдельно через `active: Anime | null`; при active
+рендерится `Watch` (`components/Player.tsx`). На Android переход в другой раздел
+не очищает `active`: Watch остаётся смонтированным и показывается как мини-плеер.
+Открытая folder/collection/modal — также ортогональное состояние, а не URL router.
+
+Список на главной формируется так:
+
+```text
+HomePage -> LibrarySections -> LibraryToolbar
+-> выбрать активную вкладку
+-> useHomeCardLimit сбрасывает лимит при смене вкладки
+-> HomeCardList показывает первые 10 карточек
+-> «Загрузить ещё» увеличивает лимит на 10
+```
+
+Мини-плеер Android использует тот же экземпляр `Watch`. Pointer drag ручки
+обновляет ограниченные viewport-координаты; центральная кнопка возвращает
+экран просмотра, а закрытие очищает `active` и размонтирует плеер.
 
 ## Цепочка 4: первоначальная загрузка сохранения
 
@@ -238,7 +253,7 @@ queue дополнительно coalesce несколько документо�
 ```text
 CatalogPage/Header input
 -> useCatalogController.setQuery
--> через 120 ms prefetchCatalogSearch
+-> через 300 ms prefetchCatalogSearch
 -> features/catalog/api.cachedCatalogSearch
 -> GET /api/yummy?mode=catalog&q=...&limit=24&offset=0
 -> api.yummy.yummy_proxy
@@ -246,10 +261,12 @@ CatalogPage/Header input
    -> anime_search_queries
    -> параллельные _request /anime
    -> первая непустая страница
-   -> cache 5 min
+-> cache 5 min
+-> persistent SQLite cache + stale-if-error
 -> Anime[]
 -> controller uniqueAnime
 -> useCatalogPresentation
+   -> metadata только для карточек рядом с viewport, concurrency 2
 -> AnimeCard[]
 ```
 
@@ -277,7 +294,9 @@ AnimeCard/onOpen
    -> иначе details/search fallback через /api/yummy
 -> groupFranchises / SeasonGroup[]
 -> Player.fetchVideos
-   -> для каждого entry до 4 попыток GET mode=videos&id=...
+   -> сначала выбранная группа/сезон
+   -> затем остальные группы в фоне, concurrency 2
+   -> для entry GET mode=videos&id=... с frontend/backend dedup
    -> нормализовать originAnimeId/originNumber/contentKind/contentTitle
    -> offset episode numbers внутри группы
    -> dedup по video_id
@@ -520,6 +539,8 @@ main.tsx
 -> @import styles/base.css
    -> ordered base-*.css modules
 -> library.css -> player.css -> system-panels.css -> home-redesign.css -> ratings.css
+-> player-toolbar.css -> custom-player.css -> mobile-android.css
+-> home-library.css -> header-layout.css
 -> useProfileStorage theme effect
    -> --accent / --accent-soft / --bg
    -> data-color-scheme / colorScheme / body background

@@ -1,16 +1,21 @@
-import type { MouseEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import type { CollectionOverviewKind } from "../../components/CollectionOverview";
 import { ReleaseMark } from "../../components/ReleaseMark";
 import type { Folder, Tracker } from "../../lib/types";
+import { HomeLoadMore } from "./HomeCardList";
+import { CardArtwork, CardMetric } from "./LibrarySections";
+import { LibraryToolbar } from "./LibraryToolbar";
 import type { HomePageActions, HomePageModel, HomePageProps } from "./types";
+import { useHomeCardLimit } from "./useHomeCardLimit";
 
-/** Two equal panels directly below the cinematic hero. */
-export function HomeDashboardPanels({ model, actions }: HomePageProps) {
+/** Tabs own visibility; the selected collection is always open. */
+export function HomeDashboardPanels({ model, actions, view }: HomePageProps & {
+  view?: "tracking" | "folders";
+}) {
   return (
     <section className="home-dashboard-panels" aria-label="Библиотека и отслеживания">
-      <TrackingPanel model={model} actions={actions} />
-      <LibraryPanel model={model} actions={actions} />
+      {view !== "folders" && <TrackingPanel model={model} actions={actions} />}
+      {view !== "tracking" && <LibraryPanel model={model} actions={actions} />}
     </section>
   );
 }
@@ -19,123 +24,137 @@ export function HomeDashboardPanels({ model, actions }: HomePageProps) {
 export const DashboardWidgets = HomeDashboardPanels;
 
 function TrackingPanel({ model, actions }: HomePageProps) {
+  const pagination = useHomeCardLimit(model.sortedTracked.length);
+
   return (
-    <Panel id="home-tracking-panel" kind="tracking" actions={actions} className="home-tracking-panel">
-      <PanelHeader
-        title="Отслеживаю"
-        count={model.tracked.length}
-        badge={model.totalNewEpisodes > 0 ? `+${model.totalNewEpisodes}` : undefined}
-      />
-      <div className="home-panel-scroll home-tracking-list">
-        {model.sortedTracked.map(tracker => (
-          <TrackingRow
-            key={tracker.animeId}
-            tracker={tracker}
-            model={model}
-            actions={actions}
-          />
+    <Panel id="home-tracking-panel" className="home-tracking-panel">
+      <LibraryToolbar summary={`${model.tracked.length} подписок`}>
+        <button type="button" className="home-action-button" onClick={() => actions.openCollection("tracking")}>
+          Открыть все <span aria-hidden="true">↗</span>
+        </button>
+      </LibraryToolbar>
+      <div id="home-tracking-list" className="home-media-card-list home-tracking-list">
+        {model.sortedTracked.slice(0, pagination.visibleCount).map(tracker => (
+          <TrackingRow key={tracker.animeId} tracker={tracker} model={model} actions={actions} />
         ))}
         {!model.tracked.length && (
           <EmptyPanelText>Подписок пока нет. Включить отслеживание можно на странице аниме.</EmptyPanelText>
         )}
       </div>
+      <HomeLoadMore remaining={pagination.remaining} onLoadMore={pagination.loadMore} />
     </Panel>
   );
 }
 
 function LibraryPanel({ model, actions }: HomePageProps) {
+  const totalCards = model.folders.length + 1;
+  const pagination = useHomeCardLimit(totalCards);
+  const visibleFolders = model.folders.slice(0, Math.max(0, pagination.visibleCount - 1));
+
   return (
-    <Panel kind="folders" actions={actions} className="home-library-panel">
-      <PanelHeader title="Папки и избранное" count={model.folders.length + 1}>
+    <Panel className="home-library-panel">
+      <LibraryToolbar summary={`Подборок: ${totalCards}`}>
+        <button type="button" className="home-action-button" onClick={() => actions.openCollection("folders")}>
+          Открыть все <span aria-hidden="true">↗</span>
+        </button>
         {model.lastDeletedFolder && (
           <button
             type="button"
-            className="home-panel-icon-button"
+            className="home-action-button"
             title={`Восстановить папку «${model.lastDeletedFolder.folder.name}»`}
             onClick={actions.restoreLastFolder}
           >
-            ↶
+            ↶ Восстановить
           </button>
         )}
-        <button
-          type="button"
-          className="home-panel-icon-button"
-          title="Создать папку"
-          onClick={actions.createFolder}
-        >
-          ＋
+        <button type="button" className="home-action-button" onClick={actions.createFolder}>
+          <span aria-hidden="true">＋</span> Создать папку
         </button>
-      </PanelHeader>
+      </LibraryToolbar>
 
-      <div className="home-panel-scroll home-library-groups">
+      <div id="home-library-groups" className="home-media-card-list home-library-groups">
         <FavoritesGroup model={model} actions={actions} />
-        <div className="home-folder-list">
-          {model.folders.map(folder => (
-            <FolderRow key={folder.id} folder={folder} actions={actions} />
-          ))}
-          {!model.folders.length && (
-            <EmptyPanelText>Создай папку и собери в ней свой список аниме.</EmptyPanelText>
-          )}
-        </div>
+        {visibleFolders.map(folder => (
+          <FolderRow key={folder.id} folder={folder} actions={actions} />
+        ))}
       </div>
+      <HomeLoadMore remaining={pagination.remaining} onLoadMore={pagination.loadMore} />
     </Panel>
   );
 }
 
 function FavoritesGroup({ model, actions }: HomePageProps) {
   const stats = model.favoriteStats;
+  const featuredAnime = model.favorites.length ? actions.resolveAnime(model.favorites[0]) : undefined;
 
   return (
-    <div className="home-library-item home-folder-item home-favorites-folder">
-      <button
-        type="button"
-        className="home-library-item-main"
-        onClick={() => actions.openCollection("favorites")}
-      >
-        <span>
-          <b>♥ Избранное</b>
-          <small>{model.favorites.length} тайтлов · {stats.watched}/{stats.total} серий</small>
-        </span>
-        <em>{stats.percent}%</em>
+    <article className="home-media-card home-folder-card home-favorites-folder">
+      <CardArtwork anime={featuredAnime} />
+      <div className="home-media-card-body">
+        <div className="home-card-status home-folder-status"><i /> Избранное</div>
+        <button type="button" className="home-card-title" onClick={() => actions.openCollection("favorites")}>
+          ♥ Избранное
+        </button>
+        <p className="home-card-subtitle">Все отмеченные тайтлы в одной подборке</p>
+        <div className="home-card-metrics">
+          <CardMetric label="Тайтлов" value={String(model.favorites.length)} />
+          <CardMetric label="Просмотрено серий" value={`${stats.watched} из ${stats.total}`} />
+        </div>
         <ProgressBar percent={stats.percent} />
-      </button>
-    </div>
+        <div className="home-card-footer">
+          <small>{stats.percent}% просмотрено</small>
+          <div className="home-card-actions">
+            <button type="button" className="home-action-button home-play-button" onClick={() => actions.openCollection("favorites")}>
+              Открыть подборку
+            </button>
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
 
-function FolderRow({
-  folder,
-  actions,
-}: {
+function FolderRow({ folder, actions }: {
   folder: Folder;
   actions: HomePageActions;
 }) {
   const stats = actions.folderStats(folder);
+  const featuredAnime = folder.animeIds.length ? actions.resolveAnime(folder.animeIds[0]) : undefined;
 
   return (
-    <div className="home-library-item home-folder-item">
-      <button
-        type="button"
-        className="home-library-item-main"
-        onClick={() => actions.openFolder(folder)}
-      >
-        <span><b>{folder.name}</b><small>{folder.animeIds.length} тайтлов · {stats.watched}/{stats.total} серий</small></span>
-        <em>{stats.percent}%</em>
+    <article className="home-media-card home-folder-card">
+      <CardArtwork anime={featuredAnime} />
+      <div className="home-media-card-body">
+        <div className="home-card-status home-folder-status"><i /> Папка</div>
+        <button type="button" className="home-card-title" onClick={() => actions.openFolder(folder)}>{folder.name}</button>
+        <p className="home-card-subtitle">Личная подборка</p>
+        <div className="home-card-metrics">
+          <CardMetric label="Тайтлов" value={String(folder.animeIds.length)} />
+          <CardMetric label="Просмотрено серий" value={`${stats.watched} из ${stats.total}`} />
+        </div>
         <ProgressBar percent={stats.percent} />
-      </button>
-      <DeleteButton
-        title={`Удалить папку «${folder.name}»`}
-        onClick={() => actions.deleteFolder(folder)}
-      />
-    </div>
+        <div className="home-card-footer">
+          <small>{stats.percent}% просмотрено</small>
+          <div className="home-card-actions">
+            <button
+              type="button"
+              className="home-action-button home-action-danger"
+              aria-label={`Удалить папку «${folder.name}»`}
+              onClick={() => actions.deleteFolder(folder)}
+            >
+              Удалить
+            </button>
+            <button type="button" className="home-action-button home-play-button" onClick={() => actions.openFolder(folder)}>
+              Открыть папку
+            </button>
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
 
-function TrackingRow({
-  tracker,
-  model,
-  actions,
-}: {
+function TrackingRow({ tracker, model, actions }: {
   tracker: Tracker;
   model: HomePageModel;
   actions: HomePageActions;
@@ -144,116 +163,60 @@ function TrackingRow({
   const otherDubEpisodes = tracker.otherDubEpisodes ?? 0;
 
   return (
-    <article className="home-tracking-row">
-      <button
-        type="button"
-        className="home-tracking-main"
-        onClick={() => actions.openKnownAnime(tracker.animeId)}
-      >
-        <span className="home-tracking-copy">
-          <b>{tracker.title}</b>
-          <small>{tracker.dubs?.length ? tracker.dubs.join(", ") : "Все озвучки"}</small>
+    <article className="home-media-card home-tracking-card">
+      <CardArtwork anime={anime} />
+      <div className="home-media-card-body">
+        <div className="home-card-status">
           <ReleaseMark anime={anime} status={model.cardMeta[tracker.animeId]?.status} />
-        </span>
-        <span className="home-tracking-meta">
-          <small>{tracker.knownEpisodes} серий</small>
           <TrackingStatus tracker={tracker} />
-        </span>
-      </button>
-      <div className="home-tracking-actions">
-        {tracker.newEpisodes > 0 && (
-          <button
-            type="button"
-            className="watch-new-button"
-            onClick={() => actions.watchNewEpisode(tracker.animeId)}
-          >
-            ▶ Смотреть новую
-          </button>
-        )}
-        <button
-          type="button"
-          className="untrack-button"
-          onClick={() => actions.untrack(tracker.animeId)}
-        >
-          Отписаться
+        </div>
+        <button type="button" className="home-card-title" onClick={() => actions.openKnownAnime(tracker.animeId)}>
+          {tracker.title}
         </button>
+        <p className="home-card-subtitle">{tracker.dubs?.length ? tracker.dubs.join(", ") : "Все озвучки"}</p>
+        <div className="home-card-metrics">
+          <CardMetric label="Доступно серий" value={String(tracker.knownEpisodes)} />
+          <CardMetric label="Новые серии" value={tracker.newEpisodes > 0 ? `+${tracker.newEpisodes}` : "Нет новых"} />
+        </div>
         {otherDubEpisodes > 0 && tracker.newEpisodes === 0 && (
-          <small className="home-other-dub-note">Есть в другой озвучке · +{otherDubEpisodes}</small>
+          <p className="home-other-dub-note">В другой озвучке доступно ещё {otherDubEpisodes}</p>
         )}
+        <div className="home-card-footer">
+          <small>{tracker.lastCheckedAt ? `Проверено ${formatCheckedAt(tracker.lastCheckedAt)}` : "Автоматическая проверка обновлений"}</small>
+          <div className="home-card-actions">
+            <button type="button" className="home-action-button home-action-danger" onClick={() => actions.untrack(tracker.animeId)}>
+              Отписаться
+            </button>
+            {tracker.newEpisodes > 0 && (
+              <button type="button" className="home-action-button home-play-button" onClick={() => actions.watchNewEpisode(tracker.animeId)}>
+                <span aria-hidden="true">▶</span> Смотреть новую
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </article>
   );
 }
 
 function TrackingStatus({ tracker }: { tracker: Tracker }) {
-  if (tracker.newEpisodes > 0) {
-    return <em className="release-status new"><i />Новая серия · +{tracker.newEpisodes}</em>;
-  }
-  if ((tracker.otherDubEpisodes ?? 0) > 0) {
-    return <em className="release-status other-dub"><i />Другая озвучка</em>;
-  }
-  return <em className="release-status quiet"><i />Новых серий нет</em>;
+  if (tracker.newEpisodes > 0) return <em className="release-status new"><i />+{tracker.newEpisodes} новых</em>;
+  if ((tracker.otherDubEpisodes ?? 0) > 0) return <em className="release-status other-dub"><i />Другая озвучка</em>;
+  return <em className="release-status quiet">Нет новых</em>;
 }
 
-function Panel({
-  id,
-  kind,
-  actions,
-  className,
-  children,
-}: {
-  id?: string;
-  kind: CollectionOverviewKind;
-  actions: HomePageActions;
-  className: string;
-  children: ReactNode;
-}) {
-  const openPanel = (event: MouseEvent<HTMLElement>) => {
-    const target = event.target;
-    if (target instanceof HTMLElement && target.closest("button, a, input, select, textarea")) return;
-    actions.openCollection(kind);
-  };
-
-  return <article id={id} className={`home-dashboard-panel ${className}`} onClick={openPanel}>{children}</article>;
-}
-
-function PanelHeader({
-  title,
-  count,
-  badge,
-  children,
-}: {
-  title: string;
-  count: number;
-  badge?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <header className="home-panel-header">
-      <h2>{title}</h2>
-      <div className="home-panel-header-actions">
-        {badge && <em className="home-panel-badge">{badge}</em>}
-        <span>{count}</span>
-        {children}
-      </div>
-    </header>
-  );
-}
-
-function DeleteButton({ title, onClick }: { title: string; onClick: () => void }) {
-  return (
-    <button type="button" className="home-item-delete" title={title} aria-label={title} onClick={onClick}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-3 6h12l-1 12H7L6 9Zm3 2v7h2v-7H9Zm4 0v7h2v-7h-2Z" />
-      </svg>
-    </button>
-  );
+function Panel({ id, className, children }: { id?: string; className: string; children: ReactNode }) {
+  return <section id={id} className={`home-dashboard-panel ${className}`}>{children}</section>;
 }
 
 function ProgressBar({ percent }: { percent: number }) {
-  return <i className="home-panel-progress"><b style={{ width: `${percent}%` }} /></i>;
+  return <div className="home-card-progress" aria-label={`Просмотрено ${percent}%`}><i style={{ width: `${percent}%` }} /></div>;
 }
 
 function EmptyPanelText({ children }: { children: ReactNode }) {
   return <p className="home-panel-empty">{children}</p>;
+}
+
+function formatCheckedAt(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
 }

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AnimeSoul</string>
+    <string name="startup_preparing">ANIMESOUL\n\nПодготавливаем локальную библиотеку…</string>
+    <string name="startup_error">ANIMESOUL\n\nНе удалось запустить приложение\n\n%1$s\n\nНажмите, чтобы открыть настройки приложения</string>
+    <string name="file_manager_unavailable">На устройстве нет файлового менеджера</string>
+    <string name="link_open_failed">Не удалось открыть ссылку</string>
+    <string name="download_notification_channel_name">Загрузки аниме</string>
+    <string name="download_notification_channel_description">Прогресс сохранения серий для просмотра без интернета</string>
+    <string name="download_notification_preparing">Подготавливаем загрузку…</string>
+    <string name="download_background_unavailable">Не удалось запустить фоновую загрузку</string>
+    <string name="playback_notification_channel_name">Сейчас играет</string>
+    <string name="playback_notification_channel_description">Управление просмотром аниме</string>
+    <string name="playback_play">Воспроизвести</string>
+    <string name="playback_pause">Пауза</string>
+    <string name="playback_rewind">Назад на 5 секунд</string>
+    <string name="playback_forward">Вперёд на 5 секунд</string>
+</resources>

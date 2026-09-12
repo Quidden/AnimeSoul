@@ -3,18 +3,45 @@
 from __future__ import annotations
 
 from pathlib import Path
+import asyncio
 import tempfile
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
+import httpx
+from fastapi import HTTPException
 
-from backend.app.services.gdrive import (
-    GoogleDriveService,
-    merge_storage_documents,
-    merge_snapshot,
-)
+from backend.app.services.gdrive import GoogleDriveService
+from backend.app.services.gdrive_merge import merge_snapshot, merge_storage_documents
+from backend.app.api.gdrive import _verify_google_credentials
 
 
 class GDriveMergeTests(unittest.TestCase):
+    def test_google_credentials_report_id_and_secret_separately(self) -> None:
+        async def scenario() -> None:
+            client = AsyncMock()
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = False
+            client.get.return_value = httpx.Response(
+                302,
+                headers={"location": "https://accounts.google.com/v3/signin/identifier"},
+            )
+            client.post.return_value = httpx.Response(400, json={"error": "invalid_grant"})
+            with patch("backend.app.api.gdrive.httpx.AsyncClient", return_value=client):
+                checks = await _verify_google_credentials(
+                    "123456789-abc.apps.googleusercontent.com",
+                    "GOCSPX-secret",
+                )
+            self.assertEqual(
+                [(item["field"], item["status"]) for item in checks],
+                [("googleClientId", "valid"), ("googleClientSecret", "valid")],
+            )
+
+            malformed = await _verify_google_credentials("not-a-google-client", "secret")
+            self.assertEqual(malformed[0]["status"], "invalid")
+            self.assertEqual(malformed[1]["status"], "pending")
+
+        asyncio.run(scenario())
+
     def test_merge_ratings_keeps_latest_edit_per_anime(self) -> None:
         local = {
             "ratings": {
@@ -171,6 +198,62 @@ class GDriveMergeTests(unittest.TestCase):
         self.assertEqual(set(snapshot["progress"]["10"]["episodes"]), {"1:1", "1:2"})
         self.assertEqual(snapshot["animeTitles"]["10"], "Readable title")
 
+    def test_unrelated_stale_device_save_cannot_replace_newer_cloud_favorites(self) -> None:
+        local_doc = {
+            "schemaVersion": 3,
+            "updatedAt": "2026-08-24T12:00:00Z",
+            "activeProfile": "p1",
+            "profiles": [{
+                "id": "p1",
+                "name": "Main",
+                "snapshot": {
+                    "favorites": [1],
+                    "fieldUpdatedAt": {"favorites": 100, "progress": 300},
+                    "progress": {},
+                },
+            }],
+        }
+        cloud_doc = {
+            "schemaVersion": 3,
+            "updatedAt": "2026-08-24T11:00:00Z",
+            "activeProfile": "p1",
+            "profiles": [{
+                "id": "p1",
+                "name": "Main",
+                "snapshot": {
+                    "favorites": [1, 2],
+                    "fieldUpdatedAt": {"favorites": 200, "progress": 100},
+                    "progress": {},
+                },
+            }],
+        }
+
+        merged = merge_storage_documents(local_doc, cloud_doc)
+
+        self.assertEqual(merged["profiles"][0]["snapshot"]["favorites"], [1, 2])
+
+    def test_progress_reset_tombstone_prevents_cloud_resurrection(self) -> None:
+        local = {
+            "progress": {
+                "7": {"episode": "1", "episodes": {}, "resetAt": 200}
+            }
+        }
+        cloud = {
+            "progress": {
+                "7": {
+                    "episode": "4",
+                    "episodes": {
+                        "1:4": {"position": 900, "updatedAt": 100}
+                    },
+                }
+            }
+        }
+
+        merged = merge_snapshot(local, cloud, prefer_watched=False)
+
+        self.assertEqual(merged["progress"]["7"]["episodes"], {})
+        self.assertEqual(merged["progress"]["7"]["resetAt"], 200)
+
     def test_latest_episode_update_controls_resume_position(self) -> None:
         local = {
             "progress": {
@@ -226,8 +309,49 @@ class GDriveMergeTests(unittest.TestCase):
             self.assertEqual(client_id, "newer.apps.googleusercontent.com")
             self.assertEqual(client_secret, "existing-secret")
 
+    def test_oauth_callback_can_wait_for_android_foreground(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = GoogleDriveService(Path(tmp))
+            service.save_pending_oauth(
+                "one-time-code",
+                "http://127.0.0.1:19082/api/gdrive/oauth2callback",
+            )
+
+            pending = service.load_pending_oauth()
+            self.assertEqual(pending["code"], "one-time-code")
+            self.assertEqual(
+                pending["redirect_uri"],
+                "http://127.0.0.1:19082/api/gdrive/oauth2callback",
+            )
+
+            service.clear_pending_oauth()
+            self.assertIsNone(service.load_pending_oauth())
+
 
 class GDriveAutosaveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_first_sync_choice_blocks_background_merge_before_io(self) -> None:
+        from backend.app.api import gdrive as api
+
+        original_service = api.gdrive_service
+        original_storage = api.local_storage
+        service = Mock()
+        service.load_tokens.return_value = {
+            "access_token": "token",
+            "choice_pending": True,
+        }
+        storage = Mock()
+        storage.read = AsyncMock()
+        api.gdrive_service = service
+        api.local_storage = storage
+        try:
+            with self.assertRaises(HTTPException) as raised:
+                await api._sync_drive_impl(api.SyncRequest(mode="merge"))
+            self.assertEqual(raised.exception.status_code, 409)
+            storage.read.assert_not_awaited()
+        finally:
+            api.gdrive_service = original_service
+            api.local_storage = original_storage
+
     async def test_schedule_write_compares_document_timestamps(self) -> None:
         """Autosave must not fail when it compares queued and current saves."""
 
@@ -245,6 +369,8 @@ class GDriveAutosaveTests(unittest.IsolatedAsyncioTestCase):
 
             service.schedule_write(
                 document,
+                mode="appdata",
+                prefer_watched=False,
                 local_reader=local_reader,
                 local_writer=local_writer,
             )
@@ -252,6 +378,7 @@ class GDriveAutosaveTests(unittest.IsolatedAsyncioTestCase):
             await service._sync_task
 
             self.assertEqual(service.last_sync_error, "")
+            service.read_cloud_storage.assert_awaited_once_with(mode="appdata")
             service.write_cloud_storage.assert_awaited_once()
             local_writer.assert_awaited_once()
 

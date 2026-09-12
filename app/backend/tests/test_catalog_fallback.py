@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -130,6 +131,45 @@ class CatalogueMergeTests(unittest.TestCase):
 
 
 class HybridServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_video_sources_start_in_parallel_when_identity_is_cached(self) -> None:
+        release = asyncio.Event()
+        kodik_started = asyncio.Event()
+
+        class SlowYummy:
+            async def request(self, path: str, _params: dict[str, object] | None = None) -> object:
+                await release.wait()
+                if path.endswith("/videos"):
+                    return []
+                return {"anime_id": 501, "title": "Тестовое аниме"}
+
+        class SlowKodik:
+            async def find_for_anime(
+                self,
+                _anime: dict[str, Any] | None,
+                *,
+                anime_id: int | None = None,
+                with_episodes: bool = False,
+            ) -> list[dict[str, Any]]:
+                self.seen = (anime_id, with_episodes)
+                kodik_started.set()
+                await release.wait()
+                return [kodik_release()]
+
+        with tempfile.TemporaryDirectory() as directory:
+            service = HybridCatalogueService(SlowYummy(), SlowKodik(), Path(directory))  # type: ignore[arg-type]
+            await service.registry.remember([{
+                "anime_id": 501,
+                "title": "Тестовое аниме",
+                "remote_ids": {"shikimori_id": 77},
+            }])
+            task = asyncio.create_task(service.videos(501))
+            await asyncio.wait_for(kodik_started.wait(), .25)
+            release.set()
+            payload, sources = await asyncio.wait_for(task, 1)
+
+            self.assertEqual(sources, {"yummy": "ok", "kodik": "ok"})
+            self.assertEqual(len(payload["videos"]), 2)
+
     async def test_kodik_supplies_catalogue_when_yummy_is_down(self) -> None:
         class YummyDown:
             async def search(self, _query: str, limit: int, offset: int = 0) -> list[dict[str, Any]]:

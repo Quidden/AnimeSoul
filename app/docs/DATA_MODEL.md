@@ -21,6 +21,7 @@
 | `gdrive-credentials.json` | JSON | `GoogleDriveService` | OAuth `client_id`/`client_secret` текущего устройства |
 | `gdrive-tokens.json` | JSON | `GoogleDriveService` | access/refresh tokens, user info и cached sync status |
 | `community-ratings.sqlite3` | SQLite WAL | `CommunityRatingStore` | анонимные оценки текущего сервера |
+| `animesoul-response-cache.sqlite3` | SQLite WAL | `PersistentJsonCache` | публичные ответы YummyAnime/Kodik; можно удалить без потери профиля |
 
 Рядом с машинным config runtime публикует `animesoul.runtime.json`. Это не
 пользовательское сохранение, а подтверждение владельца процесса.
@@ -252,6 +253,7 @@ type Tracker = {
   title: string;
   knownEpisodes: number;
   knownEpisodeKeys?: string[];
+  episodeIdentityCheckedIds?: number[];
   pendingEpisodeKeys?: string[];
   newEpisodes: number;
   knownAnyEpisodeKeys?: string[];
@@ -268,6 +270,12 @@ type Tracker = {
 - `knownAnyEpisodeKeys`/`pendingOtherDubEpisodeKeys` дают сигнал, что серия уже
   существует, но ещё не появилась в выбранной озвучке.
 - Полностью неуспешний tracking snapshot не заменяет baseline.
+- `episodeIdentityCheckedIds` отмечает тайтлы, для которых однократно убраны
+  фантомные номера из старой базы. Очистка выполняется по успешному снимку
+  обоих источников с `episode_identity_version: 1`; тайтлы с ошибками и ответы
+  старого backend сохраняют прежнюю базу. После исправления база снова только
+  растёт, поэтому временное исчезновение серии не создаёт повторное уведомление.
+  Поле необязательное, сохраняется в schema 3 и переносится вместе с профилем.
 - Проверка запускается сразу, пропускает запись моложе 240 секунд и повторяется
   каждые 300 секунд.
 

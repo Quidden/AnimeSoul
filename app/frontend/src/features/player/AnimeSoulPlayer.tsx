@@ -1,50 +1,40 @@
 import type Hls from "hls.js";
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ForwardedRef,
   type MouseEvent,
-  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
+import { IS_ANDROID_APP } from "../../lib/platform";
+import { useAndroidCast, type CastProgress } from "./useAndroidCast";
+import { CastIcon, CastRemotePanel } from "./CastRemotePanel";
 import {
   fetchKodikStream,
   hlsLevelForQuality,
   isSameEpisodeDubbingSwitch,
+  kodikStreamEpisodeKey,
+  kodikStreamRequestKey,
   lowestQualitySource,
   type KodikDirectSource,
   type KodikStreamInfo,
   type KodikStreamRequest,
 } from "../../lib/kodikStream";
+import {
+  PlayerSettingsPanel,
+  PlayerTopNavigation,
+  type PlayerMenu,
+  type VideoFit,
+} from "./AnimeSoulPlayerMenus";
+import { PlayerTimelinePreview } from "./PlayerTimelinePreview";
 
 type SkipSegment = { time: number; length: number };
 type HlsSubtitleOption = { index: number; label: string; language: string };
-type PlayerMenuOption = { value: string; label: string; disabled?: boolean; warning?: string };
-type BurnedSubtitleOption = { value: string; label: string; request: KodikStreamRequest };
-type PlayerMenu = {
-  dubbings: PlayerMenuOption[];
-  dubbing: string;
-  onDubbingChange: (value: string) => void;
-  dubbingFavorite: boolean;
-  onDubbingFavoriteToggle: () => void;
-  dubbingPreferredForTitle: boolean;
-  onDubbingPreferredForTitleToggle: () => void;
-  seasons: PlayerMenuOption[];
-  season: string;
-  onSeasonChange: (value: string) => void;
-  episodes: PlayerMenuOption[];
-  episode: string;
-  onEpisodeChange: (value: string) => void;
-  sources: PlayerMenuOption[];
-  source: string;
-  onSourceChange: (value: string) => void;
-  subtitles: BurnedSubtitleOption[];
-  externalToolbarVisible: boolean;
-  onExternalToolbarVisibleChange: (value: boolean) => void;
-  downloadControls?: ReactNode;
-};
 
 type AnimeSoulPlayerProps = {
   request: KodikStreamRequest;
@@ -56,13 +46,32 @@ type AnimeSoulPlayerProps = {
   opening?: SkipSegment | null;
   ending?: SkipSegment | null;
   onLoadedMetadata?: () => void;
-  onTimeUpdate?: () => void;
+  onTimeUpdate?: (time: number, duration: number) => void;
+  onBeforeTeardown?: (time: number, duration: number) => void;
   onPlay?: () => void;
   onPause?: () => void;
-  onEnded?: () => void;
+  onEnded?: (duration: number) => void;
   onStreamInfo?: (info: KodikStreamInfo) => void;
   onFallback?: () => void;
 };
+
+type AndroidPlaybackBridge = {
+  updatePlayback?: (
+    title: string,
+    subtitle: string,
+    playing: boolean,
+    position: number,
+    duration: number,
+    active: boolean,
+  ) => void;
+  clearPlayback?: () => void;
+  requestPictureInPicture?: (width: number, height: number) => void;
+};
+
+function androidPlaybackBridge() {
+  if (typeof window === "undefined") return undefined;
+  return (window as typeof window & { AnimeSoulPlayback?: AndroidPlaybackBridge }).AnimeSoulPlayback;
+}
 
 function clock(value: number) {
   if (!Number.isFinite(value) || value < 0) return "0:00";
@@ -102,6 +111,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   ending,
   onLoadedMetadata,
   onTimeUpdate,
+  onBeforeTeardown,
   onPlay,
   onPause,
   onEnded,
@@ -109,20 +119,47 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   onFallback,
 }, forwardedRef) {
   const shell = useRef<HTMLDivElement>(null);
+  const ambientCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ambientRequestKey = useRef("");
+  const requestKey = kodikStreamRequestKey(request);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const castProgress = useRef<CastProgress>({ active: false, requestKey: "", position: 0, duration: 0, playing: false });
+  const resolvedStreamRequestKey = useRef("");
   const burnedSubtitleVideoRef = useRef<HTMLVideoElement | null>(null);
   const audioCarrierRefs = useRef<[HTMLVideoElement | null, HTMLVideoElement | null]>([null, null]);
   const hlsRef = useRef<Hls | null>(null);
   const burnedSubtitleHlsRef = useRef<Hls | null>(null);
   const audioCarrierHlsRefs = useRef<[Hls | null, Hls | null]>([null, null]);
   const continuity = useRef({ time: 0, playing: false });
-  const episodeIdentity = useRef(`${request.season}:${request.episode}`);
+  const episodeIdentity = useRef(kodikStreamEpisodeKey(request));
   const previousRequest = useRef(request);
+  const streamRequestToken = useRef(0);
   const activeAudioSlot = useRef<number | null>(null);
   const pendingAudio = useRef<{ slot: number; token: number } | null>(null);
   const audioSwitchToken = useRef(0);
   const audioFadeFrame = useRef<number | null>(null);
+  const audioRecoveryTimers = useRef<[ReturnType<typeof setTimeout> | null, ReturnType<typeof setTimeout> | null]>([null, null]);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localWaitingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTap = useRef<{ at: number; x: number } | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressActive = useRef(false);
+  const suppressNextTap = useRef(false);
+  const gestureFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativePlaybackUpdatedAt = useRef(0);
+  const nativePlaybackPlaying = useRef(false);
+  const nativePlaybackActive = useRef(false);
+  // Keep the progress callback paired with the media request which is
+  // currently mounted. Parent callbacks close over an immutable episode
+  // target, so replacing this ref during render would attribute the old
+  // video's final timestamp to the newly selected episode.
+  const latestTeardownCallback = useRef(onBeforeTeardown);
+  const activeTeardownCallback = useRef(onBeforeTeardown);
+  const activeTeardownRequestKey = useRef(requestKey);
+  const teardownReported = useRef(false);
+  const activeMediaRequestKey = useRef("");
+  const endedMediaRequestKey = useRef("");
   const [stream, setStream] = useState<KodikStreamInfo | null>(null);
   const [hlsSubtitles, setHlsSubtitles] = useState<HlsSubtitleOption[]>([]);
   const [quality, setQuality] = useState(0);
@@ -138,14 +175,54 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [rate, setRate] = useState(1);
+  const [videoFit, setVideoFit] = useState<VideoFit>(() => {
+    if (typeof window === "undefined") return "contain";
+    const stored = window.localStorage.getItem("animesoul:video-fit");
+    if (stored === "contain" || stored === "cover" || stored === "ambient") return stored;
+    return IS_ANDROID_APP ? "cover" : "contain";
+  });
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [controlsHovered, setControlsHovered] = useState(false);
+  const [controlsFocused, setControlsFocused] = useState(false);
+  const [controlsInteracting, setControlsInteracting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickPickerOpen, setQuickPickerOpen] = useState(false);
   const [audioSwitching, setAudioSwitching] = useState(false);
   const [audioSwitchError, setAudioSwitchError] = useState("");
   const [activeLevel, setActiveLevel] = useState({ quality: 0, bitrate: 0 });
+  const [streamReloadToken, setStreamReloadToken] = useState(0);
+  const [fullscreenActive, setFullscreenActive] = useState(false);
+  const [nativePictureInPicture, setNativePictureInPicture] = useState(false);
+  const [gestureFeedback, setGestureFeedback] = useState<{ side: "left" | "center" | "right"; text: string } | null>(null);
+  const [timelinePreview, setTimelinePreview] = useState({ visible: false, position: 0, time: 0 });
+
+  latestTeardownCallback.current = onBeforeTeardown;
+
+  const reportTeardown = useCallback((video: HTMLVideoElement | null) => {
+    if (!video || teardownReported.current) return;
+    const remote = castProgress.current;
+    const time = remote.active
+      ? remote.requestKey === activeTeardownRequestKey.current ? remote.position : 0
+      : Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    const duration = remote.active ? remote.duration : Number.isFinite(video.duration) ? video.duration : 0;
+    if (time <= 0) return;
+    teardownReported.current = true;
+    activeTeardownCallback.current?.(time, duration);
+  }, []);
+
+  const attachVideoRef = useCallback((value: HTMLVideoElement | null) => {
+    const previous = videoRef.current;
+    if (!value && previous) reportTeardown(previous);
+    videoRef.current = value;
+    if (value) teardownReported.current = false;
+    setForwardedRef(forwardedRef, value);
+  }, [forwardedRef, reportTeardown]);
 
   const rememberContinuity = () => {
+    if (castProgress.current.active) {
+      continuity.current = { time: castProgress.current.position, playing: false };
+      return;
+    }
     const video = videoRef.current;
     if (!video) return;
     continuity.current = {
@@ -160,6 +237,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   };
 
   const clearAudioCarrier = (slot: number) => {
+    if (audioRecoveryTimers.current[slot]) clearTimeout(audioRecoveryTimers.current[slot]!);
+    audioRecoveryTimers.current[slot] = null;
     audioCarrierHlsRefs.current[slot]?.destroy();
     audioCarrierHlsRefs.current[slot] = null;
     const carrier = audioCarrierRefs.current[slot];
@@ -343,6 +422,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           backBufferLength: 20,
           startPosition: main.currentTime > 0 ? main.currentTime : -1,
         });
+        let networkRecoveries = 0;
+        let mediaRecoveries = 0;
         audioCarrierHlsRefs.current[slot] = hls;
         hls.attachMedia(carrier);
         hls.on(HlsRuntime.Events.MEDIA_ATTACHED, () => hls.loadSource(source.src));
@@ -357,9 +438,19 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         });
         hls.on(HlsRuntime.Events.ERROR, (_event, data) => {
           if (!data.fatal) return;
-          if (data.type === HlsRuntime.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-          else if (data.type === HlsRuntime.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-          else handleAudioCarrierFailure(slot);
+          if (data.type === HlsRuntime.ErrorTypes.NETWORK_ERROR && networkRecoveries < 2) {
+            networkRecoveries += 1;
+            audioRecoveryTimers.current[slot] = setTimeout(
+              () => hls.startLoad(),
+              networkRecoveries * 450,
+            );
+          } else if (data.type === HlsRuntime.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
+            mediaRecoveries += 1;
+            audioRecoveryTimers.current[slot] = setTimeout(
+              () => hls.recoverMediaError(),
+              mediaRecoveries * 250,
+            );
+          } else handleAudioCarrierFailure(slot);
         });
       }).catch(() => failAudioSwitch(slot, "Не удалось загрузить модуль бесшовного переключения."));
       return;
@@ -380,13 +471,115 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     else void subtitles.play().catch(() => undefined);
   };
 
+  const paintAmbientFrame = useCallback(() => {
+    if (videoFit !== "ambient" || nativePictureInPicture || document.visibilityState === "hidden") return;
+    const video = videoRef.current;
+    const canvas = ambientCanvasRef.current;
+    if (!video || !canvas || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) return;
+
+    // Only the two outer pixel columns are needed: CSS stretches the left
+    // edge into the left field and the right edge into the right field. This
+    // keeps the original picture out of the backdrop altogether.
+    const width = 96;
+    const height = 96;
+    const halfWidth = width / 2;
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) return;
+    try {
+      context.drawImage(video, 0, 0, 1, video.videoHeight, 0, 0, halfWidth, height);
+      context.drawImage(video, video.videoWidth - 1, 0, 1, video.videoHeight, halfWidth, 0, halfWidth, height);
+    } catch {
+      // A provider may temporarily protect a frame while changing streams.
+      // Playback must keep working even when that frame cannot light the UI.
+    }
+  }, [videoFit, nativePictureInPicture]);
+
   useEffect(() => {
+    const canvas = ambientCanvasRef.current;
+    if (ambientRequestKey.current !== requestKey) {
+      ambientRequestKey.current = requestKey;
+      canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    if (videoFit !== "ambient" || nativePictureInPicture) return;
+    const video = videoRef.current;
+    if (!video || !canvas) return;
+
+    let stopped = false;
+    let videoFrame = 0;
+    let animationFrame = 0;
+    const refresh = () => paintAmbientFrame();
+    const schedule = () => {
+      if (stopped || video.paused || video.ended || videoFrame || animationFrame) return;
+      if (typeof video.requestVideoFrameCallback === "function") {
+        videoFrame = video.requestVideoFrameCallback(() => {
+          videoFrame = 0;
+          refresh();
+          schedule();
+        });
+      } else {
+        animationFrame = window.requestAnimationFrame(() => {
+          animationFrame = 0;
+          refresh();
+          schedule();
+        });
+      }
+    };
+    const start = () => {
+      refresh();
+      schedule();
+    };
+    start();
+    video.addEventListener("loadeddata", start);
+    video.addEventListener("seeked", start);
+    video.addEventListener("play", start);
+    return () => {
+      stopped = true;
+      video.removeEventListener("loadeddata", start);
+      video.removeEventListener("seeked", start);
+      video.removeEventListener("play", start);
+      if (videoFrame) video.cancelVideoFrameCallback(videoFrame);
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+    };
+  }, [paintAmbientFrame, playing, requestKey, videoFit, nativePictureInPicture]);
+
+  useEffect(() => {
+    if (activeTeardownRequestKey.current !== requestKey) {
+      // The component intentionally stays mounted so Android keeps the same
+      // fullscreen owner. Flush the old media before clearing its src, then
+      // bind teardown reporting to the new episode target.
+      reportTeardown(videoRef.current);
+      teardownReported.current = false;
+      activeTeardownRequestKey.current = requestKey;
+    }
+    activeTeardownCallback.current = latestTeardownCallback.current;
     const controller = new AbortController();
-    const nextEpisodeIdentity = `${request.season}:${request.episode}`;
-    const audioOnlySwitch = isSameEpisodeDubbingSwitch(previousRequest.current, request);
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    tapTimer.current = null;
+    longPressTimer.current = null;
+    lastTap.current = null;
+    if (longPressActive.current) applyPlaybackRate(rate);
+    longPressActive.current = false;
+    suppressNextTap.current = false;
+    setTimelinePreview(value => ({ ...value, visible: false }));
+    const requestToken = ++streamRequestToken.current;
+    const nextEpisodeIdentity = kodikStreamEpisodeKey(request);
+    // A seamless switch keeps the old video decoder running and starts a
+    // second, hidden video solely for the new audio track. This is smooth on
+    // desktop, but Android WebView cannot reliably decode two HLS videos at
+    // once: it causes the active stream to stutter for the rest of playback.
+    // On Android, reload the single visible stream instead; continuity below
+    // restores the current position and playing state without overloading the
+    // device decoder.
+    const audioOnlySwitch = !IS_ANDROID_APP
+      && Boolean(stream && videoRef.current?.currentSrc)
+      && isSameEpisodeDubbingSwitch(previousRequest.current, request);
     previousRequest.current = request;
     if (audioOnlySwitch) {
-      rememberContinuity();
+      activeMediaRequestKey.current = requestKey;
+      // The visible video keeps running; no source resume should be armed.
       cancelAudioFade();
       applyAudioOutput(muted, volume);
       const token = ++audioSwitchToken.current;
@@ -404,6 +597,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       return () => controller.abort();
     }
 
+    activeMediaRequestKey.current = "";
+    endedMediaRequestKey.current = "";
     resetAudioCarriers();
     if (episodeIdentity.current === nextEpisodeIdentity) {
       rememberContinuity();
@@ -415,15 +610,29 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       setDuration(0);
       setBuffered(0);
     }
+    // A full source switch must not leave the old media/HLS eligible to emit
+    // metadata, ended or playback events while the new resolver request is in
+    // flight. Desktop audio-only dubbing switches intentionally skip this.
+    setStream(null);
+    resolvedStreamRequestKey.current = "";
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    const visibleVideo = videoRef.current;
+    if (visibleVideo) {
+      visibleVideo.pause();
+      visibleVideo.removeAttribute("src");
+      visibleVideo.load();
+    }
     setLoading(true);
     setError("");
     void fetchKodikStream(request, controller.signal).then(info => {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || requestToken !== streamRequestToken.current) return;
       const storedQuality = Number(localStorage.getItem("animesoul:stream-quality") || 0);
       const nextQuality = info.sources.some(source => source.quality === storedQuality)
         ? storedQuality
         : info.sources[0].quality;
       setStream(info);
+      resolvedStreamRequestKey.current = requestKey;
       setQuality(nextQuality);
       setActiveLevel({ quality: nextQuality, bitrate: 0 });
       const defaultSubtitle = info.subtitles.findIndex(track => track.default);
@@ -432,35 +641,59 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         : defaultSubtitle >= 0 ? `api:${defaultSubtitle}` : "off");
       onStreamInfo?.(info);
     }).catch(reason => {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || requestToken !== streamRequestToken.current) return;
       setLoading(false);
       setError(reason instanceof Error ? reason.message : "Не удалось открыть прямой поток Kodik.");
     });
     return () => controller.abort();
-  }, [request.videoId, request.season, request.episode, request.dubbing, request.translationId, request.iframeUrl]);
+  }, [requestKey, streamReloadToken]);
 
   const selectedSource = useMemo(
     () => stream ? sourceForQuality(stream.sources, quality) : undefined,
     [stream, quality],
   );
+  const timelinePreviewSource = useMemo(
+    () => stream ? lowestQualitySource(stream.sources) : undefined,
+    [stream],
+  );
+  const cast = useAndroidCast({
+    enabled: IS_ANDROID_APP,
+    source: resolvedStreamRequestKey.current === requestKey ? selectedSource : undefined,
+    localPlayback, requestKey, episodeKey: kodikStreamEpisodeKey(request), title,
+    subtitle: `${seasonLabel} · ${episodeLabel} · ${menu.dubbing}`,
+    video: videoRef, progress: castProgress,
+    onReturn: position => {
+      continuity.current = { time: position, playing: false };
+      setError("");
+      setCurrentTime(position);
+    },
+    onTimeUpdate, onPlay, onPause, onEnded,
+  });
   const selectedBurnedSubtitle = subtitle.startsWith("burned:")
     ? menu.subtitles.find(option => `burned:${option.value}` === subtitle)
     : undefined;
   const burnedSubtitleKey = selectedBurnedSubtitle
-    ? [
-        selectedBurnedSubtitle.value,
-        selectedBurnedSubtitle.request.videoId,
-        selectedBurnedSubtitle.request.season,
-        selectedBurnedSubtitle.request.episode,
-        selectedBurnedSubtitle.request.translationId,
-        selectedBurnedSubtitle.request.iframeUrl,
-      ].join("|")
+    ? `${selectedBurnedSubtitle.value}|${kodikStreamRequestKey(selectedBurnedSubtitle.request)}`
     : "";
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !selectedSource) return;
+    if (cast.active) {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      setLoading(false);
+      return;
+    }
+    activeMediaRequestKey.current = requestKey;
+    endedMediaRequestKey.current = "";
     let disposed = false;
+    let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+    let networkRecoveries = 0;
+    let mediaRecoveries = 0;
     const resume = continuity.current;
     hlsRef.current?.destroy();
     hlsRef.current = null;
@@ -469,17 +702,31 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     setActiveLevel({ quality: selectedSource.quality, bitrate: 0 });
     const isHls = selectedSource.type.includes("hls") || selectedSource.src.split("?", 1)[0].endsWith(".m3u8");
     const nativeHls = Boolean(video.canPlayType("application/vnd.apple.mpegurl"));
-    if (isHls && !nativeHls) {
+    // Android's native WebView HLS implementation keeps only a very small
+    // buffer, even when every segment is already on local flash. Managed HLS
+    // can prefetch several minutes and avoids a visible pause at each local
+    // six-second segment boundary.
+    const managedHls = isHls && (!nativeHls || (IS_ANDROID_APP && localPlayback));
+    if (managedHls) {
       void import("hls.js").then(({ default: HlsRuntime }) => {
         if (disposed) return;
         if (!HlsRuntime.isSupported()) {
+          if (nativeHls) {
+            video.src = selectedSource.src;
+            video.load();
+            return;
+          }
           setLoading(false);
           setError("Этот браузер не поддерживает HLS-потоки Kodik.");
           return;
         }
         const hls = new HlsRuntime({
           enableWorker: true,
-          backBufferLength: 90,
+          backBufferLength: localPlayback ? 180 : 90,
+          maxBufferLength: localPlayback ? 180 : 30,
+          maxMaxBufferLength: 600,
+          maxBufferSize: localPlayback ? 256 * 1024 * 1024 : 60 * 1024 * 1024,
+          startFragPrefetch: localPlayback,
           startPosition: resume.time > 0 ? resume.time : -1,
         });
         hlsRef.current = hls;
@@ -525,15 +772,33 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         });
         hls.on(HlsRuntime.Events.ERROR, (_event, data) => {
           if (!data.fatal) return;
-          if (data.type === HlsRuntime.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-          else if (data.type === HlsRuntime.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-          else {
+          if (data.type === HlsRuntime.ErrorTypes.NETWORK_ERROR && networkRecoveries < 2) {
+            networkRecoveries += 1;
+            if (recoveryTimer) clearTimeout(recoveryTimer);
+            recoveryTimer = setTimeout(() => {
+              if (!disposed && hlsRef.current === hls) hls.startLoad();
+            }, networkRecoveries * 500);
+          } else if (data.type === HlsRuntime.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
+            mediaRecoveries += 1;
+            if (recoveryTimer) clearTimeout(recoveryTimer);
+            recoveryTimer = setTimeout(() => {
+              if (!disposed && hlsRef.current === hls) hls.recoverMediaError();
+            }, mediaRecoveries * 250);
+          } else {
+            hls.stopLoad();
             setLoading(false);
-            setError("Поток Kodik прервался. Можно повторить или открыть встроенный плеер.");
+            setError(localPlayback
+              ? "Локальное видео повреждено или было удалено. Повторите загрузку серии."
+              : "Поток Kodik прервался после нескольких попыток восстановления.");
           }
         });
       }).catch(() => {
         if (disposed) return;
+        if (nativeHls) {
+          video.src = selectedSource.src;
+          video.load();
+          return;
+        }
         setLoading(false);
         setError("Не удалось загрузить модуль HLS-плеера.");
       });
@@ -543,10 +808,11 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     }
     return () => {
       disposed = true;
+      if (recoveryTimer) clearTimeout(recoveryTimer);
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [selectedSource?.src, selectedSource?.quality]);
+  }, [selectedSource?.src, selectedSource?.quality, localPlayback, cast.active]);
 
   useEffect(() => {
     const video = burnedSubtitleVideoRef.current;
@@ -554,7 +820,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     burnedSubtitleHlsRef.current = null;
     setBurnedSubtitleReady(false);
     setBurnedSubtitleError("");
-    if (!video || !selectedBurnedSubtitle) {
+    if (!video || !selectedBurnedSubtitle || cast.active) {
       if (video) {
         video.removeAttribute("src");
         video.load();
@@ -564,6 +830,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
 
     const controller = new AbortController();
     let disposed = false;
+    let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
     void fetchKodikStream(selectedBurnedSubtitle.request, controller.signal).then(info => {
       if (disposed) return;
       const source = sourceForQuality(info.sources, quality);
@@ -574,6 +841,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         return import("hls.js").then(({ default: HlsRuntime }) => {
           if (disposed || !HlsRuntime.isSupported()) return;
           const hls = new HlsRuntime({ enableWorker: true, backBufferLength: 45 });
+          let networkRecoveries = 0;
+          let mediaRecoveries = 0;
           burnedSubtitleHlsRef.current = hls;
           hls.attachMedia(video);
           hls.on(HlsRuntime.Events.MEDIA_ATTACHED, () => hls.loadSource(source.src));
@@ -588,9 +857,19 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           });
           hls.on(HlsRuntime.Events.ERROR, (_event, data) => {
             if (!data.fatal) return;
-            if (data.type === HlsRuntime.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-            else if (data.type === HlsRuntime.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-            else setBurnedSubtitleError("Не удалось синхронизировать поток субтитров Kodik.");
+            if (data.type === HlsRuntime.ErrorTypes.NETWORK_ERROR && networkRecoveries < 2) {
+              networkRecoveries += 1;
+              if (recoveryTimer) clearTimeout(recoveryTimer);
+              recoveryTimer = setTimeout(() => {
+                if (!disposed && burnedSubtitleHlsRef.current === hls) hls.startLoad();
+              }, networkRecoveries * 450);
+            } else if (data.type === HlsRuntime.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
+              mediaRecoveries += 1;
+              if (recoveryTimer) clearTimeout(recoveryTimer);
+              recoveryTimer = setTimeout(() => {
+                if (!disposed && burnedSubtitleHlsRef.current === hls) hls.recoverMediaError();
+              }, mediaRecoveries * 250);
+            } else setBurnedSubtitleError("Не удалось синхронизировать поток субтитров Kodik.");
           });
         });
       }
@@ -604,10 +883,11 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     return () => {
       disposed = true;
       controller.abort();
+      if (recoveryTimer) clearTimeout(recoveryTimer);
       burnedSubtitleHlsRef.current?.destroy();
       burnedSubtitleHlsRef.current = null;
     };
-  }, [burnedSubtitleKey, quality]);
+  }, [burnedSubtitleKey, quality, cast.active]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -623,20 +903,39 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   }, [subtitle, stream, hlsSubtitles]);
 
   useEffect(() => () => {
+    reportTeardown(videoRef.current);
     if (hideTimer.current) clearTimeout(hideTimer.current);
+    if (localWaitingTimer.current) clearTimeout(localWaitingTimer.current);
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    if (gestureFeedbackTimer.current) clearTimeout(gestureFeedbackTimer.current);
     cancelAudioFade();
+    audioRecoveryTimers.current.forEach(timer => { if (timer) clearTimeout(timer); });
     hlsRef.current?.destroy();
     burnedSubtitleHlsRef.current?.destroy();
     audioCarrierHlsRefs.current.forEach(hls => hls?.destroy());
+  }, [reportTeardown]);
+
+  const controlsPinned = settingsOpen || quickPickerOpen || controlsHovered
+    || controlsFocused || controlsInteracting || Boolean(error) || cast.active;
+  const controlsShown = controlsVisible || !playing || controlsPinned;
+
+  const hideControls = useCallback(() => {
+    setControlsVisible(false);
+    setTimelinePreview(value => ({ ...value, visible: false }));
   }, []);
 
   const showControls = () => {
     setControlsVisible(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    if (playing && !settingsOpen && !quickPickerOpen) hideTimer.current = setTimeout(() => setControlsVisible(false), 2600);
+    hideTimer.current = null;
+    if (playing && !controlsPinned) {
+      hideTimer.current = setTimeout(hideControls, 2600);
+    }
   };
 
   const togglePlayback = () => {
+    if (cast.active) { cast.command(cast.state.playing ? "pause" : "play"); return; }
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -654,17 +953,204 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
 
   const togglePictureInPicture = () => {
     const video = videoRef.current;
-    if (!video || !("requestPictureInPicture" in video)) return;
+    if (!video) return;
+    if (IS_ANDROID_APP) {
+      androidPlaybackBridge()?.requestPictureInPicture?.(video.videoWidth || 16, video.videoHeight || 9);
+      return;
+    }
+    if (!("requestPictureInPicture" in video)) return;
     if (document.pictureInPictureElement) void document.exitPictureInPicture();
     else void video.requestPictureInPicture().catch(() => undefined);
   };
+
+  const applyPlaybackRate = (next: number) => {
+    if (videoRef.current) videoRef.current.playbackRate = next;
+    if (burnedSubtitleVideoRef.current) burnedSubtitleVideoRef.current.playbackRate = next;
+    audioCarrierRefs.current.forEach(carrier => { if (carrier) carrier.playbackRate = next; });
+  };
+
+  const showGestureFeedback = (side: "left" | "center" | "right", text: string) => {
+    setGestureFeedback({ side, text });
+    if (gestureFeedbackTimer.current) clearTimeout(gestureFeedbackTimer.current);
+    gestureFeedbackTimer.current = setTimeout(() => setGestureFeedback(null), 650);
+  };
+
+  const handleVideoTap = (event: MouseEvent<HTMLVideoElement>) => {
+    if (suppressNextTap.current) {
+      suppressNextTap.current = false;
+      return;
+    }
+    const now = performance.now();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const previous = lastTap.current;
+    if (previous && now - previous.at < 300) {
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      lastTap.current = null;
+      const video = videoRef.current;
+      if (!video) return;
+      const delta = x < bounds.width / 2 ? -5 : 5;
+      video.currentTime = Math.max(0, Math.min(video.duration || Infinity, video.currentTime + delta));
+      showGestureFeedback(delta < 0 ? "left" : "right", delta < 0 ? "−5 сек" : "+5 сек");
+      showControls();
+      return;
+    }
+    lastTap.current = { at: now, x };
+    if (!controlsShown) {
+      showControls();
+      return;
+    }
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    tapTimer.current = setTimeout(() => {
+      lastTap.current = null;
+      togglePlayback();
+    }, 300);
+  };
+
+  const finishLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+    if (!longPressActive.current) return;
+    longPressActive.current = false;
+    applyPlaybackRate(rate);
+    showGestureFeedback("center", `${rate}×`);
+  };
+
+  const handleVideoPointerDown = (event: ReactPointerEvent<HTMLVideoElement>) => {
+    if (event.pointerType === "mouse" || videoRef.current?.paused) return;
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      longPressActive.current = true;
+      suppressNextTap.current = true;
+      applyPlaybackRate(2);
+      showGestureFeedback("center", "2× · удерживайте");
+    }, 420);
+  };
+
+  useEffect(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+    if (playing && !controlsPinned && controlsVisible) {
+      hideTimer.current = setTimeout(hideControls, 2600);
+    }
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, [playing, controlsPinned, controlsVisible, hideControls]);
+
+  useEffect(() => {
+    const finishInteraction = () => setControlsInteracting(false);
+    window.addEventListener("pointerup", finishInteraction);
+    window.addEventListener("pointercancel", finishInteraction);
+    window.addEventListener("blur", finishInteraction);
+    return () => {
+      window.removeEventListener("pointerup", finishInteraction);
+      window.removeEventListener("pointercancel", finishInteraction);
+      window.removeEventListener("blur", finishInteraction);
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateFullscreen = () => {
+      const active = Boolean(document.fullscreenElement);
+      setFullscreenActive(active);
+      if (!active) {
+        setSettingsOpen(false);
+        setQuickPickerOpen(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", updateFullscreen);
+    updateFullscreen();
+    return () => document.removeEventListener("fullscreenchange", updateFullscreen);
+  }, []);
+
+  useEffect(() => {
+    if (!IS_ANDROID_APP) return;
+    const mediaCommand = (event: Event) => {
+      if (castProgress.current.active) return;
+      const detail = (event as CustomEvent<{ command?: string; position?: number }>).detail;
+      const video = videoRef.current;
+      if (!video || !detail?.command) return;
+      if (detail.command === "play") void video.play().catch(() => undefined);
+      else if (detail.command === "pause") video.pause();
+      else if (detail.command === "seek" && Number.isFinite(detail.position)) {
+        video.currentTime = Math.max(0, Math.min(video.duration || Infinity, Number(detail.position)));
+      } else if (detail.command === "rewind") {
+        video.currentTime = Math.max(0, video.currentTime - 5);
+      } else if (detail.command === "forward") {
+        video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 5);
+      }
+    };
+    const pipChange = (event: Event) => {
+      const active = Boolean((event as CustomEvent<{ active?: boolean }>).detail?.active);
+      setNativePictureInPicture(active);
+      setControlsVisible(!active);
+      setSettingsOpen(false);
+      setQuickPickerOpen(false);
+    };
+    window.addEventListener("animesoul-media-command", mediaCommand);
+    window.addEventListener("animesoul-pip-change", pipChange);
+    return () => {
+      window.removeEventListener("animesoul-media-command", mediaCommand);
+      window.removeEventListener("animesoul-pip-change", pipChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!IS_ANDROID_APP) return;
+    const now = performance.now();
+    const active = Boolean(stream && !error && !cast.active);
+    const stateChanged = nativePlaybackPlaying.current !== playing
+      || nativePlaybackActive.current !== active;
+    if (playing && !stateChanged && now - nativePlaybackUpdatedAt.current < 5_000) return;
+    nativePlaybackUpdatedAt.current = now;
+    nativePlaybackPlaying.current = playing;
+    nativePlaybackActive.current = active;
+    try {
+      androidPlaybackBridge()?.updatePlayback?.(
+        title,
+        `${seasonLabel} · ${episodeLabel}`,
+        playing,
+        currentTime,
+        duration,
+        active,
+      );
+    } catch {
+      // Older APKs intentionally continue with WebView-only playback.
+    }
+  }, [title, seasonLabel, episodeLabel, playing, currentTime, duration, stream, error, cast.active]);
+
+  useEffect(() => () => {
+    if (!IS_ANDROID_APP) return;
+    try { androidPlaybackBridge()?.clearPlayback?.(); } catch { /* no-op */ }
+  }, []);
+
+  useEffect(() => {
+    const nativeBack = (event: Event) => {
+      if (settingsOpen) {
+        event.preventDefault();
+        setSettingsOpen(false);
+      } else if (quickPickerOpen) {
+        event.preventDefault();
+        setQuickPickerOpen(false);
+      }
+    };
+    window.addEventListener("animesoul-native-back", nativeBack);
+    return () => window.removeEventListener("animesoul-native-back", nativeBack);
+  }, [settingsOpen, quickPickerOpen]);
 
   const keyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const video = videoRef.current;
     const key = event.key.toLocaleLowerCase();
     if (key === "escape" && (settingsOpen || quickPickerOpen)) { setSettingsOpen(false); setQuickPickerOpen(false); return; }
-    if (!video || event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) return;
-    if ([" ", "k"].includes(key)) { event.preventDefault(); togglePlayback(); }
+    if (
+      !video
+      || event.altKey || event.ctrlKey || event.metaKey
+      || (event.target instanceof Element
+        && event.target.closest("button,input,select,textarea,[contenteditable=true]"))
+    ) return;
+    if ([" ", "k"].includes(key)) togglePlayback();
     else if (key === "arrowleft") video.currentTime = Math.max(0, video.currentTime - 10);
     else if (key === "arrowright") video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
     else if (key === "m") { const next = !muted; setMuted(next); applyAudioOutput(next, volume); }
@@ -673,7 +1159,22 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       setSubtitle(value => value === "off"
         ? stream?.subtitles.length ? "api:0" : hlsSubtitles.length ? "hls:0" : `burned:${menu.subtitles[0].value}`
         : "off");
-    }
+    } else return;
+    event.preventDefault();
+    showControls();
+  };
+
+  const updateTimelinePreview = (element: HTMLDivElement, clientX: number) => {
+    if (!selectedSource || cast.active || duration <= 0) return;
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    const position = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width));
+    setTimelinePreview({ visible: true, position, time: position * duration });
+  };
+
+  const handleTimelinePointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch" && event.type === "pointermove" && event.buttons === 0) return;
+    updateTimelinePreview(event.currentTarget, event.clientX);
   };
 
   const mergedOpening = stream?.skips?.opening ?? opening ?? undefined;
@@ -688,51 +1189,137 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const activeQuality = activeLevel.quality || quality;
   const activeBitrate = streamRate(activeLevel.bitrate);
   const activeDubbingOption = menu.dubbings.find(option => option.value === menu.dubbing);
+  const pictureInPictureSupported = IS_ANDROID_APP || (
+    typeof document !== "undefined" && document.pictureInPictureEnabled
+  );
+  const settingsPanel = (
+    <PlayerSettingsPanel
+      activeBitrate={activeBitrate}
+      activeDubbingOption={activeDubbingOption}
+      activeQuality={activeQuality}
+      episodeLabel={episodeLabel}
+      localPlayback={localPlayback}
+      menu={menu}
+      onClose={() => setSettingsOpen(false)}
+      onFallback={onFallback}
+      onVideoFitChange={next => {
+        setVideoFit(next);
+        window.localStorage.setItem("animesoul:video-fit", next);
+      }}
+      quality={quality}
+      seasonLabel={seasonLabel}
+      videoFit={videoFit}
+    />
+  );
 
   return (
     <div
       ref={shell}
-      className={`animesoul-player${localPlayback ? " is-local" : ""}${controlsVisible || !playing || settingsOpen || quickPickerOpen ? " controls-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}`}
+      data-casting={cast.active || undefined}
+      className={`animesoul-player${localPlayback ? " is-local" : ""}${loading ? " is-loading" : ""}${loading && (!stream || localPlayback) ? " is-preparing" : ""}${controlsShown ? " controls-visible" : ""}${timelinePreview.visible ? " timeline-preview-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${videoFit === "ambient" && !nativePictureInPicture ? " ambient-light" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
       tabIndex={0}
       onKeyDown={keyboard}
-      onMouseMove={showControls}
-      onMouseLeave={() => playing && !settingsOpen && !quickPickerOpen && setControlsVisible(false)}
+      onPointerMove={event => {
+        if (event.pointerType === "touch") return;
+        setControlsHovered(event.target instanceof Element
+          && Boolean(event.target.closest("button,input,select,.animesoul-player-controls,.animesoul-player-top-navigation")));
+        showControls();
+      }}
+      onPointerDownCapture={event => {
+        setControlsFocused(false);
+        if (event.target instanceof Element && event.target.closest("button,input,select")) {
+          setControlsInteracting(true);
+          showControls();
+        }
+      }}
+      onFocusCapture={event => {
+        const keyboardFocus = event.target.matches(":focus-visible");
+        setControlsFocused(event.target !== event.currentTarget && keyboardFocus);
+        if (keyboardFocus) showControls();
+      }}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setControlsFocused(false);
+      }}
+      onMouseLeave={() => {
+        setControlsHovered(false);
+        if (playing && !settingsOpen && !quickPickerOpen && !controlsFocused && !controlsInteracting && !error && !cast.active) hideControls();
+      }}
       aria-label={`Плеер AnimeSoul: ${title}${localPlayback ? ", локальное видео" : ""}`}
     >
+      {videoFit === "ambient" && !nativePictureInPicture && (
+        <canvas
+          ref={ambientCanvasRef}
+          className="animesoul-player-ambient"
+          width={96}
+          height={96}
+          aria-hidden="true"
+        />
+      )}
       <video
         className="animesoul-player-video"
-        ref={value => {
-          videoRef.current = value;
-          setForwardedRef(forwardedRef, value);
-        }}
+        ref={attachVideoRef}
         playsInline
+        preload="auto"
         crossOrigin="anonymous"
-        onClick={togglePlayback}
+        onClick={handleVideoTap}
+        onPointerDown={handleVideoPointerDown}
+        onPointerUp={finishLongPress}
+        onPointerCancel={finishLongPress}
+        onPointerLeave={finishLongPress}
         onLoadedMetadata={() => {
+          if (castProgress.current.active) return;
+          if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video) return;
-          if (continuity.current.time > 0) video.currentTime = Math.min(continuity.current.time, Math.max(0, video.duration - .25));
+          if (continuity.current.time > 0) {
+            video.currentTime = Math.min(continuity.current.time, Math.max(0, video.duration - .25));
+            continuity.current.time = 0;
+          }
+          applyPlaybackRate(rate);
           setDuration(Number.isFinite(video.duration) ? video.duration : 0);
           onLoadedMetadata?.();
         }}
         onCanPlay={() => {
+          if (castProgress.current.active) return;
+          if (activeMediaRequestKey.current !== requestKey) return;
+          if (localWaitingTimer.current) clearTimeout(localWaitingTimer.current);
+          localWaitingTimer.current = null;
           setLoading(false);
           setError("");
           applyAudioOutput(muted, volume);
-          if (continuity.current.playing) void videoRef.current?.play().catch(() => undefined);
+          // Source continuity is a one-shot resume. Later canplay events also
+          // occur after seeking/buffering and must respect a user's pause.
+          const resumePlayback = continuity.current.playing;
+          continuity.current.playing = false;
+          if (resumePlayback) void videoRef.current?.play().catch(() => undefined);
           syncBurnedSubtitle(true);
           syncActiveAudio(true);
         }}
-        onWaiting={() => setLoading(true)}
-        onPlaying={() => setLoading(false)}
+        onWaiting={() => {
+          if (castProgress.current.active) return;
+          if (!localPlayback) {
+            setLoading(true);
+            return;
+          }
+          if (localWaitingTimer.current) clearTimeout(localWaitingTimer.current);
+          localWaitingTimer.current = setTimeout(() => setLoading(true), 450);
+        }}
+        onPlaying={() => {
+          if (localWaitingTimer.current) clearTimeout(localWaitingTimer.current);
+          localWaitingTimer.current = null;
+          setLoading(false);
+        }}
         onTimeUpdate={() => {
+          if (castProgress.current.active) return;
+          if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video) return;
+          const resolvedDuration = Number.isFinite(video.duration) ? video.duration : 0;
           setCurrentTime(video.currentTime);
-          setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+          setDuration(resolvedDuration);
           syncBurnedSubtitle();
           syncActiveAudio();
-          onTimeUpdate?.();
+          onTimeUpdate?.(video.currentTime, resolvedDuration);
         }}
         onSeeking={() => { syncBurnedSubtitle(true); syncActiveAudio(true); }}
         onDurationChange={() => {
@@ -744,9 +1331,34 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           if (!video?.buffered.length) { setBuffered(0); return; }
           setBuffered(video.buffered.end(video.buffered.length - 1));
         }}
-        onPlay={() => { setPlaying(true); showControls(); syncBurnedSubtitle(true); syncActiveAudio(true); onPlay?.(); }}
-        onPause={() => { burnedSubtitleVideoRef.current?.pause(); audioCarrierRefs.current.forEach(carrier => carrier?.pause()); setPlaying(false); setControlsVisible(true); onPause?.(); }}
-        onEnded={() => { audioCarrierRefs.current.forEach(carrier => carrier?.pause()); setPlaying(false); onEnded?.(); }}
+        onPlay={() => {
+          if (castProgress.current.active) { videoRef.current?.pause(); return; }
+          if (activeMediaRequestKey.current !== requestKey) return;
+          endedMediaRequestKey.current = "";
+          setPlaying(true);
+          showControls();
+          syncBurnedSubtitle(true);
+          syncActiveAudio(true);
+          onPlay?.();
+        }}
+        onPause={() => { burnedSubtitleVideoRef.current?.pause(); audioCarrierRefs.current.forEach(carrier => carrier?.pause()); setPlaying(false); setControlsVisible(true); if (!castProgress.current.active) onPause?.(); }}
+        onEnded={() => {
+          if (castProgress.current.active) return;
+          if (activeMediaRequestKey.current !== requestKey || endedMediaRequestKey.current === requestKey) return;
+          endedMediaRequestKey.current = requestKey;
+          const resolvedDuration = Number.isFinite(videoRef.current?.duration) ? Number(videoRef.current?.duration) : duration;
+          audioCarrierRefs.current.forEach(carrier => carrier?.pause());
+          setPlaying(false);
+          onEnded?.(resolvedDuration);
+        }}
+        onError={() => {
+          if (castProgress.current.active) return;
+          if (hlsRef.current) return;
+          setLoading(false);
+          setError(localPlayback
+            ? "Локальный файл повреждён, удалён или недоступен приложению."
+            : "Браузер не смог воспроизвести полученный видеофайл.");
+        }}
       >
         {stream?.subtitles.map(track => (
           <track
@@ -788,6 +1400,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         />
       ))}
 
+      {cast.active && <CastRemotePanel state={cast.state} preparing={!cast.canCast} command={cast.command} choose={cast.choose} />}
+      {!cast.active && cast.state.error && <div className="animesoul-cast-error" role="alert">{cast.state.error}</div>}
       {localPlayback && (
         <div className="animesoul-player-local-badge" role="status">
           <i aria-hidden="true" />
@@ -795,48 +1409,20 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         </div>
       )}
 
-      <div className="animesoul-player-top-navigation" onClick={(event: MouseEvent) => event.stopPropagation()}>
-        <button
-          type="button"
-          className="animesoul-player-context"
-          aria-label="Выбрать сезон и серию"
-          aria-expanded={quickPickerOpen}
-          onClick={() => {
-            setSettingsOpen(false);
-            setQuickPickerOpen(value => !value);
-            setControlsVisible(true);
-          }}
-        >
-          <span className="animesoul-player-context-copy">
-            <strong>{seasonLabel} · {episodeLabel}</strong>
-            <span>{title}</span>
-          </span>
-          <i aria-hidden="true">⌄</i>
-        </button>
-        <label className={`animesoul-player-voice-pill${activeDubbingOption?.warning ? " warning" : ""}`} title={activeDubbingOption?.warning || "Быстрый выбор озвучки"}>
-          <span>Озвучка{activeDubbingOption?.warning && <b>⚠ возможна сокращённая версия</b>}</span>
-          <select value={menu.dubbing} aria-label="Озвучка" onChange={event => menu.onDubbingChange(event.target.value)}>
-            {menu.dubbings.map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
-          </select>
-        </label>
-      </div>
-      {quickPickerOpen && (
-        <div className="animesoul-player-quick-picker" aria-label="Выбор сезона и серии" onClick={(event: MouseEvent) => event.stopPropagation()}>
-          <label>
-            <span>Сезон</span>
-            <select value={menu.season} onChange={event => menu.onSeasonChange(event.target.value)}>
-              {menu.seasons.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Серия</span>
-            <select value={menu.episode} onChange={event => menu.onEpisodeChange(event.target.value)}>
-              {menu.episodes.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-        </div>
-      )}
-      {loading && !error && <div className={`animesoul-player-loader${stream ? " compact" : ""}`} aria-label="Буферизация"><i /><span>{stream ? "Переключаем без сброса таймкода" : "Подготавливаем поток"}</span></div>}
+      <PlayerTopNavigation
+        activeDubbingOption={activeDubbingOption}
+        episodeLabel={episodeLabel}
+        menu={menu}
+        onToggleQuickPicker={() => {
+          setSettingsOpen(false);
+          setQuickPickerOpen(value => !value);
+          setControlsVisible(true);
+        }}
+        quickPickerOpen={quickPickerOpen}
+        seasonLabel={seasonLabel}
+        title={title}
+      />
+      {loading && !error && <div className={`animesoul-player-loader${stream && !localPlayback ? " compact" : ""}`} aria-label="Буферизация"><i /><span>{localPlayback ? "Читаем локальный файл…" : stream ? "Буферизация без сброса таймкода" : "Подготавливаем поток"}</span></div>}
       {(audioSwitching || audioSwitchError) && (
         <div className={`animesoul-player-audio-status${audioSwitchError ? " error" : ""}`} role="status">
           {audioSwitchError || "Подключаем озвучку без смены кадра…"}
@@ -851,7 +1437,21 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         <div className="animesoul-player-error" role="alert">
           <b>Не удалось открыть собственный плеер</b>
           <span>{error}</span>
+          {cast.supported && cast.canCast && <button type="button" onClick={cast.choose}>На телевизор</button>}
+          <button type="button" onClick={() => {
+            rememberContinuity();
+            setError("");
+            setLoading(true);
+            setStream(null);
+            setStreamReloadToken(value => value + 1);
+          }}>Повторить</button>
           {onFallback && <button type="button" onClick={onFallback}>Открыть плеер Kodik</button>}
+        </div>
+      )}
+
+      {gestureFeedback && (
+        <div className={`animesoul-player-gesture-feedback ${gestureFeedback.side}`} role="status">
+          <span>{gestureFeedback.text}</span>
         </div>
       )}
       {!playing && !loading && !error && <button type="button" className="animesoul-player-center-play" aria-label="Воспроизвести" onClick={togglePlayback}>▶</button>}
@@ -863,8 +1463,28 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           style={{
             "--player-progress": `${progress}%`,
             "--player-buffered": `${bufferedProgress}%`,
+            "--player-preview-position": `${timelinePreview.position * 100}%`,
           } as React.CSSProperties}
+          onPointerEnter={event => {
+            if (event.pointerType !== "touch") handleTimelinePointer(event);
+          }}
+          onPointerMove={handleTimelinePointer}
+          onPointerDown={handleTimelinePointer}
+          onPointerLeave={event => {
+            if (event.pointerType !== "touch") setTimelinePreview(value => ({ ...value, visible: false }));
+          }}
+          onPointerUp={event => {
+            if (event.pointerType === "touch") setTimelinePreview(value => ({ ...value, visible: false }));
+          }}
+          onPointerCancel={() => setTimelinePreview(value => ({ ...value, visible: false }))}
         >
+          <PlayerTimelinePreview
+            localPlayback={localPlayback}
+            source={timelinePreviewSource}
+            time={timelinePreview.time}
+            timeLabel={clock(timelinePreview.time)}
+            visible={timelinePreview.visible && duration > 0 && !cast.active}
+          />
           <div className="animesoul-player-timeline-rail" aria-hidden="true">
             <span className="buffered" />
             <span className="played" />
@@ -925,9 +1545,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
             <select value={rate} aria-label="Скорость воспроизведения" onChange={event => {
               const next = Number(event.target.value);
               setRate(next);
-              if (videoRef.current) videoRef.current.playbackRate = next;
-              if (burnedSubtitleVideoRef.current) burnedSubtitleVideoRef.current.playbackRate = next;
-              audioCarrierRefs.current.forEach(carrier => { if (carrier) carrier.playbackRate = next; });
+              applyPlaybackRate(next);
             }}>
               {[.5, .75, 1, 1.25, 1.5, 2].map(value => <option key={value} value={value}>{value}×</option>)}
             </select>
@@ -948,7 +1566,12 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
               </select>
             </label>
           )}
-          <button type="button" aria-label="Картинка в картинке" title="Картинка в картинке" onClick={togglePictureInPicture}>▣</button>
+          {cast.supported && (
+            <button type="button" className="animesoul-cast-button" aria-label="На телевизор" title={localPlayback ? "Cast доступен только для онлайн-серий" : "На телевизор · Google Cast"} disabled={!cast.canCast} onClick={cast.choose}><CastIcon /></button>
+          )}
+          {pictureInPictureSupported && (
+            <button type="button" aria-label="Картинка в картинке" title="Картинка в картинке" onClick={togglePictureInPicture}>▣</button>
+          )}
           <button
             type="button"
             className={`animesoul-player-settings-button${settingsOpen ? " active" : ""}`}
@@ -965,55 +1588,14 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         </div>
       </div>
 
-      {settingsOpen && (
-        <aside className="animesoul-player-settings" aria-label="Настройки плеера" onClick={(event: MouseEvent) => event.stopPropagation()}>
-          <header>
-            <div><strong>Настройки</strong><span>{seasonLabel} · {episodeLabel}</span></div>
-            <button type="button" aria-label="Закрыть настройки" onClick={() => setSettingsOpen(false)}>×</button>
-          </header>
-          <div className="animesoul-player-settings-content">
-            <label>
-              <span>Озвучка</span>
-              <select value={menu.dubbing} onChange={event => menu.onDubbingChange(event.target.value)}>
-                {menu.dubbings.map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
-              </select>
-            </label>
-            <div className="animesoul-player-dubbing-actions">
-              <button type="button" className={menu.dubbingFavorite ? "active" : ""} aria-pressed={menu.dubbingFavorite} onClick={menu.onDubbingFavoriteToggle}>★ <span>В избранном</span></button>
-              <button type="button" className={menu.dubbingPreferredForTitle ? "active title" : ""} aria-pressed={menu.dubbingPreferredForTitle} onClick={menu.onDubbingPreferredForTitleToggle}>♥ <span>Для этого тайтла</span></button>
-            </div>
-            {activeDubbingOption?.warning && <div className="animesoul-player-duration-warning">⚠ {activeDubbingOption.warning}</div>}
-            <label>
-              <span>Сезон</span>
-              <select value={menu.season} onChange={event => menu.onSeasonChange(event.target.value)}>
-                {menu.seasons.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>Серия</span>
-              <select value={menu.episode} onChange={event => menu.onEpisodeChange(event.target.value)}>
-                {menu.episodes.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>Источник</span>
-              <select value={menu.source} onChange={event => menu.onSourceChange(event.target.value)}>
-                {menu.sources.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <div className="animesoul-player-stream-state">
-              <span>{localPlayback ? "Источник" : "Поток"}</span>
-              <strong>{localPlayback ? `Локальный файл · ${activeQuality || quality}p` : `${activeQuality || quality}p${activeBitrate ? ` · ${activeBitrate}` : ""}`}</strong>
-            </div>
-            <label className="animesoul-player-toolbar-toggle">
-              <input type="checkbox" checked={menu.externalToolbarVisible} onChange={event => menu.onExternalToolbarVisibleChange(event.target.checked)} />
-              <span>Показывать внешнюю панель</span>
-            </label>
-            {menu.downloadControls && <div className="animesoul-player-downloads">{menu.downloadControls}</div>}
-            {onFallback && <button type="button" className="animesoul-player-kodik-fallback" onClick={onFallback}>Открыть обычный плеер Kodik</button>}
-          </div>
-        </aside>
-      )}
+      {settingsOpen && (IS_ANDROID_APP && !fullscreenActive && !nativePictureInPicture && typeof document !== "undefined"
+        ? createPortal(
+            <div className="animesoul-player-settings-layer" role="presentation" onClick={() => setSettingsOpen(false)}>
+              {settingsPanel}
+            </div>,
+            document.body,
+          )
+        : settingsPanel)}
     </div>
   );
 });

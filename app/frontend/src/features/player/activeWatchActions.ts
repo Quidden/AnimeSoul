@@ -41,7 +41,8 @@ export function createActiveWatchActions({
             : originEpisodeKey ? [originEpisodeKey] : [];
 
         setProgress(current => {
-            const previousEpisodes = current[anime.anime_id]?.episodes;
+            const previousProgress = current[anime.anime_id];
+            const previousEpisodes = previousProgress?.episodes;
             const newlyWatched = changedKeys.some(key => (
                 !isEpisodeWatched(previousEpisodes?.[key])
                 && isEpisodeWatched(value.episodes[key])
@@ -50,6 +51,7 @@ export function createActiveWatchActions({
                 ...current,
                 [anime.anime_id]: {
                     ...value,
+                    resetAt: value.resetAt ?? previousProgress?.resetAt,
                     // Readable metadata only; the anime ID remains the storage key.
                     title: anime.title,
                 },

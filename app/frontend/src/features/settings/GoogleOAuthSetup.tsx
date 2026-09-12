@@ -1,3 +1,6 @@
+import type { CredentialCheck } from "./credentialImport";
+import { CredentialCheckList } from "./CredentialCheckList";
+
 type Props = {
   expanded: boolean;
   setExpanded: (value: boolean) => void;
@@ -7,6 +10,10 @@ type Props = {
   clientSecret: string;
   setClientSecret: (value: string) => void;
   onSave: () => void;
+  saving?: boolean;
+  message?: string;
+  messageTone?: "success" | "error";
+  checks?: CredentialCheck[];
 };
 
 /**
@@ -23,6 +30,10 @@ export function GoogleOAuthSetup({
   clientSecret,
   setClientSecret,
   onSave,
+  saving = false,
+  message = "",
+  messageTone = "success",
+  checks = [],
 }: Props) {
   return (
     <details
@@ -91,6 +102,7 @@ export function GoogleOAuthSetup({
             <span>Client ID</span>
             <input
               className="settings-text-input"
+              name="cloud-google-client-id"
               value={clientId}
               onChange={(event) => setClientId(event.target.value)}
               placeholder="000000000000-xxx.apps.googleusercontent.com"
@@ -103,10 +115,11 @@ export function GoogleOAuthSetup({
             <input
               type="password"
               className="settings-text-input"
+              name="cloud-google-client-secret"
               value={clientSecret}
               onChange={(event) => setClientSecret(event.target.value)}
               placeholder={hasCredentials ? "Оставьте пустым, чтобы сохранить текущий" : "GOCSPX-…"}
-              autoComplete="new-password"
+              autoComplete="off"
             />
             <small>
               {hasCredentials
@@ -114,7 +127,15 @@ export function GoogleOAuthSetup({
                 : "Хранится только локально и не добавляется в Git."}
             </small>
           </label>
-          <button className="cloud-oauth-save" onClick={onSave}>Сохранить OAuth-ключи</button>
+          <button className="cloud-oauth-save" disabled={saving} onClick={onSave}>
+            {saving ? "Проверяем…" : "Проверить и сохранить"}
+          </button>
+          <CredentialCheckList checks={checks} />
+          {message && (
+            <p className={`credentials-feedback ${messageTone}`} role="status" aria-live="polite">
+              {message}
+            </p>
+          )}
         </div>
 
         <p className="cloud-oauth-warning">

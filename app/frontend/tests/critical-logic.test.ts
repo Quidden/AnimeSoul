@@ -1,17 +1,86 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { castMediaSource, castOwnsPlayback, EMPTY_CAST_STATE, registerCastControl, commandCastVideo } from "../src/lib/cast.ts";
+
+test("Cast accepts only supported remote HTTPS video, never local media", () => {
+  const hls = { quality: 720, src: "https://media.example/episode.m3u8?token=sample", type: "hls" };
+  assert.deepEqual(castMediaSource(hls), { url: hls.src, type: "application/x-mpegURL" });
+  assert.equal(castMediaSource(hls, true), null);
+  for (const src of ["/api/downloads/media/1", "http://media.example/movie.mp4", "https://127.0.0.1/video.mp4", "https://localhost/video.mp4", "https://[::1]/video.mp4", "https://user:pass@media.example/video.mp4", "file:///movie.mp4", "content://movies/1", "blob:https://media.example/id"]) {
+    assert.equal(castMediaSource({ ...hls, src }), null, src);
+  }
+  assert.equal(castMediaSource({ ...hls, src: "https://media.example/movie.mp4", type: "video/mp4" })?.type, "video/mp4");
+  assert.equal(castMediaSource({ ...hls, src: "https://media.example/embed", type: "text/html" }), null);
+});
+
+test("Cast ignores stale receiver progress while another episode is loading", () => {
+  const state = { ...EMPTY_CAST_STATE, id: "episode-1" };
+  assert.equal(castOwnsPlayback(state, "episode-1"), true);
+  assert.equal(castOwnsPlayback(state, "episode-2"), false);
+  assert.equal(castOwnsPlayback({ ...state, pendingId: "episode-2" }, "episode-1"), false);
+  assert.equal(castOwnsPlayback(EMPTY_CAST_STATE, ""), false);
+});
+
+test("Cast imperative transport detaches cleanly and preserves ordinary local playback", () => {
+  const video = {} as HTMLVideoElement;
+  const calls: unknown[] = [];
+  assert.equal(commandCastVideo(video, "play"), false);
+  const unregister = registerCastControl(video, (method, seconds) => { calls.push([method, seconds]); return true; });
+  assert.equal(commandCastVideo(video, "seek", 42), true);
+  assert.deepEqual(calls, [["seek", 42]]);
+  unregister();
+  assert.equal(commandCastVideo(video, "pause"), false);
+});
 import {
   acknowledgeTrackedEpisode,
   compareTrackedByRelease,
   collectPlayableEpisodeDates,
   reconcileTrackedEpisodes,
 } from "../src/lib/tracking.ts";
+import { fetchTrackingSnapshot } from "../src/features/tracking/api.ts";
+import { animeMyAnimeListId, episodeAddedDate, episodeAirDate, fetchEpisodeAirDates, formatAirDate } from "../src/lib/episodeDates.ts";
+
+test("episode air dates use original part numbering and never provider update timestamps", () => {
+  const video = { video_id: 1, number: "13", originNumber: "1", date: 1788537229,
+    iframe_url: "https://player/1", data: { dubbing: "A", player: "Kodik" } };
+  assert.equal(episodeAirDate(video, { "1": "2021-07-06", "13": "2026-09-04" }), "2021-07-06");
+  assert.equal(formatAirDate("2021-07-06"), "06.07.2021");
+  assert.equal(episodeAirDate(video, { "1": "2026-02-30" }), undefined);
+  assert.equal(episodeAirDate(video), undefined);
+  assert.equal(episodeAddedDate(video), undefined);
+  assert.equal(episodeAddedDate({ ...video, episode_added_at: 1788537229 }), "2026-09-04");
+  assert.equal(animeMyAnimeListId({ anime_id: 1, title: "Test", remote_ids: { myanimelist_id: "77" } }), 77);
+  assert.equal(animeMyAnimeListId({ anime_id: 1, title: "Test", remote_ids: { kp_id: 77 } }), undefined);
+});
+
+test("episode dates load later pages, reuse requests and keep earlier pages on an outage", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  try {
+    globalThis.fetch = async input => {
+      const url = String(input);
+      calls.push(url);
+      const page = Number(new URL(url, "http://localhost").searchParams.get("page"));
+      if (page === 3) return new Response("{}", { status: 503 });
+      return new Response(JSON.stringify({ dates: { [page === 1 ? "1" : "101"]: "2026-09-04" }, hasNextPage: true }));
+    };
+    const [left, right] = await Promise.all([fetchEpisodeAirDates(98765), fetchEpisodeAirDates(98765)]);
+    assert.deepEqual(left, { "1": "2026-09-04", "101": "2026-09-04" });
+    assert.deepEqual(right, left);
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 import {
   animeSearchQueryVariants,
   animeSearchScore,
   episodeResumePosition,
+  fetchFamily,
   latestResumePoint,
   matchesAnimeSearch,
+  resolveResumeAnime,
+  shikimoriAnimeUrl,
   toggleEpisodeWatched,
 } from "../src/lib/anime.ts";
 import {
@@ -37,15 +106,205 @@ import {
   preferredDubbingForEpisode,
   preferredOfflineVideo,
   preferredPlayer,
+  playbackAnimeForVideo,
   subtitleTranslationLabel,
 } from "../src/lib/playerPreferences.ts";
 import {
   fetchKodikStream,
   hlsLevelForQuality,
   isSameEpisodeDubbingSwitch,
+  kodikStreamEpisodeKey,
+  kodikStreamRequestKey,
   lowestQualitySource,
 } from "../src/lib/kodikStream.ts";
 import { hasKodikSecretAccess } from "../src/lib/downloads.ts";
+import {
+  activePlaybackSelection,
+  createPlaybackProgressTarget,
+  nextEpisodeInSeason,
+  recordPlaybackObservation,
+} from "../src/lib/playerProgress.ts";
+import {
+  backfillFieldRevisions,
+  changedFieldRevisions,
+  isStorageDocumentShape,
+} from "../src/lib/storageSafety.ts";
+import { searchSettings } from "../src/features/settings/settingsCatalog.ts";
+import { parseDebugStack, sanitizeDebugUrl } from "../src/lib/debugLog.ts";
+import {
+  CREDENTIAL_JSON_EXAMPLE,
+  CREDENTIAL_TEXT_EXAMPLE,
+  mergePolledClientId,
+  parseCredentialImport,
+} from "../src/features/settings/credentialImport.ts";
+import { videoSourceIssues } from "../src/lib/sourceDiagnostics.ts";
+import { ApiRequestError, requestJson } from "../src/lib/http.ts";
+
+test("JSON transport preserves backend error details, status and code", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ detail: "Точная ошибка backend", code: "CONFLICT" }),
+    { status: 409, headers: { "Content-Type": "application/json" } },
+  );
+  try {
+    await assert.rejects(
+      requestJson("https://example.invalid/api", { errorMessage: "Запасная ошибка" }),
+      (error: unknown) => {
+        assert.ok(error instanceof ApiRequestError);
+        assert.equal(error.message, "Точная ошибка backend");
+        assert.equal(error.status, 409);
+        assert.equal(error.code, "CONFLICT");
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Shikimori links prefer a remote id and keep a title-search fallback", () => {
+  assert.equal(
+    shikimoriAnimeUrl({ anime_id: 10, title: "Тест", remote_ids: { shikimori_id: "51105" } }),
+    "https://shikimori.one/animes/51105",
+  );
+  assert.equal(
+    shikimoriAnimeUrl({ anime_id: -18229, title: "Гатчамен" }),
+    "https://shikimori.one/animes/18229",
+  );
+  assert.equal(
+    shikimoriAnimeUrl({ anime_id: 10, title: "Re:Zero / Жизнь с нуля" }),
+    "https://shikimori.one/animes?search=Re%3AZero%20%2F%20%D0%96%D0%B8%D0%B7%D0%BD%D1%8C%20%D1%81%20%D0%BD%D1%83%D0%BB%D1%8F",
+  );
+});
+
+test("credential import accepts flat JSON without exposing or renaming values", () => {
+  assert.deepEqual(parseCredentialImport(JSON.stringify({
+    yummyPublicToken: "yummy-value",
+    kodikPublicKey: "kodik-public",
+    kodikPrivateKey: "kodik-private",
+    googleClientId: "desktop.apps.googleusercontent.com",
+    googleClientSecret: "GOCSPX-secret",
+  })), {
+    yummyPublicToken: "yummy-value",
+    kodikPublicKey: "kodik-public",
+    kodikPrivateKey: "kodik-private",
+    googleClientId: "desktop.apps.googleusercontent.com",
+    googleClientSecret: "GOCSPX-secret",
+  });
+});
+
+test("credential examples shown in settings remain valid import files", () => {
+  const expected = {
+    yummyPublicToken: "ВАШ_YUMMY_PUBLIC_TOKEN",
+    kodikPublicKey: "ВАШ_KODIK_PUBLIC_KEY",
+    kodikPrivateKey: "ВАШ_KODIK_PRIVATE_KEY",
+    googleClientId: "ВАШ_GOOGLE_CLIENT_ID",
+    googleClientSecret: "ВАШ_GOOGLE_CLIENT_SECRET",
+  };
+  assert.deepEqual(parseCredentialImport(CREDENTIAL_JSON_EXAMPLE), expected);
+  assert.deepEqual(parseCredentialImport(CREDENTIAL_TEXT_EXAMPLE), expected);
+});
+
+test("credential import accepts TXT aliases and downloaded Google OAuth JSON", () => {
+  assert.deepEqual(parseCredentialImport([
+    "YUMMY_PUBLIC_TOKEN = yummy-value",
+    "KODIK_PUBLIC_KEY: kodik-public",
+    "KODIK_PRIVATE_KEY='kodik-private'",
+  ].join("\n")), {
+    yummyPublicToken: "yummy-value",
+    kodikPublicKey: "kodik-public",
+    kodikPrivateKey: "kodik-private",
+  });
+  assert.deepEqual(parseCredentialImport(JSON.stringify({
+    installed: {
+      client_id: "desktop.apps.googleusercontent.com",
+      client_secret: "GOCSPX-secret",
+      redirect_uris: ["http://localhost"],
+    },
+  })), {
+    googleClientId: "desktop.apps.googleusercontent.com",
+    googleClientSecret: "GOCSPX-secret",
+  });
+});
+
+test("Google status polling never overwrites a dirty OAuth draft", () => {
+  assert.equal(mergePolledClientId("saved-id", "", true), "");
+  assert.equal(mergePolledClientId("saved-id", "draft-id", true), "draft-id");
+  assert.equal(mergePolledClientId("saved-id", "stale-id", false), "saved-id");
+});
+
+test("global search finds settings by title, description and keywords", () => {
+  assert.equal(searchSettings("автоскип опенинга")[0]?.id, "player-opening");
+  assert.equal(searchSettings("автосерия")[0]?.id, "player-next");
+  assert.equal(searchSettings("client secret")[0]?.id, "credentials-google");
+  assert.equal(searchSettings("постер карточка").some((item) => item.tab === "appearance"), true);
+  assert.equal(searchSettings("google drive").some((item) => item.tab === "cloud"), true);
+  assert.equal(searchSettings("настройки")[0]?.id, "section-settings");
+  assert.equal(searchSettings("история версий")[0]?.tab, "changelog");
+});
+
+test("debug diagnostics keep function and source file locations", () => {
+  const chrome = parseDebugStack([
+    "Error",
+    "    at recordDebugEvent (http://127.0.0.1:5173/src/lib/debugLog.ts:150:20)",
+    "    at saveProgress (http://127.0.0.1:5173/src/features/storage/useProfileStorage.ts?t=123:625:5)",
+  ].join("\n"));
+  assert.deepEqual(chrome, {
+    functionName: "saveProgress",
+    file: "src/features/storage/useProfileStorage.ts",
+    line: 625,
+    column: 5,
+  });
+
+  const firefox = parseDebugStack("Error\nloadVideos@http://127.0.0.1:5173/src/components/Player.tsx:444:9");
+  assert.equal(firefox.functionName, "loadVideos");
+  assert.equal(firefox.file, "src/components/Player.tsx");
+});
+
+test("debug URLs redact credentials before persistence", () => {
+  const sanitized = new URL(sanitizeDebugUrl("https://example.test/api?token=secret&episode=3"));
+  assert.equal(sanitized.searchParams.get("token"), "[скрыто]");
+  assert.equal(sanitized.searchParams.get("episode"), "3");
+});
+
+test("global settings search can omit desktop-only watch party controls", () => {
+  assert.equal(searchSettings("hamachi", { includeParty: false }).length, 0);
+  assert.equal(searchSettings("hamachi", { includeParty: true })[0]?.tab, "party");
+});
+
+test("global settings search ignores empty and one-character queries", () => {
+  assert.deepEqual(searchSettings(""), []);
+  assert.deepEqual(searchSettings(" а "), []);
+});
+
+test("storage hydration rejects malformed success payloads", () => {
+  assert.equal(isStorageDocumentShape({}), false);
+  assert.equal(isStorageDocumentShape({ profiles: [] }), false);
+  assert.equal(isStorageDocumentShape({ profiles: [{ id: "p1", snapshot: [] }] }), false);
+  assert.equal(isStorageDocumentShape({
+    activeProfile: "p1",
+    profiles: [{ id: "p1", name: "Main", snapshot: {} }],
+  }), true);
+});
+
+test("storage field revisions preserve old fields and advance only real edits", () => {
+  const initial = backfillFieldRevisions(undefined, 100);
+  const previous = {
+    favorites: [1], folders: [], progress: {}, ratings: {}, tracked: [],
+    theme: {}, toolbar: "bottom", playerPrefs: {}, historyClearedAt: 0,
+    historyEnabled: true, libraryExpanded: true, watchingExpanded: true,
+    historyExpanded: true, watchingHidden: [],
+  };
+  const revised = changedFieldRevisions(
+    previous,
+    { ...previous, progress: { 1: { episodes: {} } } },
+    initial,
+    200,
+  );
+  assert.equal(revised.progress, 200);
+  assert.equal(revised.favorites, 100);
+  assert.equal(revised.playerPrefs, 100);
+});
 
 test("custom player and downloads require the complete Kodik secret access pair", () => {
   assert.equal(hasKodikSecretAccess({ kodikPublicKeyConfigured: true, kodikPrivateKeyConfigured: true }), true);
@@ -53,12 +312,13 @@ test("custom player and downloads require the complete Kodik secret access pair"
   assert.equal(hasKodikSecretAccess({ kodikPublicKeyConfigured: false, kodikPrivateKeyConfigured: true }), false);
 });
 
-test("player preferences follow title voice, global favourites, then Kodik default", () => {
+test("player preferences follow manual override, global preferred voice, favourites, then provider", () => {
   const available = ["Kodik default", "AniLibria", "Dream Cast"];
-  assert.equal(preferredDubbing(available, "Dream Cast", ["AniLibria"], "Kodik default"), "Dream Cast");
-  assert.equal(preferredDubbing(available, "Missing", ["AniLibria", "Dream Cast"], "Kodik default"), "AniLibria");
-  assert.equal(preferredDubbing(available, "", ["Missing"], "Kodik default"), "Kodik default");
-  assert.equal(preferredDubbing(available, "", [], ""), "Kodik default");
+  assert.equal(preferredDubbing(available, "Dream Cast", "AniLibria", [], "Kodik default"), "Dream Cast");
+  assert.equal(preferredDubbing(available, "", "Dream Cast", ["AniLibria"], "Kodik default"), "Dream Cast");
+  assert.equal(preferredDubbing(available, "", "Missing", ["AniLibria", "Dream Cast"], "Kodik default"), "AniLibria");
+  assert.equal(preferredDubbing(available, "", "", ["Missing"], "Kodik default"), "Kodik default");
+  assert.equal(preferredDubbing(available, "", "", [], ""), "Kodik default");
 });
 
 test("dubbing switches never substitute another episode", () => {
@@ -70,18 +330,37 @@ test("dubbing switches never substitute another episode", () => {
   assert.equal(dubbingHasEpisode(videos, "Voice B", "5"), false);
 });
 
-test("resume keeps the requested episode before applying a favourite dubbing", () => {
+test("franchise playback resolves metadata from the video's own anime entry", () => {
+  const root = { anime_id: 100, title: "Season 1", remote_ids: { shikimori_id: 39535 } };
+  const seasonThree = { anime_id: 300, title: "Season 3", remote_ids: { shikimori_id: 59193 } };
+
+  assert.equal(
+    playbackAnimeForVideo(root, [root, seasonThree], {}, seasonThree.anime_id),
+    seasonThree,
+  );
+  assert.equal(
+    playbackAnimeForVideo(root, [root], { [seasonThree.anime_id]: seasonThree }, seasonThree.anime_id),
+    seasonThree,
+  );
+  assert.equal(playbackAnimeForVideo(root, [root], {}, seasonThree.anime_id), undefined);
+});
+
+test("episode selection applies global voices before an old resume voice", () => {
   const videos = [
     { number: "1", data: { dubbing: "Favourite" } },
     { number: "3", data: { dubbing: "Resume voice" } },
     { number: "3", data: { dubbing: "Fallback" } },
   ];
   assert.equal(
-    preferredDubbingForEpisode(videos, "3", "Resume voice", "Favourite", ["Favourite"], "Fallback"),
+    preferredDubbingForEpisode(videos, "3", "", "Favourite", ["Favourite"], "Resume voice", "Fallback"),
     "Resume voice",
   );
   assert.equal(
-    preferredDubbingForEpisode(videos, "3", "Missing", "Favourite", ["Favourite"], "Fallback"),
+    preferredDubbingForEpisode(videos, "3", "", "Favourite", ["Favourite"], "Missing", "Fallback"),
+    "Fallback",
+  );
+  assert.equal(
+    preferredDubbingForEpisode(videos, "3", "Fallback", "Favourite", [], "Resume voice", ""),
     "Fallback",
   );
 });
@@ -106,6 +385,30 @@ test("player flags a materially shorter Kodik dubbing without calling it censors
   ];
   assert.equal(dubbingDurationDeficit(videos, "Short", "6"), 321);
   assert.equal(dubbingDurationDeficit(videos, "Full", "6"), 0);
+  assert.equal(dubbingDurationDeficit([
+    ...videos,
+    {
+      number: "6",
+      duration: 1_100,
+      data: { dubbing: "Short", player: "Локальный файл · 720p" },
+      offline: { quality: 720 },
+    },
+  ], "Short", "6"), 0);
+});
+
+test("video source diagnostics say which provider and data failed", () => {
+  const issues = videoSourceIssues({
+    animeId: 77,
+    title: "Re:Zero",
+    seasonLabel: "Сезон 1",
+    sources: { yummy: "ok", kodik: "error" },
+    loadedVideos: 12,
+  });
+
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0]?.sourceLabel, "Kodik");
+  assert.match(issues[0]?.unavailableData ?? "", /озвучки/);
+  assert.match(issues[0]?.context ?? "", /Re:Zero/);
 });
 
 test("Kodik subtitle translations are separated from voice dubbings", () => {
@@ -180,6 +483,115 @@ test("custom player keeps the picture when only the dubbing changes", () => {
     videoId: 4,
     iframeUrl: "https://kodik.example/another-source",
   }), false);
+  assert.equal(isSameEpisodeDubbingSwitch(previous, {
+    ...previous,
+    videoId: 5,
+    dubbing: "ТО Дубляжная",
+    translationId: 3084,
+    originEpisode: "9",
+    sourceId: "59193",
+  }), false);
+
+  const unresolvedFamily = {
+    ...previous,
+    originAnimeId: 300,
+    originEpisode: "5",
+    sourceId: "39535",
+    sourceIdType: "shikimori" as const,
+    sourceTitle: "Season 1",
+  };
+  const resolvedFamily = {
+    ...unresolvedFamily,
+    videoId: 6,
+    dubbing: "Voice B",
+    translationId: 202,
+    sourceId: "59193",
+    sourceTitle: "Season 3",
+  };
+  assert.equal(kodikStreamEpisodeKey(unresolvedFamily), kodikStreamEpisodeKey(resolvedFamily));
+  assert.notEqual(kodikStreamRequestKey(unresolvedFamily), kodikStreamRequestKey(resolvedFamily));
+  assert.equal(isSameEpisodeDubbingSwitch(unresolvedFamily, resolvedFamily), true);
+});
+
+test("Kodik stream identity changes when late family resolver metadata is corrected", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    requests.push(body);
+    return new Response(JSON.stringify({
+      sources: [{
+        quality: 720,
+        src: `https://cdn.example/${body.sourceId}.m3u8`,
+        type: "hls",
+      }],
+      subtitles: [],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  const wrongRootIdentity = {
+    videoId: "to-episode-9-cache-regression",
+    season: 3,
+    episode: "9",
+    originAnimeId: 300,
+    originEpisode: "9",
+    dubbing: "ТО Дубляжная",
+    translationId: 3084,
+    iframeUrl: "https://kodik.example/seria/episode-9/hash/720p",
+    sourceId: "39535",
+    sourceIdType: "shikimori" as const,
+    sourceTitle: "Season 1",
+  };
+  const exactSeasonIdentity = {
+    ...wrongRootIdentity,
+    sourceId: "59193",
+    sourceTitle: "Season 3",
+  };
+
+  try {
+    assert.notEqual(
+      kodikStreamRequestKey(wrongRootIdentity),
+      kodikStreamRequestKey(exactSeasonIdentity),
+    );
+    const wrong = await fetchKodikStream(wrongRootIdentity);
+    const exact = await fetchKodikStream(exactSeasonIdentity);
+    assert.equal(wrong.sources[0].src, "https://cdn.example/39535.m3u8");
+    assert.equal(exact.sources[0].src, "https://cdn.example/59193.m3u8");
+    assert.equal(requests.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("online Kodik playback resolves a fresh temporary URL for every launch", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_input, init) => {
+    calls += 1;
+    assert.equal(init?.cache, "no-store");
+    return new Response(JSON.stringify({
+      sources: [{ quality: 720, src: `https://cdn.example/fresh-${calls}.m3u8`, type: "hls" }],
+      subtitles: [],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  const request = {
+    videoId: "fresh-link-regression",
+    season: 1,
+    episode: "3",
+    dubbing: "Test",
+    iframeUrl: "https://kodik.example/seria/3/hash/720p",
+  };
+
+  try {
+    const first = await fetchKodikStream(request);
+    const second = await fetchKodikStream(request);
+    assert.equal(calls, 2);
+    assert.equal(first.sources[0].src, "https://cdn.example/fresh-1.m3u8");
+    assert.equal(second.sources[0].src, "https://cdn.example/fresh-2.m3u8");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("downloaded episodes use a direct local stream without calling Kodik", async () => {
@@ -205,6 +617,103 @@ test("downloaded episodes use a direct local stream without calling Kodik", asyn
     });
     assert.equal(calls, 0);
     assert.deepEqual(resolved, directStream);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("late media updates stay attached to their immutable episode", () => {
+  const first = createPlaybackProgressTarget({
+    season: 1,
+    episode: "1",
+    dub: "Voice A",
+    player: "AnimeSoul",
+    originAnimeId: 101,
+    originEpisode: "1",
+  });
+  const second = createPlaybackProgressTarget({
+    season: 1,
+    episode: "2",
+    dub: "Voice A",
+    player: "AnimeSoul",
+    originAnimeId: 101,
+    originEpisode: "2",
+  });
+
+  const afterFirst = recordPlaybackObservation(undefined, first, {
+    time: 40,
+    duration: 1_400,
+    updatedAt: 1,
+  }).value;
+  const afterSecond = recordPlaybackObservation(afterFirst, second, {
+    time: 12,
+    duration: 1_400,
+    updatedAt: 2,
+  }).value;
+  const afterLateFirstEvent = recordPlaybackObservation(afterSecond, first, {
+    time: 43,
+    // Teardown can race metadata reset. It must keep the valid duration that
+    // the same immutable episode recorded earlier.
+    duration: 0,
+    updatedAt: 3,
+  }).value;
+
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(afterLateFirstEvent.episodes["1:1"].position, 43);
+  assert.equal(afterLateFirstEvent.episodes["1:1"].duration, 1_400);
+  assert.equal(afterLateFirstEvent.episodes["1:2"].position, 12);
+});
+
+test("auto-next stays inside the active season and never enters an alternate cut", () => {
+  const episodes = [
+    { season: 1, number: "24" },
+    { season: 1, number: "25" },
+    { season: 8, number: "1" },
+  ];
+  assert.deepEqual(nextEpisodeInSeason(episodes, 1, "24"), episodes[1]);
+  assert.equal(nextEpisodeInSeason(episodes, 1, "25"), undefined);
+  assert.equal(nextEpisodeInSeason(episodes, 7, "25"), undefined);
+});
+
+test("fullscreen AnimeSoul playback advances repeatedly after the first auto-next", () => {
+  const episodes = [
+    { season: 1, number: "1" },
+    { season: 1, number: "2" },
+    { season: 1, number: "3" },
+  ];
+  const staleFullscreenCursor = { season: 1, episode: "1" };
+  const uiAfterFirstTransition = { season: 1, episode: "2" };
+
+  const animeSoulSelection = activePlaybackSelection(
+    uiAfterFirstTransition,
+    staleFullscreenCursor,
+    true,
+    false,
+  );
+  assert.deepEqual(
+    nextEpisodeInSeason(episodes, animeSoulSelection.season, animeSoulSelection.episode),
+    episodes[2],
+  );
+
+  // A cross-origin iframe still needs its player-reported fullscreen cursor,
+  // because React intentionally waits until fullscreen closes before syncing.
+  assert.equal(
+    activePlaybackSelection(uiAfterFirstTransition, staleFullscreenCursor, true, true),
+    staleFullscreenCursor,
+  );
+});
+
+test("obsolete franchise discovery is aborted instead of retrying in the background", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  globalThis.fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+  });
+
+  try {
+    const pending = fetchFamily({ anime_id: 77, title: "Demo" }, "Demo", controller.signal);
+    controller.abort();
+    await assert.rejects(pending, error => error instanceof DOMException && error.name === "AbortError");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -352,9 +861,11 @@ test("Kodik event payload helpers accept common player formats", () => {
   assert.equal(playerDubbing({ translation: { title: "AniLibria" } }), "AniLibria");
   assert.equal(playerDubbing({ value: { translation: { name: "Dream Cast" } } }), "Dream Cast");
   assert.equal(playerDubbing('{"translation":{"title":"AniDUB"}}'), "AniDUB");
+  assert.equal(playerDubbing("{неполный payload"), "{неполный payload");
   assert.equal(playerTranslationId({ translation: { id: 610 } }), "610");
   assert.equal(playerTranslationId({ value: { translation_id: "711" } }), "711");
   assert.equal(playerTranslationId('{"translation":{"id":812}}'), "812");
+  assert.equal(playerTranslationId("812"), "");
 });
 
 test("tracking keeps a monotonic baseline and acknowledges an exact episode", () => {
@@ -396,6 +907,56 @@ test("tracking filters unavailable videos and non-selected dubbings", () => {
     ["A"],
   );
   assert.deepEqual([...dates.keys()], ["7:1"]);
+});
+
+test("tracking repairs phantom baselines once and detects the real release later", () => {
+  const legacy = {
+    animeId: 15066, animeIds: [15066, 25629, 30021], title: "Slime", dubs: ["A"],
+    knownEpisodes: 4, knownEpisodeKeys: ["15066:21", "25629:1", "25629:2", "30021:25"],
+    knownAnyEpisodeKeys: ["15066:21", "25629:1", "25629:2", "30021:25"],
+    pendingEpisodeKeys: ["25629:1"], newEpisodes: 1,
+    pendingOtherDubEpisodeKeys: ["25629:2"], otherDubEpisodes: 1, lastCheckedAt: 100,
+  };
+  const current = new Map([["15066:21", 1]]);
+  const repaired = reconcileTrackedEpisodes(legacy, legacy.animeIds, current, 200, current, [15066, 25629]);
+  assert.deepEqual(repaired.knownEpisodeKeys, ["15066:21", "30021:25"]);
+  assert.deepEqual(repaired.knownAnyEpisodeKeys, ["15066:21", "30021:25"]);
+  assert.equal(repaired.newEpisodes, 0);
+  assert.equal(repaired.otherDubEpisodes, 0);
+  assert.deepEqual(repaired.episodeIdentityCheckedIds, [15066, 25629]);
+  // Unavailable titles keep their history; subsequent partial results keep
+  // the repaired baseline monotonic even with a healthy-source marker.
+  const partial = reconcileTrackedEpisodes(repaired, legacy.animeIds, new Map(), 300, new Map(), [15066, 25629]);
+  assert.deepEqual(partial.knownEpisodeKeys, repaired.knownEpisodeKeys);
+  const otherVoice = new Map([...current, ["25629:1", 2] as const]);
+  const released = reconcileTrackedEpisodes(partial, legacy.animeIds, current, 400, otherVoice, [15066, 25629]);
+  assert.equal(released.newEpisodes, 0);
+  assert.equal(released.otherDubEpisodes, 1);
+  const dubbed = reconcileTrackedEpisodes(released, legacy.animeIds, otherVoice, 500, otherVoice, [15066, 25629]);
+  assert.deepEqual(dubbed.pendingEpisodeKeys, ["25629:1"]);
+  assert.equal(dubbed.otherDubEpisodes, 0);
+});
+
+test("tracking repairs only snapshots from the corrected backend with both sources available", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async input => {
+      const url = String(input);
+      if (url.includes("mode=details")) return new Response(JSON.stringify({ anime: [] }));
+      const id = Number(new URL(url, "http://localhost").searchParams.get("id"));
+      return new Response(JSON.stringify({
+        videos: id === 4 ? null : [], episode_identity_version: id === 3 ? undefined : 1,
+        _sources: { yummy: "ok", kodik: id === 2 ? "error" : "ok" },
+      }));
+    };
+    const snapshot = await fetchTrackingSnapshot({
+      animeId: 1, animeIds: [1, 2, 3, 4], title: "Test", knownEpisodes: 1, newEpisodes: 0,
+    });
+    assert.equal(snapshot?.successfulRequests, 3);
+    assert.deepEqual(snapshot?.identityCheckedAnimeIds, [1]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("tracking keeps baseline quiet and orders pending releases newest first", () => {
@@ -580,4 +1141,17 @@ test("continue watching resumes an unfinished rewatch", () => {
   assert.equal(episodeResumePosition(state), 92);
   assert.equal(point?.key, "2:2");
   assert.equal(point?.state.position, 92);
+});
+
+test("continue watching resolves a persisted local title before the remote catalog", () => {
+  const local = resolveResumeAnime([], 1248, "Локально сохранённое аниме");
+  assert.deepEqual(local, {
+    anime_id: 1248,
+    title: "Локально сохранённое аниме",
+  });
+  assert.equal(
+    resolveResumeAnime([{ anime_id: 1248, title: "Полная карточка" }], 1248, "Локальная")?.title,
+    "Полная карточка",
+  );
+  assert.equal(resolveResumeAnime([], 1248, undefined), undefined);
 });

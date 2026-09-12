@@ -39,7 +39,8 @@ class RuntimeInstanceTests(unittest.TestCase):
 
                 state = read_runtime_state(config_path)
                 self.assertIsNotNone(state)
-                self.assertEqual(target, root / "animesoul.runtime.json")
+                # Windows TEMP may use an 8.3 alias while the API resolves paths.
+                self.assertEqual(target, (root / "animesoul.runtime.json").resolve())
                 self.assertEqual(runtime_state_file(config_path), target)
                 self.assertEqual(state["instance_id"], "server-one")
                 self.assertEqual(state["pid"], 1234)
@@ -65,7 +66,7 @@ class RuntimeInstanceTests(unittest.TestCase):
             ):
                 self.assertEqual(
                     runtime_state_file(root / "ignored.json"),
-                    explicit_path,
+                    explicit_path.resolve(),
                 )
 
     def test_find_available_port_skips_occupied_ports(self) -> None:

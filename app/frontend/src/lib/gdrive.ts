@@ -1,9 +1,14 @@
+import type { CredentialSaveOutcome } from "../features/settings/credentialImport";
+import { requestJson } from "./http";
+
 /**
  * Google Drive Connection & Sync Status object returned from /api/gdrive/status.
  */
 export type GDriveStatus = {
   /** True if user has valid Google OAuth tokens stored */
   connected: boolean;
+  /** OAuth callback was accepted and awaits foreground token exchange. */
+  oauth_pending?: boolean;
   /** Primary email address of connected Google account */
   user_email: string;
   /** Full name of connected Google account */
@@ -39,48 +44,79 @@ export type GDriveSyncMode = "auto" | "local" | "cloud" | "merge" | "anime_only"
 /** Location in Google Drive for storage file ("visible" in AnimeSoul folder, or "appdata" hidden folder) */
 export type GDriveFolderMode = "visible" | "appdata";
 
+let pendingCompletion: Promise<{ pending: boolean; connected: boolean; user_email?: string }> | null = null;
+
 /**
  * Fetches the current Google Drive authentication and synchronization status.
  */
 export async function fetchGDriveStatus(): Promise<GDriveStatus> {
-  const res = await fetch("/api/gdrive/status");
-  if (!res.ok) throw new Error("Failed to fetch Google Drive status");
-  return res.json();
+  return requestJson("/api/gdrive/status", {
+    errorMessage: "Failed to fetch Google Drive status",
+  });
 }
 
 /**
  * Fetches the OAuth 2.0 authorization URL for Google Sign-In.
  */
 export async function fetchGDriveAuthUrl(): Promise<{ url: string; redirect_uri: string }> {
-  const res = await fetch("/api/gdrive/auth-url");
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Failed to get auth URL" }));
-    throw new Error(err.detail || "Failed to get auth URL");
+  return requestJson("/api/gdrive/auth-url", {
+    errorMessage: "Failed to get auth URL",
+  });
+}
+
+/** Finish a callback saved while Android had the app in background. */
+export async function completeGDriveAuth(): Promise<{ pending: boolean; connected: boolean; user_email?: string }> {
+  if (pendingCompletion) return pendingCompletion;
+  pendingCompletion = (async () => {
+    const payload = await requestJson<{
+      detail?: string;
+      pending?: boolean;
+      connected?: boolean;
+      user_email?: string;
+    }>("/api/gdrive/complete-auth", {
+      method: "POST",
+      errorMessage: "Не удалось завершить подключение Google Drive",
+    });
+    return {
+      pending: Boolean(payload.pending),
+      connected: Boolean(payload.connected),
+      user_email: payload.user_email,
+    };
+  })();
+  try {
+    return await pendingCompletion;
+  } finally {
+    pendingCompletion = null;
   }
-  return res.json();
 }
 
 /**
  * Saves custom Google OAuth Client ID and Secret to backend credentials storage.
  */
-export async function saveGDriveCredentials(clientId: string, clientSecret?: string): Promise<void> {
-  const res = await fetch("/api/gdrive/credentials", {
+export async function saveGDriveCredentials(clientId: string, clientSecret?: string): Promise<CredentialSaveOutcome> {
+  const payload = await requestJson<Partial<CredentialSaveOutcome> & { detail?: string }>("/api/gdrive/credentials", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       client_id: clientId,
       client_secret: clientSecret?.trim() || null,
     }),
+    errorMessage: "Не удалось проверить Google OAuth credentials",
   });
-  if (!res.ok) throw new Error("Failed to save Google OAuth credentials");
+  return {
+    saved: Boolean(payload.saved),
+    checks: Array.isArray(payload.checks) ? payload.checks : [],
+  };
 }
 
 /**
- * Revokes Google Drive access tokens and disconnects cloud sync.
+ * Asks the backend to revoke Google access, then disconnects cloud sync locally.
  */
 export async function disconnectGDrive(): Promise<void> {
-  const res = await fetch("/api/gdrive/disconnect", { method: "POST" });
-  if (!res.ok) throw new Error("Failed to disconnect Google Drive");
+  await requestJson("/api/gdrive/disconnect", {
+    method: "POST",
+    errorMessage: "Failed to disconnect Google Drive",
+  });
 }
 
 /**
@@ -94,19 +130,17 @@ export async function syncGDrive(
   mode: GDriveSyncMode = "auto",
   preferWatched = true,
   folderMode: GDriveFolderMode = "visible",
-): Promise<{ status: string; file_id?: string; document?: unknown }> {
-  const res = await fetch("/api/gdrive/sync", {
+  resolveInitialChoice = false,
+): Promise<{ status: string; file_id?: string; document?: unknown; backup?: string | null }> {
+  return requestJson("/api/gdrive/sync", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       mode,
       prefer_watched: preferWatched,
       folder_mode: folderMode,
+      resolve_initial_choice: resolveInitialChoice,
     }),
+    errorMessage: "Sync failed",
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Sync failed" }));
-    throw new Error(err.detail || "Sync failed");
-  }
-  return res.json();
 }

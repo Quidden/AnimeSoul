@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response
+from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..services.catalog import CatalogueUnavailableError, HybridCatalogueService
@@ -14,9 +18,80 @@ from ..services.yummy import YummyAnimeGateway
 
 
 router = APIRouter(prefix="/api/yummy", tags=["YummyAnime", "Kodik"])
-gateway = YummyAnimeGateway(settings.yummy_token)
+credentials_file = settings.data_dir / "api-credentials.json"
+
+
+def _stored_yummy_token(path: Path = credentials_file) -> str:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    return str(payload.get("yummyPublicToken") or "").strip() if isinstance(payload, dict) else ""
+
+
+gateway = YummyAnimeGateway(
+    _stored_yummy_token() or settings.yummy_token,
+    settings.data_dir,
+)
 kodik_gateway = KodikAnimeGateway(settings.data_dir)
 catalogue_service = HybridCatalogueService(gateway, kodik_gateway, settings.data_dir)
+
+
+class YummyCredentialsRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+
+
+@router.get("/credentials")
+async def yummy_credentials() -> dict[str, bool]:
+    """Report configuration without returning the public token itself."""
+
+    return {"configured": bool(gateway.token.strip())}
+
+
+@router.post("/credentials")
+async def save_yummy_credentials(payload: YummyCredentialsRequest) -> dict[str, object]:
+    """Validate and store a per-device YummyAnime public token."""
+
+    token = payload.token.strip()
+    candidate = YummyAnimeGateway(token)
+    try:
+        await candidate.request("/anime", {"limit": 1, "offset": 0}, refresh=True)
+    except httpx.HTTPStatusError as error:
+        detail = "YummyAnime отклонил Public token. Проверьте значение и доступ приложения."
+        raise HTTPException(status_code=422, detail=detail) from error
+    except (httpx.HTTPError, RuntimeError) as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Не удалось проверить Public token: источник временно недоступен.",
+        ) from error
+    finally:
+        await candidate.close()
+
+    credentials_file.parent.mkdir(parents=True, exist_ok=True)
+    current: dict[str, object] = {}
+    try:
+        loaded = json.loads(credentials_file.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            current = loaded
+    except (OSError, json.JSONDecodeError):
+        pass
+    current["yummyPublicToken"] = token
+    temporary = credentials_file.with_suffix(credentials_file.suffix + ".tmp")
+    encoded = json.dumps(current, ensure_ascii=False, indent=2) + "\n"
+    await asyncio.to_thread(temporary.write_text, encoded, encoding="utf-8")
+    await asyncio.to_thread(temporary.replace, credentials_file)
+    gateway.token = token
+    await gateway.clear_cache()
+    return {
+        "configured": True,
+        "saved": True,
+        "checks": [{
+            "field": "yummyPublicToken",
+            "label": "YummyAnime Public token",
+            "status": "valid",
+            "detail": "YummyAnime принял токен и вернул каталог.",
+        }],
+    }
 
 
 def _source_headers(sources: dict[str, str]) -> dict[str, str]:
@@ -40,13 +115,18 @@ async def yummy_proxy(
     limit: int = Query(24, ge=1, le=48),
     offset: int = Query(0, ge=0),
     q: str = "",
+    refresh: bool = False,
 ) -> dict:
     """Keep the UI contract while filling missing data from either provider."""
 
     try:
         if mode == "ping":
             started_at = time.perf_counter()
-            await gateway.request("/anime", {"limit": 1, "offset": 0})
+            await gateway.request(
+                "/anime",
+                {"limit": 1, "offset": 0},
+                refresh=True,
+            )
             _set_source_headers(response, {"yummy": "ok", "kodik": "unused"})
             return {
                 "ok": True,
@@ -54,27 +134,38 @@ async def yummy_proxy(
             }
         if mode == "details":
             requested = [item for item in ids.split(",") if item][:50]
-            anime, sources = await catalogue_service.details(requested)
+            anime, sources = await catalogue_service.details(requested, refresh=refresh)
             _set_source_headers(response, sources)
             return {"anime": anime, "_sources": sources}
         if mode == "videos":
             if id is None:
                 raise HTTPException(status_code=400, detail="Anime ID is required")
-            payload, sources = await catalogue_service.videos(id)
+            payload, sources = await catalogue_service.videos(id, refresh=refresh)
             _set_source_headers(response, sources)
             return {**payload, "_sources": sources}
         if mode == "trailers":
             if id is None:
                 raise HTTPException(status_code=400, detail="Anime ID is required")
-            trailers = await gateway.request(f"/anime/{id}/trailers") or []
+            trailers = await gateway.request(
+                f"/anime/{id}/trailers",
+                refresh=refresh,
+            ) or []
             _set_source_headers(response, {"yummy": "ok", "kodik": "unused"})
             return {"trailers": trailers}
         if mode == "schedule":
-            schedule = await gateway.request("/anime/schedule") or []
+            schedule = await gateway.request(
+                "/anime/schedule",
+                refresh=refresh,
+            ) or []
             _set_source_headers(response, {"yummy": "ok", "kodik": "unused"})
             return {"schedule": schedule}
 
-        anime, sources = await catalogue_service.catalogue(q.strip(), limit, offset)
+        anime, sources = await catalogue_service.catalogue(
+            q.strip(),
+            limit,
+            offset,
+            refresh=refresh,
+        )
         _set_source_headers(response, sources)
         return {
             "anime": anime,
@@ -101,3 +192,13 @@ async def yummy_proxy(
             detail="YummyAnime API is temporarily unavailable",
             headers=_source_headers({"yummy": "error", "kodik": "unused"}),
         ) from error
+
+
+async def close_yummy_services() -> None:
+    """Release provider connection pools during desktop or Android shutdown."""
+
+    await asyncio.gather(
+        gateway.close(),
+        kodik_gateway.close(),
+        return_exceptions=True,
+    )

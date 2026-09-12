@@ -571,6 +571,35 @@
   padding: 16px 18px 18px;
 }
 
+.player-settings-dubbing-actions {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #342a3d;
+  border-radius: 11px;
+  background: #ffffff07;
+}
+
+.player-settings-dubbing-actions > span {
+  overflow: hidden;
+  color: #aaa2b0;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-settings-dubbing-actions > span b { color: #eee8f2; }
+.player-settings-dubbing-actions > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.player-settings-dubbing-actions button {
+  min-height: 38px;
+  border: 1px solid #403547;
+  border-radius: 9px;
+  background: #211c27;
+  color: #8d8494;
+}
+.player-settings-dubbing-actions button.active { border-color: #b9974e; color: #ffd76b; }
+.player-settings-dubbing-actions button.active.title { border-color: #b45c7b; color: #ff9abb; }
+
 .player-settings-content > .toggle-row {
   justify-content: space-between;
   flex-direction: row-reverse;

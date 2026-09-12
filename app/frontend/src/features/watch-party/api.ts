@@ -1,4 +1,5 @@
 import type { PartyState } from "../../lib/types";
+import { requestJson } from "../../lib/http";
 import type { WatchPartySession } from "./types";
 
 export const WATCH_PARTY_PROTOCOL = 2;
@@ -70,36 +71,22 @@ export async function postWatchParty<T = unknown>(
   path: string,
   body: unknown,
 ): Promise<T> {
-  const response = await fetch(endpoint(server, path), {
+  return requestJson<T>(endpoint(server, path), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    errorMessage: "Ошибка комнаты",
   });
-  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (!response.ok) {
-    const error = new Error(String(payload.error || "Ошибка комнаты")) as WatchPartyRequestError;
-    error.status = response.status;
-    error.code = typeof payload.code === "string" ? payload.code : undefined;
-    throw error;
-  }
-  return payload as T;
 }
 
 export async function fetchWatchPartyState(
   server: string,
   roomId: string,
 ): Promise<PartyState> {
-  const response = await fetch(
+  const payload = await requestJson<PartyState>(
     endpoint(server, `/watch-party/state?room=${encodeURIComponent(roomId)}`),
-    { cache: "no-store" },
+    { cache: "no-store", errorMessage: "Комната недоступна" },
   );
-  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (!response.ok) {
-    const error = new Error(String(payload.error || "Комната недоступна")) as WatchPartyRequestError;
-    error.status = response.status;
-    error.code = typeof payload.code === "string" ? payload.code : undefined;
-    throw error;
-  }
   assertCompatibleWatchPartyProtocol(payload);
-  return normalizeParty(payload as unknown as PartyState);
+  return normalizeParty(payload);
 }
