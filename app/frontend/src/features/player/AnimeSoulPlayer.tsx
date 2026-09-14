@@ -1140,16 +1140,19 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     return () => window.removeEventListener("animesoul-native-back", nativeBack);
   }, [settingsOpen, quickPickerOpen]);
 
-  const keyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const keyboard = (event: KeyboardEvent) => {
     const video = videoRef.current;
-    const key = event.key.toLocaleLowerCase();
-    if (key === "escape" && (settingsOpen || quickPickerOpen)) { setSettingsOpen(false); setQuickPickerOpen(false); return; }
+    const key = /^Key[KMFC]$/.test(event.code) ? event.code.slice(3).toLowerCase() : event.key.toLocaleLowerCase();
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (key === "escape" && (settingsOpen || quickPickerOpen)) { event.preventDefault(); setSettingsOpen(false); setQuickPickerOpen(false); return; }
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest("button");
     if (
-      !video
-      || event.altKey || event.ctrlKey || event.metaKey
-      || (event.target instanceof Element
-        && event.target.closest("button,input,select,textarea,[contenteditable=true]"))
+      !video || cast.active || settingsOpen || quickPickerOpen
+      || target?.closest("input,select,textarea,summary,a[href],[contenteditable]:not([contenteditable='false']),[role='textbox'],[role='slider'],[role='dialog']")
+      || (button && (!shell.current?.contains(button) || key === " "))
     ) return;
+    if (event.repeat && !["arrowleft", "arrowright"].includes(key)) return;
     if ([" ", "k"].includes(key)) togglePlayback();
     else if (key === "arrowleft") video.currentTime = Math.max(0, video.currentTime - 10);
     else if (key === "arrowright") video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
@@ -1163,6 +1166,14 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     event.preventDefault();
     showControls();
   };
+
+  // Clicking play may leave focus on a button or on the page after that
+  // button disappears. Listen at window level so playback shortcuts still
+  // work, while preserving native editing and button activation above.
+  useEffect(() => {
+    window.addEventListener("keydown", keyboard);
+    return () => window.removeEventListener("keydown", keyboard);
+  });
 
   const updateTimelinePreview = (element: HTMLDivElement, clientX: number) => {
     if (!selectedSource || cast.active || duration <= 0) return;
@@ -1218,7 +1229,6 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       data-casting={cast.active || undefined}
       className={`animesoul-player${localPlayback ? " is-local" : ""}${loading ? " is-loading" : ""}${loading && (!stream || localPlayback) ? " is-preparing" : ""}${controlsShown ? " controls-visible" : ""}${timelinePreview.visible ? " timeline-preview-visible" : ""}${settingsOpen ? " settings-open" : ""}${quickPickerOpen ? " quick-picker-open" : ""}${videoFit === "cover" ? " fit-cover" : ""}${videoFit === "ambient" && !nativePictureInPicture ? " ambient-light" : ""}${nativePictureInPicture ? " native-pip" : ""}`}
       tabIndex={0}
-      onKeyDown={keyboard}
       onPointerMove={event => {
         if (event.pointerType === "touch") return;
         setControlsHovered(event.target instanceof Element

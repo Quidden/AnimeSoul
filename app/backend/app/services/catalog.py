@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .anime_identity import anime_match_score
+from .episode_links import normalize_episode_links
 from .kodik import (
     KodikAnimeGateway,
     KodikNotConfiguredError,
@@ -467,4 +468,8 @@ class HybridCatalogueService:
             raise CatalogueUnavailableError("Серии недоступны в YummyAnime и Kodik", sources)
         if anime:
             await self.registry.remember([anime])
-        return {"anime": anime or {}, "videos": videos, "episode_identity_version": 1}, sources
+        return {
+            "anime": anime or {},
+            **normalize_episode_links(anime or {}, videos),
+            "episode_identity_version": 1,
+        }, sources
