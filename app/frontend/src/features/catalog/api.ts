@@ -1,6 +1,6 @@
 import type {Anime, HeroTrailer, ScheduleEntry, Video} from "../../lib/types";
 import {requestJson} from "../../lib/http";
-
+//test
 type AnimePayload = {anime?: Anime[]; error?: string};
 type VideoPayload = {
     anime?: Anime;
