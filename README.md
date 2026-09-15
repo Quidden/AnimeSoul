@@ -13,8 +13,7 @@ AnimeSoul — локальное приложение для каталога, �
 ## Интерфейс
 
 ### Windows
-
-![Главная библиотека AnimeSoul на Windows](<img width="2500" height="1314" alt="зображення" src="https://github.com/user-attachments/assets/68aa5d34-ccf9-4c0d-8cca-c6f6d47eea1b" />
+<img width="2500" height="1314" alt="зображення" src="https://github.com/user-attachments/assets/68aa5d34-ccf9-4c0d-8cca-c6f6d47eea1b" />
 
 
 
