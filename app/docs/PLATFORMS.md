@@ -1,77 +1,66 @@
-# Windows и Android
+[English](PLATFORMS.md) | [Русский](PLATFORMS.ru.md)
 
-AnimeSoul 0.2.7 использует общий React-интерфейс и FastAPI backend на Windows и
-Android. Профили, прогресс, папки, история, оценки и настройки имеют одинаковые
-контракты. Платформенный слой отвечает за запуск, хранение файлов, системные
-разрешения и жизненный цикл видео.
+# Windows and Android
 
-## Общий интерфейс
+Version **0.2.7** shares React and FastAPI contracts across platforms. Profiles, progress, folders, history, ratings and preferences use the same data model; shell, filesystem permissions and media lifecycle differ.
 
-- Трейлер остаётся верхним блоком главной страницы.
-- Библиотека разделена на вкладки «Смотрю сейчас», «Отслеживаю», «Папки и
-  избранное» и «История».
-- Карточка показывает постер с плавным переходом в фон, статус, текущую серию,
-  прогресс, дату последнего просмотра и доступные действия.
-- Длинный список раскрывается по 10 карточек. Внутреннего скролла у списка нет:
-  прокручивается документ.
-- В собственном плеере шкала времени показывает кадр и время будущей позиции.
-  У серии выводится исходная дата выхода либо дата её появления в источнике.
+| Capability | Windows browser / desktop | Android |
+| --- | --- | --- |
+| UI/server | Browser or PyWebView + local Python/Uvicorn | WebView + embedded Chaquopy/Python |
+| Default port | Source 8000; installed launcher 3001 unless configured | Release 19082; debug 19083 |
+| Watch Party | Available | UI and router disabled |
+| Online player | HLS/MP4 and provider iframe fallback | Same player with native media lifecycle |
+| Navigation during playback | Desktop watch behavior | Same mounted Watch becomes floating mini-player |
+| PiP | Depends on browser/WebView capability | Native application Picture-in-Picture |
+| Offline | Files in selected library folder | FFmpegKit remux → seekable MP4 → MediaStore |
+| Cast | No Android Cast bridge | Experimental online HTTPS HLS/MP4 |
+| Scaling | Profile sizes plus PyWebView Ctrl+wheel/Ctrl+0 | Responsive/safe-area layout |
 
-## Windows
+Home keeps the trailer/hero above library tabs; lists expand 10 items at a time and scroll with the document. Episode cards use source release dates when known, otherwise an added-date fallback/unknown label.
 
-Приложение запускается через `Start AnimeSoul.bat` в сохранённом режиме:
-обычный браузер или окно PyWebView. Локальный backend слушает loopback-адрес и
-раздаёт production-сборку frontend. В PyWebView `Ctrl` + колёсико меняет масштаб,
-а `Ctrl+0` возвращает 100%.
+## Windows build
 
-Исходная конфигурация хранится в `app/animesoul.python.json`. Установщик пишет
-программу в `%LOCALAPPDATA%\Programs\AnimeSoul`, конфигурацию и пользовательские
-данные — в `%LOCALAPPDATA%\AnimeSoul`.
-
-Сборка из `app/`:
+From `app/`:
 
 ```powershell
 .\packaging\build_windows.ps1
 ```
 
-Результат: `release-work/AnimeSoul-Setup-0.2.7.exe`.
+The script coordinates frontend preparation, PyInstaller launcher/runtime and Inno Setup. Output for this version: repository `release-work/AnimeSoul-Setup-0.2.7.exe`. Installed program: `%LOCALAPPDATA%\Programs\AnimeSoul`; config/data: `%LOCALAPPDATA%\AnimeSoul`. Read [application development commands](../README.md) for source execution.
 
-## Android
+## Android build
 
-Android APK упаковывает frontend, backend и Python runtime в одно приложение.
-Локальный сервер доступен только WebView на `127.0.0.1:19082`. Нижняя навигация,
-карточки библиотеки и отступы адаптированы к узкому экрану и системным панелям.
-
-При переходе со страницы просмотра видео сворачивается в панель над нижним
-меню. Ручка перемещает панель в пределах экрана, нажатие по центру возвращает
-просмотр, кнопка `×` полностью останавливает текущую сессию. При сворачивании
-всего приложения собственный плеер также поддерживает системный Picture-in-Picture.
-
-Скачанные серии публикуются через MediaStore в
-`Movies/AnimeSoul/<тайтл>/<сезон>`. Приватный индекс, ключи и настройки остаются
-в sandbox приложения. Google Cast работает только с прямыми HTTPS HLS/MP4.
-
-Сборка из `app/`:
+From `app/`:
 
 ```powershell
 .\mobile\build_android.ps1 -Configuration Release
 ```
 
-Результат: `app/mobile/releases/AnimeSoul-0.2.7-android-arm64.apk`. Release APK
-имеет `applicationId com.animesoul.mobile`, `versionCode 2070000` и подписывается
-постоянным ключом, поэтому устанавливается поверх предыдущей версии без очистки
-данных.
+Requires JDK 17, SDK 35 and Python 3.12 in app/.venv, plus release signing for release builds. Gradle builds frontend with `VITE_ANIMESOUL_PLATFORM=android` into `dist-android`, copies backend/runtime and packages ARM64 through Chaquopy. The Android build does not overwrite desktop `frontend/dist`.
 
-## Проверка релиза
+Output: `app/mobile/releases/AnimeSoul-0.2.7-android-arm64.apk`. Release applicationId `com.animesoul.mobile`, versionCode `2070000`. Debug uses `com.animesoul.mobile.debug` and port 19083 so it can coexist with release. Gradle direct debug command from `app/mobile/android`: `./gradlew.bat assembleDebug`; output is `app/build/outputs/apk/debug/app-debug.apk` relative to that directory.
 
-| Проверка | Windows | Android |
-| --- | --- | --- |
-| Типы, unit-тесты, CSS-аудит и production build | `npm run check` | общая frontend-проверка перед Gradle |
-| Backend-тесты | `python -m pytest` | тот же backend до упаковки |
-| Установка | запуск `.exe` | `adb install -r <apk>` |
-| Главная | desktop и узкое окно | портретный экран и системные отступы |
-| Видео | полный плеер, шкала и предпросмотр | полный плеер, мини-плеер, закрытие и PiP |
-| Офлайн | локальная библиотека | MediaStore, разрешения и восстановление индекса |
+The build reads a Yummy Public token from ignored source config. Google OAuth/Kodik secrets are entered on the device, not embedded by the build. [Android guide](../mobile/README.md), [permanent signing](../mobile/UPDATE_SIGNING.md).
 
-Версия frontend, Windows-скрипта, Inno Setup и Android `versionName` меняется
-одновременно. `versionCode` Android обязан быть больше уже опубликованного.
+## Android lifecycle and limitations
+
+Switching sections keeps Watch mounted as a draggable panel; its center reopens full view and × clears the session. System PiP is separate and applies when leaving the app. Modal/native-back handling prevents closing two UI layers at once.
+
+Downloads publish under `Movies/AnimeSoul/<title>/<season>`. Private index loss can be repaired by scanning permitted MediaStore videos. Mobile downloads are off by default; a network change can pause the active item. A dataSync foreground service polls Python, displays progress and holds a scoped wake lock. Notification permission is requested on Android 13+. Process kill/force-stop/reboot still loses the memory queue.
+
+Cast uses Google Default Media Receiver on the same LAN and sends direct online HTTPS media. It does not cast iframe players, downloaded episodes, selected subtitles or playback speed. Signed URL reachability, CORS and codecs depend on the provider/receiver. Returning to the phone restores paused playback. Backend stays on loopback; native bridge is restricted to the local top page.
+
+## Release verification
+
+| Area | Check |
+| --- | --- |
+| Shared logic | Ruff, `python -m unittest discover -s backend/tests -v`, `npm run check` |
+| Install/update | Windows installer; Android `adb install -r <apk>` with same signing key and increasing versionCode |
+| Library | Home tabs, pagination, dark/light, narrow/wide layout |
+| Playback | Real HLS, seek/timeline, dub/source changes, resume, quality/subtitles/skip |
+| Android lifecycle | Back, floating player, close, background, PiP, MediaSession |
+| Offline | Queue/cancel/delete, network pause, file/MediaStore playback and rescan |
+| Cast | Device discovery, handoff, progress/end, stop/return, receiver failure |
+| Data | Existing profiles retained, unknown fields, cloud first-choice and restore backup |
+
+Update frontend, Windows build/installer and Android versionName together. Android versionCode must exceed published builds, with the same permanent signing key. Browser harnesses complement but do not replace real decoding/device checks.

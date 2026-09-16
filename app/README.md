@@ -1,139 +1,79 @@
-# AnimeSoul — актуальное приложение
+[English](README.md) | [Русский](README.ru.md)
 
-Текущая версия: **0.2.7**.
+# AnimeSoul — application and development guide
 
-В этом каталоге находится поддерживаемая реализация AnimeSoul. React 19 и Vite
-отвечают за интерфейс, FastAPI — за локальное хранилище и интеграции, PyWebView
-— за необязательное desktop-окно. Браузерный и desktop-режимы обращаются к
-одному серверу и одному файлу сохранения.
+Version **0.2.7**. The maintained application lives here: React 19 + TypeScript + Vite, Python/FastAPI, optional PyWebView, and an Android wrapper with embedded Python. See the [project overview](../README.md), [screenshots](docs/SCREENSHOTS.md), and [documentation index](docs/README.md).
 
-## Возможности
+## Install and start
 
-- каталог, поиск с исправлением раскладки и псевдонимов, фильтры и группировка франшиз;
-- карточка тайтла, сезоны, серии, озвучки, источники и продолжение просмотра;
-- собственный HLS-плеер AnimeSoul с качеством, субтитрами, скоростью,
-  Picture-in-Picture, таймингами опенинга/эндинга и переключением озвучки без
-  сброса позиции;
-- прогресс, ручные отметки, пересмотры, история и статистика;
-- экспериментальная трансляция онлайн-серий на Google Cast/Chromecast из Android-приложения;
-- избранное, пользовательские папки, заметки и профили;
-- отслеживание новых серий по всей франшизе и выбранным озвучкам;
-- личные оценки и анонимные агрегированные оценки текущего сервера AnimeSoul;
-- комнаты совместного просмотра;
-- резервное сохранение и синхронизация через Google Drive;
-- темы, размеры элементов и настройки поведения плеера.
+Download packaged builds from [Releases](https://github.com/Quidden/AnimeSoul/releases). Source startup on Windows requires Python 3.11+, Node.js 22+ and internet access for dependency installation. CI uses Python 3.12. Configure YummyAnime Public token for its catalogue; direct Kodik streams/downloads need the separate Kodik Public/Private pair. Google OAuth is optional.
 
-Главная страница сохраняет трейлер в верхней части и показывает библиотеку ниже
-едиными карточками. Вкладки разделяют текущие просмотры, отслеживание, папки и
-историю; длинные списки раскрываются порциями по 10 без внутренней прокрутки.
-На Android воспроизведение остаётся доступным в мини-плеере при переходе между
-разделами. Панель можно перетащить, открыть обратно или закрыть вместе с видео.
-
-Метаданные и iframe-ссылки предоставляет внешний API. Доступность видео,
-таймкодов и кадров зависит от ответа источника.
-
-## Запуск в Windows
-
-| Файл | Назначение |
+| Launcher in this directory | Action |
 | --- | --- |
-| `Start AnimeSoul.bat` | запустить режим из локальной конфигурации |
-| `Start AnimeSoul in Browser.bat` | принудительно открыть браузер |
-| `Start AnimeSoul Desktop.bat` | принудительно открыть desktop-окно |
-| `Configure AnimeSoul.bat` | повторно настроить порт, Public token и режим |
+| `Start AnimeSoul.bat` | Prepare dependencies/build and start the saved mode |
+| `Start AnimeSoul in Browser.bat` | Start in a browser |
+| `Start AnimeSoul Desktop.bat` | Start a PyWebView window |
+| `Configure AnimeSoul.bat` | Configure port, token and launch mode again |
 
-Для запуска из исходников нужны Python 3.11+, Node.js 22+ и доступ к интернету
-при первой установке зависимостей. Для каталога нужен личный **Public token**
-YummyAnime. Прямой плеер Kodik включается после сохранения пары публичного и
-приватного ключей Kodik в настройках офлайн-библиотеки; приватный ключ хранится
-локально в защищённом виде и не передаётся frontend.
+Source settings: `app/animesoul.python.json` (Git-ignored). Installed settings: `%LOCALAPPDATA%\AnimeSoul\animesoul.python.json`, with data in its `data` subdirectory by default. Backend environment variables can override paths; see [Data model](docs/DATA_MODEL.md). In PyWebView, Ctrl + wheel changes interface zoom from 50% to 200%; Ctrl+0 resets it. Zoom is device-local.
 
-Исходный запуск хранит настройки в игнорируемом файле
-`app/animesoul.python.json`. Установленная сборка использует
-`%LOCALAPPDATA%\AnimeSoul\animesoul.python.json`, а пользовательские данные —
-подкаталог `data` рядом с этим конфигом.
+## Develop
 
-В desktop-режиме `Ctrl` + колёсико изменяет масштаб всего интерфейса от 50% до
-200%, `Ctrl+0` возвращает 100%. Значение хранится только на текущем устройстве.
-
-Различия платформ, пути артефактов и матрица проверки описаны в
-[`docs/PLATFORMS.md`](docs/PLATFORMS.md).
-
-## Разработка
-
-Backend:
+Run these commands from the repository root in PowerShell. Backend terminal:
 
 ```powershell
 cd app
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
-.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
+# Configure animesoul.python.json using the launcher, or set the required environment values.
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Frontend в другом терминале:
+Frontend terminal, also starting at the repository root:
 
 ```powershell
 cd app\frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Откройте `http://127.0.0.1:5173`. Vite проксирует `/api`, `/watch-party` и
-`/ws` на `http://127.0.0.1:8000`. Production-сборку раздаёт FastAPI:
+Open `http://127.0.0.1:5173`. Vite proxies `/api`, `/watch-party` and `/ws` to port 8000. Production is served by FastAPI on one origin. Build and run from `app/`:
 
 ```powershell
 npm --prefix frontend run build
 .\.venv\Scripts\python.exe run.py --mode browser
 ```
 
-Аргументы `run.py`:
+`run.py` accepts `--mode browser|desktop`, `--configure`, and `--config <path>`. Launcher startup checks runtime identity and required API capabilities before reusing an existing process; an unrelated occupied port triggers a search for a free port.
 
-- `--mode browser|desktop` — переопределить режим на один запуск;
-- `--configure` — повторить консольную настройку;
-- `--config <path>` — использовать явный файл машинной конфигурации.
+## Validate
 
-## Проверка
+From `app/`:
 
 ```powershell
-cd app
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
 npm --prefix frontend run check
+.\.venv\Scripts\python.exe tools/check_docs.py
 ```
 
-`npm --prefix frontend run check` последовательно запускает ESLint, строгий
-TypeScript typecheck, CSS-аудит, тесты критической логики, production-сборку и
-проверку bundle budgets. Те же проверки выполняет GitHub Actions для каждого
-push и pull request.
+The frontend gate runs ESLint, strict TypeScript, CSS audit, critical-logic tests, production build and bundle-budget audit. GitHub Actions runs the backend and frontend quality gates on push and pull request. The documentation checker verifies local links, bilingual guide pairs and route coverage.
 
-Для браузерных регрессий плеера запустите `npm --prefix frontend run dev` и
-откройте `/tests/player-browser.html` на адресе Vite. Страница автоматически
-проверяет курсор, скрытие интерфейса, клавиатуру, касания и переходы между
-потоками на настоящем React-компоненте с управляемыми событиями видео.
-Проверка декодирования реальных HLS-потоков и Android-устройства выполняется
-отдельно; эти браузерные сценарии не входят в `npm run check`.
+For player browser regressions, run Vite and open `/tests/player-browser.html`. It exercises the real React player using controlled video events: cursor, control hiding, keyboard, touch and stream changes. It is separate from `npm run check`. Real HLS decoding, device PiP, Cast and Android lifecycle still require integration/device checks. See [Platforms](docs/PLATFORMS.md).
 
-## Документация для разработчика
+## Technical entry points
 
-Начните с [`docs/README.md`](docs/README.md). Там собраны ссылки на:
+- [Architecture](ARCHITECTURE.md): layers and boundaries.
+- [UI](docs/UI.md) and [Backend](docs/BACKEND.md): ownership, functions and runtime behavior.
+- [HTTP API](docs/API_REFERENCE.md) and [generated route/model inventory](docs/API_SCHEMA.md): requests, responses, errors and callers.
+- [Call flows](docs/ENTRY_POINTS_AND_FLOWS.md) and [project map](docs/PROJECT_MAP.md): where changes belong.
+- [Data](docs/DATA_MODEL.md), [Drive sync](docs/GDRIVE_SYNC.md), [save compatibility](SAVE_COMPATIBILITY.md): schema 3, merge and recovery.
+- [CSS](docs/STYLES.md) and [refactoring guide](docs/REFACTORING_RECOMMENDATIONS.md).
 
-- архитектуру и карту модулей;
-- точки входа/выхода и цепочки функций;
-- полный справочник внутренних API и реально используемых полей YummyAnime;
-- формат сохранения и правила Google Drive merge;
-- структуру CSS, порядок импорта и динамические переменные;
-- план дальнейшего рефакторинга.
+FastAPI exposes interactive OpenAPI at `/docs`, ReDoc at `/redoc`, and the live schema at `/openapi.json`. The handwritten API guide adds dynamic payloads, native bridges and runtime restrictions not captured by OpenAPI.
 
-OpenAPI текущего локального backend доступен после запуска по `/docs`, а схема
-— по `/openapi.json`. Ручной справочник фиксирует дополнительные ограничения и
-связи с frontend, которых нет в автоматически созданной схеме.
+## Product boundaries
 
-## Совместимость данных
+Browser and desktop clients share the same backend/save. Android embeds the same stack, omits Watch Party, supports a floating mini-player, native PiP and MediaStore downloads. Cast is experimental and only supports direct online HTTPS HLS/MP4. Metadata, streams, subtitles and previews depend on the providers.
 
-Текущая схема сохранения — **3**. Frontend добавляет значения по умолчанию для
-известных полей и сохраняет неизвестные поля документа, профиля и снимка.
-Backend проверяет оболочку и записывает JSON атомарно. До изменения формата
-прочитайте [`SAVE_COMPATIBILITY.md`](SAVE_COMPATIBILITY.md) и
-[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
-
-Спасибо разработчикам YummyAnime за доступный API, на котором основаны каталог
-и воспроизведение AnimeSoul.
+Profile exports preserve library/progress/preferences and unknown fields. They exclude credentials, download files/index, runtime state and community databases. Read [save compatibility](SAVE_COMPATIBILITY.md) before changing schema or moving data.

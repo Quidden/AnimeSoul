@@ -1,39 +1,34 @@
+[English](RELEASE_0.2.0.md) | [Русский](RELEASE_0.2.0.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.2.0
 
-Крупное обновление основной Python + React версии AnimeSoul. Релиз объединяет все изменения, накопленные после 0.1.9 Beta 2.
+A major update to the primary Python + React app, collecting changes since 0.1.9 Beta 2.
 
-## Что добавлено
+## Added
 
-- Облачные резервные копии и перенос сохранений через Google Drive.
-- Единый центр настроек с разделами, поиском и подробными пояснениями.
-- Отдельный журнал отладки действий, статусов и ошибок AnimeSoul.
-- Ченжлог версий, доступный прямо из верхней панели.
-- Метка выхода серии в другой озвучке и сортировка отслеживаний по времени появления новых серий.
+- Google Drive cloud backups and save transfer.
+- Unified settings center with sections, search and detailed explanations.
+- Separate debug journal for actions, status and errors; release history accessible from the header.
+- Other-dub episode badge and tracking sorted by new-episode arrival.
 
-## Что починено
+## Fixed
 
-- Запуск упакованного FastAPI-сервера и поиск backend-модулей в установленной версии.
-- Падения лаунчера при старте, локализованная вставка из буфера и оформление окна запуска.
-- Ряд ошибок продолжения просмотра, прогресса, отслеживания серий и совместного просмотра.
-- Обратная связь облачного сохранения и поведение настроек Google Drive.
+- Packaged FastAPI startup and backend-module discovery in installed builds.
+- Launcher startup crashes, localized clipboard paste and launcher window appearance.
+- Resume, progress, episode tracking and Watch Party issues.
+- Cloud-save feedback and Google Drive settings behavior.
 
-## Что улучшено
+## Improved
 
-- Интерфейс Python + React разделён на понятные модули и подготовлен к дальнейшему расширению.
-- Статусы API, локального сохранения и облака приведены к единому компактному виду.
-- Настройки, библиотека, статистика и управление просмотром получили более последовательное поведение.
-- Окна changelog и отладки стали компактнее, получили корректную прокрутку и единый визуальный стиль.
+- Modular Python + React UI prepared for extension.
+- Consistent compact API/local/cloud status indicators.
+- More consistent settings, library, statistics and playback behavior.
+- Compact changelog/debug windows with correct scrolling and shared visual style.
 
-## Совместимость
+## Compatibility and installer
 
-Сохранения 0.1.9 Beta 2 совместимы с 0.2.0 и автоматически мигрируют при запуске. Конфигурация, библиотека и прогресс хранятся в `%LOCALAPPDATA%\AnimeSoul`.
+0.1.9 Beta 2 saves migrate automatically and remain compatible. Config/library/progress live in `%LOCALAPPDATA%\AnimeSoul`. AnimeSoul-Setup-0.2.0.exe installs a standalone launcher, shortcut, browser and desktop modes; users need no Python/Node.js.
 
-## Windows installer
-
-`AnimeSoul-Setup-0.2.0.exe` устанавливает автономную сборку с лаунчером, ярлыком и выбором запуска в браузере или отдельном desktop-окне. Python и Node.js пользователю не требуются.
-
-## Важно
-
-AnimeSoul не включает общий API-ключ. При первом запуске нужен личный Public token из [документации YummyAnime API](https://api.yani.tv/swagger). Private token приложению не нужен.
-
-Огромная благодарность разработчикам YummyAnime за предоставленный API — именно благодаря их работе стало возможным создание AnimeSoul.
+No shared API key is included. First launch needs your Public token from the [YummyAnime API documentation](https://api.yani.tv/swagger); private token is not required. Thanks to the YummyAnime developers.

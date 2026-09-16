@@ -1,39 +1,34 @@
+[English](RELEASE_0.2.7.md) | [Русский](RELEASE_0.2.7.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.2.7
 
-Дата выпуска: 12 сентября 2026 года.
+Release date: **September 12, 2026**.
 
-## Главное
+## Highlights
 
-- Трейлер сохранён в верхней части главной страницы, а библиотека под ним
-  перестроена в единые вкладки: текущие просмотры, отслеживание, папки и история.
-- Карточки стали ниже, получили настоящие постеры с плавным переходом в фон и
-  сохранили прогресс, метаданные и прежние действия.
-- Длинные списки загружаются по 10 элементов кнопкой «Загрузить ещё». Отдельной
-  прокрутки внутри списка больше нет.
-- Шапка и поиск корректно перестраиваются на узких desktop-экранах.
+- Trailer remains above a rebuilt library with unified watching/tracking/folders/history tabs.
+- Shorter cards use real posters fading into the background while retaining progress, metadata and actions.
+- Lists expand by 10 through Load more, without an internal list scrollbar.
+- Header/search adapt correctly to narrow desktop screens.
 
-## Плеер и серии
+## Player and episodes
 
-- Над шкалой времени собственного плеера появляется предпросмотр кадра с точной
-  позицией.
-- У серий показывается исходная дата выхода из Jikan/MAL, а при её отсутствии —
-  дата появления в источнике.
-- Сопоставление тайтлов, сезонов, озвучек и серий Kodik стало строже и больше не
-  добавляет фантомные, ещё не вышедшие или чужие эпизоды.
+- Timeline frame preview with precise future position.
+- Original release dates from Jikan/MAL, with provider-added date as fallback.
+- Stricter Kodik title/season/dub/episode matching avoids phantom, unreleased and unrelated episodes.
 
 ## Android
 
-- Главная и нижнее меню используют тот же структурированный интерфейс на
-  телефоне и учитывают безопасные системные области.
-- При переходе между разделами видео сворачивается в мини-плеер. Его можно
-  перемещать за ручку, вернуть в полный просмотр или закрыть кнопкой `×`.
-- Release APK обновляет установленную AnimeSoul с сохранением профилей,
-  прогресса, настроек и скачанных файлов.
+- Shared structured home/bottom navigation respects system safe areas.
+- Section navigation collapses video into a draggable mini-player; reopen full watch or close with ×.
+- Release APK updates installed AnimeSoul while retaining profiles, progress, preferences and downloaded files.
 
-## Совместимость и файлы
+## Compatibility and release files
 
-Формат сохранения совместим с 0.2.6. Для релиза публикуются:
+Save format remains compatible with 0.2.6.
 
-- `AnimeSoul-Setup-0.2.7.exe` — установщик Windows x64;
-- `AnimeSoul-0.2.7-android-arm64.apk` — Android 7.0+ для ARM64;
-- `AnimeSoul-0.2.7-SHA256SUMS.txt` — контрольные суммы обоих файлов.
+- AnimeSoul-Setup-0.2.7.exe — Windows x64 installer.
+- AnimeSoul-0.2.7-android-arm64.apk — Android 7.0+, ARM64.
+- AnimeSoul-0.2.7-SHA256SUMS.txt — checksums for both files.

@@ -1,129 +1,45 @@
+[English](README.md) | [Русский](README.ru.md)
+
 # AnimeSoul for Android
 
-Мобильная версия основана на AnimeSoul 0.2.7 и запускает тот же React +
-FastAPI стек внутри одного Android-приложения. Каталог, профили, сохранения,
-оценки, статистика, Google Drive, собственный плеер, загрузки и локальная
-библиотека используют те же контракты, что desktop-сборка.
+[Platforms](../docs/PLATFORMS.md) · [Permanent update signing](UPDATE_SIGNING.md) · [API](../docs/API_REFERENCE.md)
 
-Совместный просмотр намеренно отключён: в Android bundle нет его вкладки,
-панели плеера и активных backend-маршрутов.
+Android packages AnimeSoul 0.2.7's React interface, FastAPI backend and Python runtime in one ARM64 app. Catalogue, profiles, progress, ratings, statistics, Drive, direct player and offline library use the desktop contracts. Watch Party is deliberately omitted from both UI and backend routes.
 
-## Навигация и мини-плеер
+## Navigation and playback
 
-Нижнее меню повторяет основные разделы desktop-интерфейса и учитывает
-системную безопасную область Android. Главная страница использует те же вкладки
-библиотеки и те же карточки с постерами; длинный список раскрывается по 10
-элементов и прокручивается вместе со страницей.
+Bottom navigation respects Android safe areas. Home uses shared library tabs/cards and expands lists by 10. Leaving full watch view keeps the same player in a draggable floating panel above navigation; center reopens it, × clears the active session. Native Picture-in-Picture is a separate mode used when leaving the app. MediaSession integrates system playback controls.
 
-Если перейти из просмотра в другой раздел приложения, текущий плеер остаётся
-поверх страницы в компактном режиме. За ручку слева его можно перемещать в
-пределах видимой области над нижним меню. Центральная область возвращает на
-полный экран просмотра, а кнопка `×` закрывает видео и очищает активную сессию.
-Системный Picture-in-Picture Android остаётся отдельным режимом для случая,
-когда пользователь сворачивает всё приложение.
+## Offline media
 
-## Офлайн-хранилище
+HLS is remuxed by bundled FFmpegKit to one seekable MP4 without re-encoding and published through MediaStore to `Movies/AnimeSoul/<title>/<season>`. Private index, posters, keys and settings stay in the app sandbox. After reinstall/index loss, grant video access and scan downloaded files to recover title/season/episode/dub/quality/size/media reference from folders and filenames.
 
-На Android HLS-поток во время загрузки собирается встроенным FFmpegKit в один
-seekable MP4 без повторного кодирования. Готовое видео публикуется через
-MediaStore в видимую папку `Movies/AnimeSoul/<тайтл>/<сезон>` и доступно как
-AnimeSoulPlayer, так и обычному файловому менеджеру. Индекс, постеры, ключи и
-настройки остаются в защищённом sandbox приложения.
+Selection supports multiple seasons, from/to ranges and individual episodes. New selections become separate jobs in a sequential queue while earlier work continues. The library supports per-episode, season and whole-title deletion. Direct playback/downloads require the user's Kodik Public/Private pair via the Keys settings; Offline settings handle download behavior/location.
 
-Если приложение было переустановлено и приватный индекс исчез, экран
-`Скачанные` умеет заново просканировать `Movies/AnimeSoul`. После разрешения
-доступа к видео он восстанавливает тайтл, сезон, номер серии, озвучку,
-качество, размер и ссылку MediaStore из структуры папок и имён MP4.
+## Background jobs
 
-Выбор загрузок поддерживает несколько сезонов в одной операции, диапазоны
-`с–по` и отдельные серии. Новые наборы можно добавлять, пока предыдущий уже
-скачивается: они становятся самостоятельными задачами последовательной
-очереди. На экране библиотеки серии так же можно выбирать и удалять по одной,
-целым сезоном или целым тайтлом.
+Enqueue starts a dataSync foreground service. It polls local FastAPI independently of WebView timers, displays progress and holds a scoped PARTIAL_WAKE_LOCK while jobs remain active. Android 13+ asks for notification permission; denied permission may hide ordinary notification while the OS still exposes the active foreground service.
 
-Для собственного плеера и загрузок, как и в 0.2.7 для Windows, пользователь
-вводит официальную пару Public/Private ключей Kodik в разделе
-`Настройки → Офлайн`.
+Mobile-data downloads are disabled by default. Switching away from an allowed network can pause the active episode and update the notification; permitted connectivity resumes it. The Python queue is memory-only: force-stop, reboot or process termination loses queued work. Persistent WorkManager/DownloadManager ownership is not implemented.
 
-### Фоновые загрузки
+## Experimental Google Cast
 
-После добавления серий в очередь Android запускает `dataSync` foreground
-service. Он показывает системное уведомление с прогрессом, самостоятельно
-читает состояние локального FastAPI и удерживает scoped `PARTIAL_WAKE_LOCK`
-только пока очередь активна. Поэтому WebView можно свернуть, а экран —
-выключить: скачивание продолжает Python worker внутри процесса приложения.
+From AnimeSoulPlayer, choose the TV/device button. Phone and receiver must share a LAN and the TV must support Google Cast/Chromecast. Google Default Media Receiver handles the stream; no separate AnimeSoul TV app is required.
 
-На Android 13 и новее разрешение на уведомления запрашивается при первом
-запуске. Если пользователь его отклонит, Android всё равно показывает
-foreground service в системном диспетчере активных приложений, но обычное
-уведомление может быть скрыто.
+Handoff transfers position. Remote controls support play/pause/seek, receiver volume via device dialog and return to the phone paused. Progress/end events feed the existing episode/dub/auto-next controller. Session bar and system notification retain stop controls across navigation.
 
-Очередь пока живёт в памяти Python-процесса. Foreground service существенно
-снижает вероятность его завершения в фоне, но не может пережить
-`Принудительную остановку`, перезагрузку телефона или убийство процесса
-прошивкой. Для такой гарантии очередь и сетевой worker потребуется полностью
-перенести в персистентный Android WorkManager/DownloadManager.
+Supported: direct online HTTPS HLS/MP4. Unsupported: iframe players, offline files, transferring selected text/embedded subtitles or speed. Provider URL reachability/CORS/codecs can prevent receiver playback. FastAPI stays on loopback; private keys/settings are not exposed on the LAN. The AnimeSoulCast.postMessage bridge is restricted through AndroidX WebKit to the top local-origin page. SDK listeners are released with Activity destruction.
 
-Скачивание через мобильную сеть выключено по умолчанию. При смене Wi‑Fi на
-мобильную сеть активная серия ставится на паузу, foreground service обновляет
-уведомление, а продолжение начинается после возврата разрешённой сети.
+## Build and update
 
-## Трансляция
+Needs JDK 17, Android SDK 35, Python 3.12 from app/.venv and the Node frontend toolchain. Gradle builds `VITE_ANIMESOUL_PLATFORM=android` into dist-android, copies backend/mobile runtime and packages dependencies with Chaquopy.
 
-### Google Cast (Chromecast, экспериментально)
-
-Android-версия поддерживает трансляцию онлайн-серий из **AnimeSoulPlayer**:
-кнопка «На телевизор» открывает системный выбор Cast-устройства. Телефон и
-телевизор должны быть в одной локальной сети; у телевизора должна быть
-поддержка Google Cast либо подключённый Chromecast. Отдельная ТВ-версия
-AnimeSoul не нужна: используется Google Default Media Receiver.
-
-Текущая позиция передаётся телевизору; пульт позволяет ставить на паузу,
-перематывать, менять громкость через диалог устройства и возвращать видео
-на телефон (на паузе). Страница просмотра получает прогресс и событие конца
-серии от телевизора. Выбор серии/озвучки и автопереход продолжают использовать
-существующий контроллер; при уходе со страницы прогресс фиксируется, а
-постоянная панель и системное уведомление позволяют остановить трансляцию.
-
-В первой версии поддержаны прямые HTTPS HLS/MP4. iframe-плееры, скачанные
-серии, перенос выбранных текстовых/встроенных субтитров и скорости не
-поддерживаются. Доступность конкретного Kodik-потока зависит от его CORS,
-кодеков и доступности подписанной ссылки для телевизора. Сервер AnimeSoul
-остаётся на `127.0.0.1`; настройки и приватные ключи не открываются в LAN.
-
-Нативный мост `AnimeSoulCast.postMessage` доступен только верхней странице
-локального origin через AndroidX WebKit. Сторонние iframe не могут вызывать
-Cast-команды. Все подписки Cast SDK снимаются при уничтожении Activity.
-
-## Сборка APK
-
-Android-проект находится в `mobile/android`. Он требует JDK 17, Android SDK 35
-и Python 3.12 из `app/.venv`. Gradle перед сборкой:
-
-1. собирает frontend с `VITE_ANIMESOUL_PLATFORM=android`;
-2. копирует backend 0.2.7 и локальный runtime;
-3. упаковывает FastAPI/httpx/Uvicorn через Chaquopy;
-4. создаёт ARM64 APK.
-
-Команда из `app/mobile/android`:
+From `app/mobile/android`:
 
 ```powershell
 .\gradlew.bat assembleDebug
 ```
 
-Результат: `app/build/outputs/apk/debug/app-debug.apk`.
+Output relative to that directory: `app/build/outputs/apk/debug/app-debug.apk`. `build_android.ps1` reuses a local toolchain Gradle when present. Debug applicationId is `com.animesoul.mobile.debug`, port 19083; release is `com.animesoul.mobile`, port 19082. They can coexist without clearing release data.
 
-`app/mobile/build_android.ps1` использует локальный Gradle из
-`app/mobile/.toolchains/gradle`, если он уже установлен, поэтому повторная
-сборка не скачивает дистрибутив заново. Debug-вариант устанавливается как
-`com.animesoul.mobile.debug` и слушает локальный порт `19083`: его можно
-проверять рядом с подписанным `com.animesoul.mobile`, не удаляя приложение и
-его данные.
-
-Публичный APK собирается командой `assembleRelease` и требует постоянного
-ключа из переменных, описанных в [`UPDATE_SIGNING.md`](UPDATE_SIGNING.md).
-
-Public token YummyAnime читается во время сборки из игнорируемого Git файла
-`app/animesoul.python.json`. Google OAuth и пара ключей Kodik в APK не
-встраиваются: пользователь вводит их на телефоне, после чего значения хранятся
-в приватной папке приложения.
+Public APK: assembleRelease with the permanent key described in [signing](UPDATE_SIGNING.md), or run `./mobile/build_android.ps1 -Configuration Release` from app. The build reads a Yummy Public token from ignored app/animesoul.python.json. Google OAuth and Kodik keys are not embedded: users configure them on the phone. See [platform validation](../docs/PLATFORMS.md) for native/device checks beyond shared tests.

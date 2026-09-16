@@ -1,253 +1,35 @@
-# План дальнейшего рефакторинга AnimeSoul
+[English](REFACTORING_RECOMMENDATIONS.md) | [Русский](REFACTORING_RECOMMENDATIONS.ru.md)
 
-Документ относится к актуальному `app/` и описывает безопасные границы
-следующих изменений. Рефакторинг не должен незаметно менять пользовательское
-поведение, сетевые контракты или формат сохранения.
+# Refactoring guide
 
-## Неприкосновенные правила
+This document describes possible next slices, not shipped features or a release promise. Keep behavior, API contracts and schema 3 stable while moving code.
 
-1. Новая продуктовая логика добавляется в `app/`, не в `legacy-old-stack/`.
-2. Schema 3 остаётся читаемой обеими реализациями. Неизвестные поля должны
-   переживать migration, save, cloud merge и import/export.
-3. HTTP/WS contract меняется только вместе со всеми callers, tests и
-   [`API_REFERENCE.md`](API_REFERENCE.md).
-4. Нельзя молча менять progress, rewatch, tracking, Watch Party или Drive merge
-   под видом перемещения кода.
-5. Перемещение/переименование не меняет product version и schema version.
-6. Порядок CSS imports сохраняется, пока визуальный diff не доказал
-   эквивалентность.
+## Existing boundaries
 
-## Уже выполненные границы
+Catalogue transport/controller/presentation, tracking/party adapters, library selectors, profile builders/lifecycle/autosave, ratings retries, settings groups, player subcomponents, navigation/folder hooks and header cloud lifecycle are extracted. Typed events live in lib/events.ts. CSS has an ordered base manifest and feature bundles. Heavy pages/player/parser load lazily under bundle budgets.
 
-### Frontend
+Backend separates transport from services, pure Drive merge from OAuth, runtime identity from launcher UI, and Kodik helpers/resolution from offline queue/index. Android MediaSession/network monitor are separated from MainActivity. `App.tsx`, `Player.tsx` and `SettingsCenter.tsx` still coordinate multiple responsibilities.
 
-- Transport каталога вынесен в `features/catalog/api.ts`.
-- Catalog request/filter state находится в `useCatalogController`.
-- Franchise/card presentation находится в `useCatalogPresentation`.
-- Tracking transport находится в `features/tracking/api.ts`.
-- Watch Party transport/types отделены в `features/watch-party/`.
-- Library/history/statistics calculations находятся в чистых selectors.
-- Profile document construction/resolution находится в
-  `features/storage/profileDocument.ts`.
-- Profile lifecycle, migration, mirror и persistence находятся в
-  `features/storage/useProfileStorage.ts`.
-- Ratings transport/retry находятся в `features/ratings/`.
-- Settings разбиты на catalog/common row, appearance, playback, Watch Party,
-  profiles, offline и cloud; shell хранит только modal orchestration.
-- Player presentation разбит на toolbar, season list, schedule, metadata,
-  Watch Party panel, offline/download hooks и меню собственного плеера.
-- Home, catalog, ratings, statistics и folder имеют page boundaries.
-- Folder/navigation, profile autosave и header cloud lifecycle вынесены в
-  отдельные hooks.
-- Typed browser events определены в `lib/events.ts`.
-- CSS base разделён на ordered `base-*` modules; feature bundles сохранены.
-- Точные CSS-дубли запрещает `audit:css`; тяжёлые pages/player/modals и
-  source-map parser загружаются лениво под контролем bundle budgets.
+## Safe next slices
 
-`App.tsx`, `Player.tsx` и `SettingsCenter.tsx` остаются orchestration shells.
-Это осознанно: их следует уменьшать по одной проверяемой ответственности.
-
-### Backend
-
-- Routes являются transport adapters.
-- External/file/room logic находится в services.
-- Drive merge выделен в pure `gdrive_merge.py` и тестируется без сети.
-- Community ratings отделены в SQLite store и aggregate API.
-- Runtime instance ownership отделён от launcher/runtime UI.
-- Kodik normalization и private API resolver отделены от очереди/индекса в
-  `kodik_helpers.py` и `kodik_resolver.py`.
-- Android MediaSession и network monitor отделены от `MainActivity`.
-
-## Целевое направление
-
-```text
-pages/components -> feature hooks/controllers -> feature domain/API -> lib contracts
-FastAPI routes   -> use-case coordination      -> services/pure policy -> I/O
-```
-
-Не нужна абстракция ради симметрии. Новый слой оправдан, если он убирает
-несколько связанных решений из UI/router и даёт самостоятельный тест.
-
-## Этап 1: завершить anime detail boundary
-
-Сейчас `Watch` и часть detail composition остаются большим экраном. Нужно
-выделить typed page/view model, сохранив lifetime iframe в player feature.
-
-Кандидаты:
-
-- family/load state;
-- detail metadata и rating view model;
-- folder/favorite/tracking actions;
-- route/back intent.
-
-Критерии:
-
-- page не читает `StorageDocument` напрямую;
-- `App.tsx` передаёт model/actions, а не десятки взаимозависимых state setters;
-- открытие card/resume/new episode остаётся различимым;
-- catalog/resume tests проходят без изменения.
-
-## Этап 2: разделить player orchestration
-
-`Player.tsx` должен остаться владельцем iframe lifetime, но из него можно
-выделить hooks:
-
-- selection season/episode/dub/source;
-- family video loading/retry/normalization;
-- resume и progress commit;
-- auto-next и fullscreen transition policy;
-- Kodik message adapter;
-- preview loading/positioning.
-
-Не создавайте один глобальный player context: скрытые зависимости усложнят
-защиту от Watch Party feedback loop.
-
-Критерии:
-
-- manual selection и auto-next остаются разными командами;
-- watched episode можно воспроизвести повторно;
-- resume возвращает правильный origin anime/episode и timestamp;
-- remote party command не публикуется обратно;
-- provider без postMessage по-прежнему встраивается.
-
-## Этап 3: удерживать SettingsCenter тонким shell
-
-`SettingsCenter.tsx` уже делегирует feature-группы. При дальнейшем росте
-оставлять в shell только modal navigation, search и composition, вынося:
-
-- reset command;
-- focus/overlay lifecycle при необходимости в modal hook.
-
-Критерии:
-
-- одна canonical label/description/search entry на настройку;
-- persisted setting имеет owner в `lib/settings.ts`/data docs;
-- закрытие modal не кликает фоновые элементы;
-- cloud UI рендерится только из `useGoogleDriveSettings` state;
-- reset покрыт migration/component test.
-
-## Этап 4: формализовать persistence commands
-
-Заменить разбросанные state mutations именованными pure commands:
-
-```text
-markEpisodeWatched
-updateEpisodeProgress
-removeFavorite
-deleteFolder / restoreFolder
-updateTrackingBaseline
-setPersonalRating
-```
-
-Command принимает snapshot/domain state и возвращает новый объект. Одна
-persistence boundary пишет документ.
-
-Критерии:
-
-- одно пользовательское действие создаёт один итоговый save;
-- unknown snapshot fields не теряются;
-- Unicode notes/names проходят round-trip;
-- concurrent progress/settings cloud cases покрыты tests.
-
-## Этап 5: backend use cases только для сложной координации
-
-Простые health/proxy routes оставлять простыми. Use-case функция уместна там,
-где route координирует несколько ресурсов:
-
-- cloud restore/merge/upload;
-- initial OAuth cloud inspection;
-- Watch Party host transfer;
-- при появлении server-side tracking — его refresh.
-
-Критерии:
-
-- route разбирает request и переводит errors;
-- use case описывает последовательность;
-- service владеет I/O;
-- pure policy не знает FastAPI/httpx/filesystem.
-
-## Этап 6: усилить CSS ownership
-
-Первичное разбиение выполнено, но часть одинаковых selectors распределена между
-`base-*` modules и поздними feature bundles. Продолжать постепенно по одному UI.
-
-Правила:
-
-- tokens/reset/primitives — `base-core.css`;
-- settings/cloud/ratings/player/home selectors — у feature owner;
-- `base.css` остаётся только manifest;
-- новый state class scope-ится feature parent;
-- существующий `!important` удаляется только после поиска всех overrides.
-
-Критерии:
-
-- для изменяемой feature один очевидный owner;
-- import order и light theme не ломаются;
-- responsive, reduced-motion, touch и desktop zoom проверены;
-- [`STYLES.md`](STYLES.md) обновлён одновременно.
-
-## Этап 7: усилить контракты API
-
-Некоторые routes принимают свободный `dict`, особенно Watch Party и storage.
-После стабилизации callers можно добавить Pydantic models без изменения JSON.
-
-Приоритет:
-
-1. request/response models для Watch Party;
-2. ограниченный storage envelope model с `extra=allow`;
-3. typed Yummy proxy discriminated responses;
-4. OpenAPI examples и stable error models.
-
-Критерии:
-
-- extra/unknown storage fields разрешены;
-- legacy caller contract не отклоняется;
-- generated `/openapi.json` согласован с ручным справочником;
-- validation status и error body покрыты tests.
-
-## Как выполнить один безопасный срез
-
-1. Зафиксировать текущее поведение test или небольшой characterization fixture.
-2. Выбрать один owner и одну ответственность.
-3. Переместить pure logic первой, transport/lifecycle — отдельным шагом.
-4. Не менять одновременно формат данных, UI и route contract.
-5. Запустить точечные tests, затем полный набор.
-6. Обновить `PROJECT_MAP`, flows/API/data/styles по затронутой границе.
-7. Проверить diff: refactor не должен содержать случайное форматирование
-   несвязанных файлов.
-
-## Обязательная проверка
-
-```powershell
-cd app
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
-npm --prefix frontend run check
-```
-
-Frontend gate включает strict TypeScript, ESLint warning ceiling, 50
-characterization tests, CSS duplicate audit, production build и бюджеты:
-entry JS 300 KiB, entry CSS 315 KiB, любой lazy/vendor chunk 580 KiB.
-
-Для затронутой подсистемы дополнительно:
-
-| Подсистема | Проверить вручную/тестом |
+| Slice | Extract / acceptance criteria |
 | --- | --- |
-| storage | import/export, profile switch, unknown fields, backend 404 bootstrap |
-| progress | resume, manual toggle rollback, rewatch, franchise origin |
-| tracking | selected/all dubs, partial API failure, acknowledge |
-| party | host/shared, follow/free, transfer, stale participant, protocol mismatch |
-| Drive | local/cloud/merge/anime_only, deletion, timestamp, queue coalescing |
-| ratings | score removal/offline tombstone, aggregate isolation, cookie |
-| CSS | dark/light, 1440/960/600, touch hover, desktop 50/100/200% |
+| Anime detail boundary | Typed model/actions for family/loading/metadata/library actions; retain distinct open/resume/new-episode intents |
+| Player orchestration | Selection, family loading, resume/progress, auto-next, iframe messages, previews; preserve actual video/iframe lifetime and Android mini-player |
+| Settings shell | Keep modal navigation/search/composition; extract reset/focus lifecycle only if it has a clear owner |
+| Persistence commands | Named pure commands for watched/progress/favorite/folder/tracking/rating changes; retain unknown fields and field revisions |
+| Complex backend coordination | Extract use cases only where routes coordinate several resources; keep simple proxy/health routes simple |
+| CSS ownership | Move one surface at a time without changing cascade/import order or light/touch/zoom behavior |
+| API typing | Models for dynamic party/storage/provider payloads, preserving unknown fields and legacy-compatible validation |
 
-## Документация как acceptance criterion
+Do not introduce a global player context solely to reduce prop counts: hidden dependencies make party feedback suppression and source lifetime harder to verify. Do not mix code movement, schema change, styling and network behavior in one slice.
 
-Рефакторинг считается завершённым только когда документация по-прежнему
-указывает фактического владельца:
+## Invariants
 
-- файл переехал — `PROJECT_MAP.md`;
-- цепочка изменилась — `ENTRY_POINTS_AND_FLOWS.md`;
-- contract изменился — `API_REFERENCE.md`;
-- данные изменились — `DATA_MODEL.md`;
-- cascade/owner изменился — `STYLES.md`.
+New product work belongs in app. Preserve unknown JSON fields, per-field revisions and progress resetAt. Progress, rewatches, tracking identities, cloud merge and party remote-control guards are behavior. Changing file names alone does not increment product/schema versions. New abstraction needs a coherent responsibility and a useful independent test.
+
+## Verification and documentation
+
+Characterize the affected behavior, move pure logic first, then transport/lifecycle. Run targeted tests followed by required gates from the [app README](../README.md). Inspect diff for unrelated formatting. Verify profile round-trip/switch/error bootstrap, source identity/resume/manual undo, tracking partial failure, cloud timestamps/deletion/queue/reset, ratings tombstones/cookie, party host/shared/follow/free, and affected native behavior.
+
+Current bundle audit defines budgets in `tools/audit-bundle.mjs`; consult code for authoritative thresholds. Browser harnesses and device/media tests are separate from frontend check. Update [map](PROJECT_MAP.md), [flows](ENTRY_POINTS_AND_FLOWS.md), [API](API_REFERENCE.md), [data](DATA_MODEL.md), [styles](STYLES.md), and their Russian pairs whenever ownership/contracts change. Regenerate API_SCHEMA and run check_docs.py.

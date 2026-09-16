@@ -44,5 +44,8 @@ jobs:
       - name: Test backend
         run: python -m unittest discover -s backend/tests -v
 
+      - name: Check bilingual documentation and API inventory
+        run: python tools/check_docs.py
+
       - name: Check frontend
         run: npm --prefix frontend run check

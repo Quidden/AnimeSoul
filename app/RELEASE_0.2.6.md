@@ -1,56 +1,39 @@
+[English](RELEASE_0.2.6.md) | [Русский](RELEASE_0.2.6.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.2.6
 
-Google Cast на Android, удобнее настройки собственного плеера и устойчивый
-повторный автопереход между сериями. В релиз также вошли оптимизации и
-рефакторинг, накопившиеся после 0.2.5.
+Android Google Cast, easier built-in player settings, reliable repeated auto-next, plus performance/refactoring work since 0.2.5.
 
-## Google Cast / Chromecast — экспериментально
+## Experimental Google Cast / Chromecast
 
-- Кнопка **«На телевизор»** в Android AnimeSoulPlayer открывает стандартный
-  выбор Cast-устройства. Отдельное приложение на телевизор устанавливать не нужно.
-- Серия передаётся с текущей позиции; доступны пауза, перемотка, управление
-  громкостью через диалог устройства и возврат на телефон на паузе.
-- Прогресс и завершение серии поступают от телевизора. Поддержаны переключение
-  серий, смена озвучки с сохранением позиции и автопереход на следующую серию.
-- При Cast локальный видеодекодер останавливается. После ухода со страницы
-  просмотра остаются постоянная панель управления и системное уведомление.
-- Нативный мост ограничен доверенной верхней страницей AnimeSoul: сторонние
-  iframe не получают доступ, а приватный backend не открывается в локальную сеть.
+- Android AnimeSoulPlayer TV button opens the standard Cast picker; no separate TV app required.
+- Handoff retains position; pause/seek/receiver volume via device dialog and return to phone paused.
+- TV progress/end events support episode/dub changes with position preservation and auto-next.
+- Local decoder stops during Cast; session controls and system notification remain after navigation.
+- Bridge restricted to the trusted top AnimeSoul page; third-party iframe has no access and private backend is not exposed to LAN.
 
-**Ограничения:** только прямые HTTPS HLS/MP4 онлайн-серий из AnimeSoulPlayer.
-Скачанные файлы, iframe-плееры, перенос выбранных субтитров и скорости пока
-не поддерживаются. Телефон и телевизор должны находиться в одной локальной
-сети; нужны Google Play services и совместимое устройство Google Cast/Chromecast.
-Конкретный поток зависит от CORS, кодеков и доступности ссылки Kodik для ТВ.
+Only direct online HTTPS HLS/MP4. No downloaded files, iframe players, selected subtitle/speed transfer. Phone/receiver need the same LAN, Google Play services and a compatible Cast/Chromecast receiver. Playback depends on CORS/codecs/Kodik URL reachability from the TV.
 
-Проверены логика пульта, мобильная вёрстка и нативный Cast-диалог на Android.
-**Сквозная проверка воспроизведения Kodik на реальном телевизоре ещё не выполнена.**
-Cast в Windows в этот релиз не входит.
+Remote logic, mobile layout and native Android Cast dialog were checked for this release. **End-to-end Kodik playback on a real TV had not yet been tested.** Windows Cast is not included.
 
-## Плеер
+## Player
 
-- Автоскип опенинга, автоскип эндинга и автосерия доступны непосредственно
-  в настройках собственного плеера и синхронизированы с внешней панелью.
-- Исправлен повторный автопереход в fullscreen: собственный плеер использует
-  актуальную выбранную серию, а не старое состояние встроенного iframe.
-- Поздние события Cast не переносят прогресс предыдущей серии в следующую.
-- Выбор скачанного файла во время Cast завершает трансляцию и возвращает
-  локальное воспроизведение.
+- Opening/ending auto-skip and auto-next in player settings, synchronized with the outer toolbar.
+- Fixed repeated fullscreen auto-next using the current selection rather than stale iframe state.
+- Late Cast events do not transfer previous-episode progress to the next.
+- Selecting a downloaded file ends Cast and returns local playback.
 
-## Производительность и сопровождение
+## Performance and maintenance
 
-- Тяжёлые экраны загружаются по необходимости; добавлены проверки размеров
-  стартового JavaScript, CSS и отложенных модулей.
-- Разделены контроллеры навигации, папок, загрузок, автосохранения, облака,
-  Kodik и Android-воспроизведения; удалены дубли CSS и неиспользуемый код.
-- Добавлены регрессионные тесты Cast, браузерный стенд пульта и Android
-  smoke-тест нативного диалога и изоляции моста от стороннего iframe.
+- Lazy heavy screens and entry-JS/CSS/lazy-chunk size budgets.
+- Extracted navigation/folder/download/autosave/cloud/Kodik/Android playback controllers; removed duplicate CSS/unused code.
+- Cast regressions, browser remote harness and Android smoke test for native dialog/iframe bridge isolation.
 
-## Совместимость и файлы
+## Compatibility and files
 
-Сохранения совместимы с 0.2.5. Обновление Windows использует прежний AppId.
-Android APK подписан постоянным release-ключом и имеет увеличенный versionCode;
-основную AnimeSoul не нужно удалять перед обновлением.
+0.2.5 saves remain compatible. Windows keeps AppId. Android uses permanent release signing with increased versionCode; do not uninstall the main app before updating.
 
-- **`AnimeSoul-Setup-0.2.6.exe`** — установщик Windows x64.
-- **`AnimeSoul-0.2.6-android-arm64.apk`** — Android ARM64, Android 7.0+.
+- AnimeSoul-Setup-0.2.6.exe — Windows x64.
+- AnimeSoul-0.2.6-android-arm64.apk — Android ARM64, Android 7.0+.

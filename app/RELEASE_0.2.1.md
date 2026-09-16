@@ -1,47 +1,40 @@
+[English](RELEASE_0.2.1.md) | [Русский](RELEASE_0.2.1.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.2.1
 
-Обновление добавляет личные и общие оценки, расширяет поиск и делает запуск локального сервера надёжнее. Одновременно крупные части Python + React приложения разделены на самостоятельные модули без изменения совместимого формата сохранений.
+Personal/shared ratings, expanded search and more reliable local-server startup. Large parts of the Python + React app were separated into modules without changing the compatible save format.
 
-## Что добавлено
+## Added
 
-- Личные оценки от 1 до 10 для аниме, сезонов и отдельных серий.
-- Автоматические средние оценки по сезонам и всему тайтлу.
-- Отдельная страница оценок с быстрым редактированием всей сохранённой шкалы.
-- Анонимная общая оценка AnimeSoul для аниме, сезонов и серий на текущем сервере.
-- Одновременный показ рейтингов AnimeSoul, YummyAnime, Shikimori, MyAnimeList, IMDb и других источников, если они доступны в API.
-- Трейлер или кинематографичный предпросмотр продолжения просмотра на главной странице.
-- Панель состояния сервера в лаунчере и безопасная кнопка остановки процесса, запущенного текущей установкой.
+- Personal 1–10 scores for anime, seasons and episodes, with automatic season/title averages.
+- A ratings page for quick editing of the saved score tree.
+- Anonymous AnimeSoul anime/season/episode aggregates on the current server.
+- Simultaneous AnimeSoul, YummyAnime, Shikimori, MyAnimeList, IMDb and other API-provided ratings.
+- Trailer/cinematic resume preview on home.
+- Launcher server-status panel and safe stop for the process owned by the current installation.
 
-## Что исправлено
+## Fixed
 
-- Поиск понимает неверную русскую или английскую раскладку, транслитерацию, слитное написание, популярные сокращения и альтернативные названия.
-- Одинаковые параллельные поисковые запросы больше не дублируют обращения к YummyAnime; кратковременный кеш ускоряет повторный поиск.
-- При занятом порте приложение автоматически выбирает ближайший свободный, а повторный запуск открывает уже работающий AnimeSoul.
-- Лаунчер отличает сервер AnimeSoul от другого приложения на том же порту и останавливает только процесс, принадлежность которого подтверждена идентификатором экземпляра.
-- Google Drive не стирает сохранённый Client Secret, если при перенастройке поле оставлено пустым.
-- Слияние облачного и локального сохранений учитывает время изменения оценок, прогресса и позиции просмотра и сохраняет неизвестные поля.
-- Уточнено поведение повторного просмотра, ручных отметок серий, отслеживания новых выпусков и синхронизации команд совместного просмотра.
+- Search recognizes wrong Russian/English keyboard layouts, transliteration, joined words, popular abbreviations and alternative titles.
+- Identical concurrent searches share Yummy requests; short cache speeds repeated search.
+- Occupied ports select a nearby free port; repeated launch reopens a running instance.
+- Launcher distinguishes AnimeSoul from other apps and stops only an instance whose ownership is confirmed.
+- Blank Google Client Secret no longer erases the saved value.
+- Cloud merge uses rating/progress/position timestamps and preserves unknown fields.
+- More precise rewatch, manual marks, new-release tracking and party command synchronization.
 
-## Что улучшено
+## Improved
 
-- В каталоге можно выбрать источник рейтинга и минимальную оценку; рейтинги видны на карточках и странице просмотра.
-- Главная страница, каталог, статистика, настройки, плеер, хранилище и интеграции разделены на самостоятельные модули.
-- Google Drive merge вынесен в чистую тестируемую логику, независимую от OAuth, HTTP и файловой системы.
-- CSS разделён на тематические модули с сохранением прежнего порядка каскада.
-- Добавлены регрессионные тесты оценок, поиска, запуска на занятом порту, облачного слияния, прогресса, отслеживания серий и совместного просмотра.
+- Catalogue rating-source/minimum filters and scores on cards/watch screen.
+- Independent home/catalogue/statistics/settings/player/storage/integration modules.
+- Pure Drive merge independent of OAuth/HTTP/filesystem.
+- Thematic CSS modules preserving cascade order.
+- Regression tests for ratings, search, port conflicts, merge, progress, tracking and party.
 
-## Совместимость
+## Compatibility and installer
 
-Сохранения 0.2.0 совместимы с 0.2.1. Номер схемы остаётся прежним; личные оценки записываются в существующий профиль, а неизвестные поля сохраняются при загрузке, локальной записи, импорте и синхронизации Google Drive.
+0.2.0 saves remain compatible with unchanged schema. Personal scores live in profiles; unknown fields survive loading/saving/import/Drive sync. Shared scores belong to the connected backend; independent local servers do not automatically exchange votes.
 
-Общая оценка AnimeSoul хранится и агрегируется на сервере, к которому подключено приложение. Независимые локальные серверы не обмениваются такими оценками автоматически.
-
-## Windows installer
-
-`AnimeSoul-Setup-0.2.1.exe` устанавливает автономную сборку с лаунчером, ярлыками и выбором запуска в браузере или отдельном desktop-окне. Python и Node.js пользователю не требуются.
-
-## Важно
-
-AnimeSoul не включает общий API-ключ. Для каталога, видео и трейлеров нужен личный Public token из [документации YummyAnime API](https://api.yani.tv/swagger). Private token приложению не нужен.
-
-Огромная благодарность разработчикам YummyAnime за предоставленный API — именно благодаря их работе стало возможным создание AnimeSoul.
+AnimeSoul-Setup-0.2.1.exe installs a standalone launcher, shortcuts and browser/desktop modes; Python/Node.js are not required. No shared API key is included. Catalogue/video/trailers need your Public token from the [YummyAnime API documentation](https://api.yani.tv/swagger); private token is not used. Thanks to YummyAnime.

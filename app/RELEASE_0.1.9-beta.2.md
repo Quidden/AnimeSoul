@@ -1,24 +1,16 @@
+[English](RELEASE_0.1.9-beta.2.md) | [Русский](RELEASE_0.1.9-beta.2.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.1.9 Beta 2
 
-Главное изменение этой beta-версии — полноценная установка новой
-Python + React версии на Windows.
+This beta introduces a complete Windows installation of the Python + React application.
 
 ## Windows installer
 
-- `AnimeSoul-Setup-0.1.9-beta.2.exe` устанавливает полностью автономную
-  сборку: пользователю не нужны Python, Node.js или bat-файлы.
-- Установщик создаёт ярлык AnimeSoul на рабочем столе и в меню «Пуск».
-- Ярлык открывает launcher с выбором «Открыть сайт» или «Открыть десктоп».
-- В launcher можно изменить порт и личный Public token YummyAnime API.
-- Перед сохранением ключ проверяется небольшим реальным запросом к API.
-- Конфиг, библиотека и прогресс находятся в `%LOCALAPPDATA%\AnimeSoul` и
-  сохраняются между обновлениями приложения.
+- AnimeSoul-Setup-0.1.9-beta.2.exe installs a standalone build; users need no Python, Node.js or BAT files.
+- Desktop and Start menu shortcuts open a launcher with browser/desktop choices.
+- The launcher edits the port and personal YummyAnime Public token, checking the token with a small real API request before saving.
+- Configuration, library and progress are in `%LOCALAPPDATA%\AnimeSoul` and remain across updates.
 
-## Важно
-
-AnimeSoul не включает общий API-ключ. При первом запуске нужен личный
-Public token из [документации YummyAnime API](https://api.yani.tv/swagger).
-Private token приложению не нужен.
-
-Огромная благодарность разработчикам YummyAnime за предоставленный API.
-Именно благодаря их работе стало возможным создание AnimeSoul.
+No shared API key is included. First launch needs a personal Public token from the [YummyAnime API documentation](https://api.yani.tv/swagger); the private token is not used. Thanks to the YummyAnime developers for the API that made AnimeSoul possible.

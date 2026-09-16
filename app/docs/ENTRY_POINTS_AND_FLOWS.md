@@ -1,555 +1,149 @@
-# Точки входа, выхода и цепочки функций AnimeSoul
+[English](ENTRY_POINTS_AND_FLOWS.md) | [Русский](ENTRY_POINTS_AND_FLOWS.ru.md)
 
-Документ показывает не только файлы запуска, но и фактический путь вызовов от
-действия пользователя до внешнего эффекта и обратно.
+# Entry points, exits and function calls
 
-## Точки входа процесса
+Paths are relative to `app/` unless prefixed otherwise. [API](API_REFERENCE.md) · [UI](UI.md) · [Backend](BACKEND.md)
 
-| Точка | Файл/символ | Когда используется | Выход |
-| --- | --- | --- | --- |
-| корневой BAT | `Start AnimeSoul.bat` | обычный source-запуск из корня | вызывает `app/Start AnimeSoul.bat` |
-| основной BAT | `app/Start AnimeSoul.bat` | source runtime | venv → changed-only prepare → `run.py` |
-| browser BAT | `app/Start AnimeSoul in Browser.bat` | принудительный browser | `run.py --mode browser` |
-| desktop BAT | `app/Start AnimeSoul Desktop.bat` | принудительный PyWebView | `run.py --mode desktop` |
-| configure BAT | `app/Configure AnimeSoul.bat` | повторная настройка | `run.py --configure` |
-| runtime CLI | `app/run.py::main()` | source и packaged runtime | Uvicorn + browser/PyWebView |
-| packaged launcher | `app/launcher.py::main()` | Windows installer shortcut | WebView UI + `LauncherApi` |
-| ASGI | `app/backend/app/main.py::app` | Uvicorn, dev или tests | FastAPI routes/static SPA |
-| HTML | `app/frontend/index.html` | загрузка SPA | `/src/main.tsx` или built bundle |
-| React | `app/frontend/src/main.tsx` | browser/WebView | debug capture + `<App />` |
-| transfer CLI | `python -m tools.transfer_saves` | ручной перенос | validated atomic copy + backup |
+## Process entry points and exits
 
-## Точки входа FastAPI
-
-На import `backend.app.main`:
-
-1. `config.settings = load_settings()` вычисляет все пути и tokens.
-2. Router modules создают singleton services для текущего data directory.
-3. `FastAPI(...)` и CORS middleware создаются в `main.py`.
-4. Подключаются routers Yummy, storage, party, gdrive, ratings.
-5. Регистрируется `/api/health`.
-6. Если `frontend/dist` существует, монтируются `/assets` и SPA catch-all.
-
-HTTP/WS точки перечислены в [`API_REFERENCE.md`](API_REFERENCE.md).
-
-## Выходы и завершение
-
-### Коды процесса `run.py`
-
-| Код | Где возникает | Причина |
-| --- | --- | --- |
-| `0` | обычный return/закрытие | нормальное завершение или открытие уже работающего instance |
-| `2` | `load_runtime_settings` | повреждённый/не-object JSON config |
-| `3` | `main` | занятый порт и не найден свободный в следующих 100 user ports |
-| `4` | `open_existing_client`/`run_desktop` | для desktop не импортируется `webview` |
-| `5` | `run_desktop` | FastAPI не ответил за 100 × 0.12 с |
-
-При занятом configured port код 3 не возникает сразу: если там AnimeSoul,
-открывается второй client; если другое приложение, `find_available_port`
-начинает с `port + 1` и сохраняет первый свободный.
-
-### Нормальное завершение runtime
-
-- Browser mode: Uvicorn работает в foreground до сигнала завершения.
-- Desktop mode: закрытие WebView запускает `finally`, устанавливает
-  `server.should_exit = True` и ждёт thread до 5 секунд.
-- Внешний `finally` `run.py::main` вызывает
-  `remove_runtime_state(CONFIG_FILE, instance_id)`.
-- Launcher может принудительно остановить только PID, чей instance ID совпал с
-  `/api/health` и runtime state.
-- `WebSocketDisconnect` удаляет socket из `room.sockets`.
-- React effects очищают свои timers/listeners через cleanup functions.
-
-### Выходы данных
-
-| Действие | Выход |
+| Entry | Calls / result |
 | --- | --- |
-| локальное сохранение | `data/animesoul-storage.json` через temp + replace |
-| export profile | browser download `AnimeSoul-<profile>.json` |
-| полный transfer | destination JSON + optional timestamped backup |
-| Google sync | `AnimeSoul/animesoul-storage.json` или Drive `appDataFolder` |
-| community vote | SQLite row или delete по `(voter_id, anime_id)` |
-| Watch Party | состояние только в памяти процесса + optional WS snapshots |
-| diagnostics | `localStorage` debug log и экспорт через DebugPanel |
+| Repository `Start AnimeSoul.bat` | Delegates to `app/Start AnimeSoul.bat` |
+| App BAT launchers | venv / changed-only preparation → `run.py`; browser/desktop/configure variants pass arguments |
+| `run.py::main` | Parse arguments → load runtime settings → check port/runtime compatibility → start/open client |
+| `launcher.py::main` | PyWebView launcher UI with `LauncherApi` → launch/open/stop runtime |
+| `backend.app.main:app` | ASGI entry for Uvicorn and tests |
+| `frontend/index.html`, `src/main.tsx` | Debug capture, CSS, StrictMode/createRoot → App |
+| Android `MainActivity`, `mobile_runtime.py` | Embedded Python/FastAPI → local WebView → native bridges |
+| `tools.transfer_saves.main` | Validate → destination backup → atomic copy |
 
-## Цепочка 1: source-запуск
+`run.py` exit codes: 0 normal/already-running client; 2 invalid config; 3 no available port; 4 missing PyWebView for desktop; 5 backend not ready for desktop. Occupied unrelated ports are not killed: search the next available user port. Runtime health includes a capability check, so a matching stack name alone is insufficient for reuse.
+
+Browser mode runs Uvicorn in the foreground. Desktop close sets `server.should_exit`, waits for the server thread, and removes runtime state owned by its instance ID. Launcher stop requires matching process identity. Backend lifespan closes provider clients. React effects unsubscribe/clear timers; disconnected WS sockets leave the room socket list.
+
+## Startup
 
 ```mermaid
 sequenceDiagram
-    actor User as Пользователь
-    participant Bat as Start AnimeSoul.bat
+    actor User
+    participant Launch as BAT / LauncherApi
     participant Run as run.py
-    participant State as runtime_instance.py
-    participant Api as FastAPI/Uvicorn
-    participant Client as Browser/PyWebView
-    participant React as main.tsx/App
-
-    User->>Bat: запуск с optional args
-    Bat->>Bat: создать venv / установить зависимости / npm build
-    Bat->>Run: python run.py args
-    Run->>Run: parse_arguments
-    Run->>Run: load_runtime_settings
-    Run->>Run: port_is_available / animesoul_is_running
-    Run->>State: write_runtime_state
-    alt browser
-        Run->>Api: run_browser -> uvicorn.run
-        Run->>Client: background open после wait_until_ready
-    else desktop
-        Run->>Api: run_desktop -> Server(thread)
-        Run->>Client: webview.create_window/start
-    end
-    Client->>Api: GET /
-    Api-->>Client: index.html + assets
-    Client->>React: main.tsx -> installDebugCapture -> createRoot(App)
-    React->>Api: начальные API-запросы
+    participant API as Uvicorn / FastAPI
+    participant UI as React client
+    User->>Launch: Start
+    Launch->>Run: Config + launch mode
+    Run->>Run: Check port, health, capabilities and instance
+    Run->>API: Start when needed
+    Run->>UI: Browser / PyWebView
+    UI->>API: GET / and assets
+    UI->>API: GET /api/storage and catalogue/status
 ```
 
-Точная функция выбора готовности — `wait_until_ready`, проверяющая
-`/api/health`. Повторный запуск распознаётся по `ok` и
-`stack === "FastAPI + React"`.
+Packaged launch: `webview.create_window(LAUNCHER_HTML, js_api=LauncherApi) → pywebviewready → get_settings/get_server_status → launch`. Launch validates fields/token, saves configuration, chooses runtime command, uses subprocess and writes runtime identity. An already-running compatible server opens another client without another backend process.
 
-## Цепочка 2: packaged launcher
+## Profile hydrate/save
 
 ```text
-AnimeSoul Launcher.exe
--> launcher.main
--> webview.create_window(LAUNCHER_HTML, js_api=LauncherApi)
--> JS pywebviewready
--> LauncherApi.get_settings + get_server_status
--> пользователь: save / launch / stop_server
+useProfileStorage.hydrateFileStorage
+ → GET /api/storage → JsonStorage.read → optional first legacy import
+ → resolveActiveProfileDocument → migrateDocument/migrateSnapshot
+ → applyStorageProfile → applySnapshot → React + localStorage mirror
+404 → createDocumentFromBrowserBackup → PUT /api/storage
+Other failure → storage safety state; do not silently overwrite
+
+React state change → useProfileAutosave (400 ms debounce)
+ → buildProfileSnapshot → buildStorageDocument → saveStorageDocument
+ → PUT /api/storage?auto_sync=...&folder_mode=...&prefer_watched=...
+ → validate_storage_document → JsonStorage.write (shared lock/temp/replace)
+ → optional GoogleDriveService.schedule_write
+ → usePublishedSaveStatus → event/mirror → Header
 ```
 
-Запуск нового runtime:
+Builders preserve unknown envelope/profile/snapshot fields. Local save success is independent of cloud upload confirmation.
+
+## Catalogue, family and playback
 
 ```text
-LauncherApi.launch
--> _validate_port / port_is_available / existing_animesoul
--> при конфликте find_available_port
--> _validate_fields -> validate_public_token (GET api.yani.tv/anime?limit=1)
--> save_settings
--> runtime_command
--> subprocess.Popen(AnimeSoul Runtime.exe или run.py)
--> write_runtime_state(instance_id, pid, port, mode)
--> UI polling get_server_status
+Header/CatalogPage query
+ → useCatalogController (300 ms search prefetch)
+ → cachedCatalogSearch / fetchCatalogPage → GET /api/yummy
+ → yummy_proxy → HybridCatalogueService.catalogue/details
+ → YummyAnimeGateway / KodikAnimeGateway + persistent cache/identity registry
+ → normalized Anime[] + _sources → uniqueAnime/useCatalogPresentation
+ → visible franchise cards; near-viewport metadata concurrency 2
+
+AnimeCard → useAppNavigation.openAnime → active Anime → Watch
+ → fetchFamily → viewing_order or details/search fallback → SeasonGroup[]
+ → fetchVideos (selected group first, remaining groups concurrency 2)
+ → hybrid videos + episode identity normalization
+ → originAnimeId/originNumber and display numbering → season/episode/dub/source
+ → fetchKodikStream → POST /api/kodik/stream
+ → playback_source → KodikSourceResolver.resolve_playback_api
+ → AnimeSoulPlayer (HLS/video, subtitles/skips)
+ → provider iframe on fallback/selection
 ```
 
-Если server уже работает, `_open_running_server` открывает ещё один browser или
-desktop client и не создаёт второй FastAPI process.
+`loadMore` may fetch up to five pages of 48 to collect 12 new cards after grouping/filtering. Stored IDs missing from the catalogue are hydrated via details batches. Query cache and in-flight coordination avoid duplicate work. Media URLs are runtime output, not persistent episode identity.
 
-## Цепочка 3: React bootstrap и выбор экрана
+## Progress, tracking and ratings
 
 ```text
-index.html#root
--> main.tsx
-   -> installDebugCapture
-   -> import globals.css
-   -> createRoot(...).render(<StrictMode><App /></StrictMode>)
--> App.Home()
-   -> useProfileStorage
-   -> useCatalogController
-   -> useCommunityRatings
-   -> useWatchPartyPresence
-   -> useApiActivity
-   -> useEpisodeTracking
-   -> useCatalogPresentation / useResumePreview / library selectors
--> render Header + текущая Page + modals/footer
+Player event or manual episode toggle
+ → EpisodeState/AnimeProgress → createActiveWatchActions.updateProgress
+ → changed/newly watched keys → immutable progress + local mirror
+ → acknowledgeTrackedEpisode for original keys → tracking state
+ → debounced profile save
 ```
 
-`ApplicationView` принимает `home`, `catalog`, `downloads`, `stats`, `ratings`.
-Просмотр тайтла задаётся отдельно через `active: Anime | null`; при active
-рендерится `Watch` (`components/Player.tsx`). На Android переход в другой раздел
-не очищает `active`: Watch остаётся смонтированным и показывается как мини-плеер.
-Открытая folder/collection/modal — также ортогональное состояние, а не URL router.
+`toggleEpisodeWatched` retains `manualPrevious` for undo. Natural completion, rewind/rewatch and auto-next are separate decisions. `latestResumePoint` and `episodeResumePosition` select a meaningful resume point rather than the end of a completed episode.
 
-Список на главной формируется так:
+Tracking: `useEpisodeTracking → fetchTrackingSnapshot → resolveFranchiseAnimeIds → details → videos for each part → collectPlayableEpisodeDates(selected/all dubs) → reconcileTrackedEpisodes → state/mirror/save`. Runs immediately and every 300 seconds, skipping entries checked within 240 seconds. Partial success can update valid parts; all-failed snapshots do not replace the baseline. Identity repair is conditional on both providers' successful evidence/version.
+
+Ratings: `ScorePicker → setUserRating → personal map → profile save`. Separately, `useCommunityRatings → publishCommunityRating → PUT community-ratings → CommunityRatingStore.replace → aggregate → UI`. Publication debounce is 500 ms, retry is 30 seconds, reads are in batches of 100; deletions retain a tombstone queue.
+
+## Offline and Android Cast
 
 ```text
-HomePage -> LibrarySections -> LibraryToolbar
--> выбрать активную вкладку
--> useHomeCardLimit сбрасывает лимит при смене вкладки
--> HomeCardList показывает первые 10 карточек
--> «Загрузить ещё» увеличивает лимит на 10
+DownloadPicker → useDownloadManager → checkDownloadAvailability
+ → POST /api/downloads/availability → resolver checks exact quality
+ → enqueueDownload → POST /api/downloads/jobs → OfflineLibraryService.enqueue
+ → sequential worker → source resolution → download/FFmpeg → file + index
+ → jobs/library polling → DownloadsPage
+ → useOfflinePlayback → media endpoint → same AnimeSoulPlayer
 ```
 
-Мини-плеер Android использует тот же экземпляр `Watch`. Pointer drag ручки
-обновляет ограниченные viewport-координаты; центральная кнопка возвращает
-экран просмотра, а закрытие очищает `active` и размонтирует плеер.
+Android `AnimeSoulDownloads` bridge starts foreground monitoring; `DownloadNetworkMonitor` posts network type. Disallowed mobile data pauses a job; permitted network resumes it. `NativeDownloadSupport`/FFmpegKit publishes MediaStore MP4. Jobs are process-memory state; existing MediaStore files can be scanned after index loss.
 
-## Цепочка 4: первоначальная загрузка сохранения
+Cast: `useAndroidCast → castMediaSource → sendCastCommand → AnimeSoulCast.postMessage → CastController → Google Default Media Receiver`. Native status returns as `cast-state` → player/session bar/progress; returning to phone restores playback paused. Direct online HTTPS HLS/MP4 only. No backend LAN listener is opened.
 
-```mermaid
-sequenceDiagram
-    participant Hook as useProfileStorage
-    participant Mirror as localStorage
-    participant Api as GET /api/storage
-    participant Storage as JsonStorage
-    participant Migration as profileDocument/storage.ts
-    participant React as React state
+## Watch Party
 
-    Hook->>Mirror: восстановить резервные known fields
-    Hook->>Api: fetch STORAGE_URL no-store
-    Api->>Storage: storage.read
-    Storage->>Storage: если main-файла нет, _import_first_existing legacy
-    alt документ найден
-        Storage-->>Hook: StorageDocument
-        Hook->>Migration: resolveActiveProfileDocument
-        Migration->>Migration: migrateDocument + migrateSnapshot
-        Hook->>React: applyStorageProfile -> applySnapshot
-        Hook->>Mirror: обновить mirror и active profile
-    else 404
-        Hook->>Migration: createDocumentFromBrowserBackup
-        Hook->>Api: PUT /api/storage
-    end
-    Hook->>Hook: storageReady=true
-```
+Create/join: `WatchPartyPanel → useWatchParty → postWatchParty → WatchPartyService.create/join → protocol check (2) → sessionStorage`.
 
-Главные функции:
+Every second: `tick → playbackChangedByUser/playbackReachedTarget → POST update → service update/broadcast → GET state → normalize/role update → roomPlaybackRevision → onHostState`. Remote playback suppression (12 seconds) prevents applied remote seek/play from being re-published as local control. The current React hook uses REST, not WS. Android removes this feature.
+
+## OAuth and sync
 
 ```text
-hydrateFileStorage
--> resolveActiveProfileDocument
--> applyStorageProfile
--> applySnapshot
+CredentialsSettings → save/check credentials API → per-field checks
+CloudSettings/useGoogleDriveSettings → auth-url → Google browser login
+ → callback code/state → consume_oauth_state
+ → desktop: exchange_code → userinfo/cloud inspection → save tokens
+ → Android: save pending callback → foreground POST complete-auth → exchange once
+ → status polling → first-choice modal if cloud already exists
+
+Explicit sync → POST /api/gdrive/sync → first-choice/validation guard
+ → read local/cloud → upload / restore-with-backup / merge policy
+ → write local/cloud as required → mark_sync_succeeded|failed
+ → reloadStorage → rehydrate profile
 ```
 
-`storageEnvelopeRef` удерживает неизвестные root fields для следующей записи.
+Instant: `PUT storage → schedule_write → replace pending → latest local read → cloud read → merge → cloud write → local write only if no newer local save`. Interval mode comes from `useHeaderCloudSync`; manual has no automatic upload. Header/settings status polling is 2.5 seconds while mounted/open. Both frontend and backend block automatic first sync pending explicit choice.
 
-## Цепочка 5: автоматическое сохранение профиля
+## Import/export, styles and outputs
 
-Любое изменение перечисленных dependencies (`favorites`, `folders`, `progress`,
-`ratings`, `tracked`, theme/prefs/history/layout/profile) запускает effect:
+Profile export: `ProfileSettings → exportConfig → makeSnapshot → JSON Blob → browser download → revoke object URL`. Import: file text/JSON → migrateSnapshot → new UUID/name → save existing/current profile → optional switch/reload. Full transfer: paths_for → read/validate → backup destination → temp/replace; source unchanged.
 
-```text
-React state change
--> useProfileStorage effect
--> setSaveStatus(saving)
--> debounce 400 ms
--> makeSnapshot
-   -> buildProfileSnapshot
-   -> migrateSnapshot
--> upsertProfile
--> makeDocument
-   -> buildStorageDocument
-   -> migrateDocument
--> write local profiles mirror
--> saveStorageDocument
-   -> определить auto_sync из localStorage cloud guard
-   -> PUT /api/storage?auto_sync=true|false
--> api.storage.write_storage
-   -> JsonStorage.write
-      -> asyncio.Lock
-      -> animesoul-storage.tmp.json
-      -> replace animesoul-storage.json
-   -> optional GoogleDriveService.schedule_write
--> setSaveStatus(saved|error)
--> usePublishedSaveStatus -> event + localStorage -> Header
-```
+Styles: `main.tsx → globals.css → base manifest → feature bundles → runtime theme/preferences variables → optional desktop zoom`. [CSS order](STYLES.md).
 
-Один debounce отменяет предыдущий timer при следующем изменении. Backend Drive
-queue дополнительно coalesce несколько документов.
-
-## Цепочка 6: каталог и поиск
-
-```text
-CatalogPage/Header input
--> useCatalogController.setQuery
--> через 300 ms prefetchCatalogSearch
--> features/catalog/api.cachedCatalogSearch
--> GET /api/yummy?mode=catalog&q=...&limit=24&offset=0
--> api.yummy.yummy_proxy
--> YummyAnimeGateway.search
-   -> anime_search_queries
-   -> параллельные _request /anime
-   -> первая непустая страница
--> cache 5 min
--> persistent SQLite cache + stale-if-error
--> Anime[]
--> controller uniqueAnime
--> useCatalogPresentation
-   -> metadata только для карточек рядом с viewport, concurrency 2
--> AnimeCard[]
-```
-
-Явная загрузка без query проходит через `fetchCatalogPage -> requestCatalogPage`
-и upstream `/anime`. `loadMore` может выполнить до пяти страниц по 48, пока не
-получит 12 новых карточек после franchise filters.
-
-Сохранённые ID, которых нет в catalog, восстанавливаются цепью:
-
-```text
-storedIds -> fetchAnimeDetails
--> /api/yummy?mode=details&ids=...
--> Promise.all upstream /anime/{id}
--> catalog merge
-```
-
-## Цепочка 7: открытие тайтла и загрузка плеера
-
-```text
-AnimeCard/onOpen
--> App setActive(anime)
--> render Watch
--> fetchFamily(anime)
-   -> при viewing_order использовать его
-   -> иначе details/search fallback через /api/yummy
--> groupFranchises / SeasonGroup[]
--> Player.fetchVideos
-   -> сначала выбранная группа/сезон
-   -> затем остальные группы в фоне, concurrency 2
-   -> для entry GET mode=videos&id=... с frontend/backend dedup
-   -> нормализовать originAnimeId/originNumber/contentKind/contentTitle
-   -> offset episode numbers внутри группы
-   -> dedup по video_id
--> PlayerToolbar + SeasonList + iframe
-```
-
-Источник iframe проходит через `lib/kodik.ts`. Для Kodik URL добавляются
-параметры серии/startAt и обрабатываются provider `postMessage`; другие iframe
-гарантируют только встраивание.
-
-## Цепочка 8: progress, ручная отметка и tracking acknowledge
-
-```text
-iframe/player event или SeasonList toggle
--> Player строит AnimeProgress/EpisodeState
--> createActiveWatchActions(...).updateProgress
--> определить changedKeys и newlyWatched через isEpisodeWatched
--> setProgress immutable update + writeLocal(progress)
--> если серия только что просмотрена и есть tracker:
-   originKeys.reduce(acknowledgeTrackedEpisode)
-   -> setTracked + writeLocal(tracked)
--> useProfileStorage debounce-save полного документа
-```
-
-`toggleEpisodeWatched` хранит/восстанавливает `manualPrevious`. Естественное
-завершение, повторный просмотр и auto-next остаются отдельными решениями player.
-
-## Цепочка 9: отслеживание новых серий
-
-```text
-App -> useEpisodeTracking(tracked)
--> check сразу и setInterval 300000 ms
--> для каждой записи, если lastCheckedAt старше 240000 ms:
-   fetchTrackingSnapshot
-   -> resolveFranchiseAnimeIds
-      -> GET mode=details&ids=seed
-      -> seed + viewing_order anime IDs
-   -> последовательно для каждого ID GET mode=videos
-   -> collectPlayableEpisodeDates(selected dubs)
-   -> collectPlayableEpisodeDates(all dubs)
--> если successfulRequests > 0:
-   reconcileTrackedEpisodes
--> setTracked + localStorage mirror
--> useProfileStorage save
-```
-
-Отмена component effect проверяется между запросами. Один неуспешный сезон не
-останавливает остальные, но полностью неуспешный snapshot игнорируется.
-
-## Цепочка 10: личная и общая оценка
-
-Локальное изменение:
-
-```text
-ScorePicker
--> App handleRatingChange
--> setUserRating(current, title, target, value)
--> saveRatings -> localStorage mirror
--> useProfileStorage -> PUT storage
-```
-
-Публикация aggregate:
-
-```text
-personalRatings updatedAt изменился
--> useCommunityRatings effect (debounce 500 ms)
--> publishCommunityRating
--> PUT /api/community-ratings/{animeId}
--> publish_community_rating validation
--> CommunityRatingStore.replace
-   -> INSERT ... ON CONFLICT UPDATE или DELETE пустого дерева
--> aggregate
--> frontend communityRatings state
--> published updatedAt marker
-```
-
-При offline error публикация повторяется через 30 секунд. Удаления хранятся в
-отдельной localStorage tombstone queue.
-
-Чтение:
-
-```text
-animeIds -> fetchCommunityRatings (chunks по 100)
--> GET /api/community-ratings?ids=...
--> SQLite aggregate -> CommunityRatings map
-```
-
-## Цепочка 11: Watch Party
-
-Создание/вход:
-
-```text
-WatchPartyPanel
--> useWatchParty.createRoom|joinRoom
--> postWatchParty(/create|/join)
--> WatchPartyService.create|join
--> assertCompatibleWatchPartyProtocol(2)
--> saveWatchPartySession(sessionStorage)
-```
-
-Основной цикл раз в секунду:
-
-```text
-useWatchParty.tick
--> определить suppressingRemotePlayback
--> playbackReachedTarget / playbackChangedByUser
--> POST /watch-party/update {session,name,mode,roomMode,playback,control}
--> WatchPartyService.update -> broadcast optional WS
--> GET /watch-party/state
--> assert protocol + normalizeParty
--> найти self/обновить role
--> roomPlaybackRevision
--> если новая чужая command и follow policy:
-   suppressControlUntil = now + 12s
-   lastLocalPlayback = remote playback with local updatedAt anchor
-   onHostState(remote playback)
-```
-
-Guard не даёт применённой remote-команде вернуться на server как новая local
-seek/play command. REST polling — авторитетный путь; WS в текущем hook не
-создаётся.
-
-## Цепочка 12: Google OAuth
-
-```mermaid
-sequenceDiagram
-    participant UI as SettingsCenter
-    participant Client as lib/gdrive.ts
-    participant Api as api/gdrive.py
-    participant Service as GoogleDriveService
-    participant Google as Google OAuth/Userinfo/Drive
-
-    UI->>Client: connect -> fetchGDriveAuthUrl
-    Client->>Api: GET /api/gdrive/auth-url
-    Api->>Service: get_auth_url(redirect_uri)
-    Service-->>UI: url + state (state внутри URL)
-    UI->>Google: window.open(url)
-    Google->>Api: GET oauth2callback?code&state
-    Api->>Service: consume_oauth_state
-    Api->>Service: exchange_code
-    Service->>Google: token exchange + userinfo
-    Service->>Google: read_cloud_storage
-    Service->>Service: save tokens, has_cloud_file, choice_pending
-    Api-->>UI: HTML postMessage GDRIVE_AUTH_SUCCESS
-    UI->>Api: status polling/loadGDriveStatus
-```
-
-Header poll status выполняется сразу и каждые 2.5 секунды; Settings modal
-добавляет собственный polling с тем же интервалом, пока открыт.
-
-## Цепочка 13: Google Drive sync и autosave
-
-Явная команда:
-
-```text
-CloudSettings/useGoogleDriveSettings.syncNow(mode)
--> confirm для cloud/local destructive direction
--> lib/gdrive.syncGDrive
--> POST /api/gdrive/sync
--> mark_sync_started
--> _sync_drive_impl
-   -> local_storage.read
-   -> read_cloud_storage(folder_mode)
-   -> upload/download/merge/anime_only branch
-   -> optional merge_storage_documents
-   -> local_storage.write + write_cloud_storage
--> mark_sync_succeeded|failed
--> frontend onStorageReload
--> useProfileStorage.reloadStorage/applyStorageProfile
-```
-
-Мгновенный autosave:
-
-```text
-PUT /api/storage?auto_sync=true
--> shared GoogleDriveService.schedule_write
--> pending document replace/coalesce
--> worker:
-   latest local read
-   -> cloud read
-   -> merge_storage_documents
-   -> cloud write
-   -> если не пришёл более новый local save, local write merged
-```
-
-Interval autosave:
-
-```text
-Header effect (Drive connected)
--> read interval minutes
--> setInterval
--> если mode === interval:
-   syncGDrive("merge", preferWatched, folderMode)
-   -> reload storage/status
-```
-
-Manual mode не запускает PUT autosync или interval callback; синхронизация
-происходит по кнопке.
-
-## Цепочка 14: import/export и полный transfer
-
-Экспорт одного профиля:
-
-```text
-ProfileSettings -> useProfileStorage.exportConfig
--> makeSnapshot(active name)
--> JSON.stringify UTF-8 browser Blob
--> Object URL -> anchor download -> revoke URL
-```
-
-Импорт одного профиля:
-
-```text
-file input -> importConfig
--> file.text -> JSON.parse
--> migrateSnapshot
--> запрос имени -> новый crypto.randomUUID profile
--> сохранить текущий active snapshot
--> build/save document
--> optional switch -> applySnapshot + location.reload
-```
-
-Полный transfer:
-
-```text
-tools.transfer_saves.main
--> paths_for(to-main|to-legacy)
--> read_document source + validate profiles list
--> backup_file existing destination
--> copy_document через temp + replace
-```
-
-Источник не изменяется.
-
-## Цепочка 15: применение стилей
-
-```text
-main.tsx
--> import globals.css
--> @import styles/base.css
-   -> ordered base-*.css modules
--> library.css -> player.css -> system-panels.css -> home-redesign.css -> ratings.css
--> player-toolbar.css -> custom-player.css -> mobile-android.css
--> home-library.css -> header-layout.css
--> useProfileStorage theme effect
-   -> --accent / --accent-soft / --bg
-   -> data-color-scheme / colorScheme / body background
--> useProfileStorage playerPrefs effect
-   -> --watched-episode-color
-   -> --interface-font-scale / --heading-font-scale
-   -> --poster-scale / --preview-scale
--> optional run.py DESKTOP_ZOOM_SCRIPT
-   -> documentElement.style.zoom
-```
-
-CSS cascade и inline surfaces подробно описаны в [`STYLES.md`](STYLES.md).
+Outputs: profile JSON; downloaded media/index; Google Drive file; per-server rating SQLite; in-memory room state/WS snapshots; device debug journal/export. Credentials, runtime identity and native state remain outside portable profile exports.

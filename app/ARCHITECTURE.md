@@ -1,217 +1,84 @@
-# Архитектура AnimeSoul
+[English](ARCHITECTURE.md) | [Русский](ARCHITECTURE.ru.md)
 
-AnimeSoul — локальное SPA с единым FastAPI-процессом для браузерного и
-desktop-режима. Интерфейс не обращается к YummyAnime или файловой системе
-напрямую: сетевые и файловые границы проходят через backend.
+# Architecture
 
-## Контур системы
+AnimeSoul is a local SPA with one FastAPI process per running instance. Browser and PyWebView use the same endpoints and profile document. Android embeds Python and serves the same UI to a WebView. This guide describes version 0.2.7, checked against source on 2026-09-16.
 
 ```mermaid
-flowchart LR
-    U["Пользователь"] --> C["React SPA"]
-    C -->|"same-origin REST / WS"| R["FastAPI routes"]
-    R --> S["Сервисы backend"]
-    S --> Y["YummyAnime API"]
-    S --> G["Google OAuth / Drive API"]
-    S --> J["JSON-хранилище"]
-    S --> Q["SQLite общих оценок"]
-    S --> W["Комнаты Watch Party в памяти"]
-    L["run.py / launcher.py"] --> R
-    L --> B["Браузер или PyWebView"]
-    B --> C
+flowchart TB
+    Launch["run.py / launcher.py / Android MainActivity"] --> Server["Uvicorn + FastAPI"]
+    Launch --> Shell["Browser / PyWebView / Android WebView"]
+    Shell --> React["main.tsx → App"]
+    React --> UI["Pages → hooks/controllers → domain/API adapters"]
+    UI -->|"relative HTTP"| Server
+    Server --> Routes["8 router modules; Watch Party excluded on Android"]
+    Routes --> Catalog["HybridCatalogueService → Yummy + Kodik"]
+    Routes --> Offline["OfflineLibraryService → KodikSourceResolver"]
+    Routes --> Store["JsonStorage / SQLite / GoogleDriveService"]
+    Routes --> Rooms["WatchPartyService: memory"]
+    UI -->|"HLS / MP4 / iframe / images"| CDN["Provider media"]
+    UI -->|"Android bridges"| Native["MediaSession / PiP / MediaStore / Cast"]
 ```
 
-В разработке Vite работает на порту 5173 и проксирует относительные маршруты
-на FastAPI 8000. В собранной версии FastAPI раздаёт `frontend/dist`, поэтому
-контракты frontend не зависят от режима запуска.
-
-## Направление зависимостей
+## Dependency direction
 
 ```text
-страницы/компоненты -> feature hooks/controllers -> feature API/domain -> lib/types
-FastAPI routes      -> services/pure policy       -> сеть/файлы/SQLite
-launcher/run.py     -> FastAPI application        -> React static bundle
+pages/components → feature hooks/controllers → feature API/domain → shared types
+FastAPI routes  → services / pure policy     → HTTP, files, SQLite
+runtime shells  → backend + static frontend
 ```
 
-Обратные зависимости запрещены: чистые селекторы не импортируют React,
-компоненты не собирают URL внешнего API, сервисы не импортируют frontend, а
-router не должен содержать правила слияния данных.
+Pure selectors do not import React. Routers parse transport and map errors; services own I/O and policy. Google Drive merge is a pure module, independently testable without OAuth. UI catalogue calls use local adapters; direct playback/images/iframes remain external client media requests.
 
-## Frontend
+## Frontend ownership
 
-### Инициализация и оболочка
+| Area | Responsibility |
+| --- | --- |
+| `main.tsx` | Debug capture, global styles, StrictMode/createRoot |
+| `App.tsx` | Composition of profile, catalogue, ratings, tracking and navigation state |
+| `features/navigation/useAppNavigation.ts` | Screen transitions and native back; active player lifetime on Android |
+| `features/storage/` | Profile hydration, migration, snapshot/document construction and debounced autosave |
+| `features/catalog/` | Transport, loading/filter state, franchise/card presentation |
+| `features/library/` | Pure progress/history/statistics selectors and folder management |
+| `components/Player.tsx` | Watch screen, family/video selection and player orchestration |
+| `features/player/` | Native HLS player, menus, downloads, offline playback, Cast, dates and Watch Party panels |
+| `features/settings/` | Settings groups, credentials, OAuth, cloud choice and profile UI |
+| `lib/types.ts`, `lib/events.ts` | Shared domain types and typed browser event names |
 
-- `app/frontend/index.html` предоставляет `#root`.
-- `app/frontend/src/main.tsx` устанавливает перехват журнала, импортирует
-  глобальный CSS и монтирует `<App />` в `StrictMode`.
-- `app/frontend/src/App.tsx` — координатор экранов. Он связывает хранилище,
-  каталог, оценки, трекинг и маршрутизацию состояния, но не выполняет raw HTTP.
-- `app/frontend/src/lib/types.ts` — общий TypeScript-контракт доменных данных.
-- `app/frontend/src/lib/events.ts` — единственный реестр межфункциональных
-  `CustomEvent`.
+Navigation uses React state, not a URL router. Heavy pages and the player are lazy loaded. [UI details](docs/UI.md).
 
-### Страницы и компоненты
+## Backend ownership
 
-`pages/` получает готовые view models и callback-функции. `components/` содержит
-повторно используемые элементы и оставшиеся orchestration shells (`Player`,
-`SettingsCenter`). Детальная карта находится в
-[`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md).
+| Router | Service / purpose |
+| --- | --- |
+| `yummy.py` | `HybridCatalogueService`, `YummyAnimeGateway`, `KodikAnimeGateway`; metadata and credential checks |
+| `kodik.py` | `OfflineLibraryService.playback_source`; direct playback and ping |
+| `downloads.py` | `OfflineLibraryService`; queue, files, settings and network policy |
+| `episode_dates.py` | `EpisodeDatesGateway`; independent calendar dates |
+| `storage.py` | `JsonStorage`, shared Drive autosave service |
+| `gdrive.py` | Shared `GoogleDriveService`, pure merge, OAuth completion and restore |
+| `community_ratings.py` | `CommunityRatingStore`, anonymous per-browser vote tree |
+| `watch_party.py` | `WatchPartyService`, REST polling contract and optional WS snapshots |
 
-### Features
+`main.py` installs CORS for Vite, timing/cache middleware, health, routers and the production SPA fallback. Lifespan closes provider pools on shutdown. [Backend details](docs/BACKEND.md).
 
-- `features/catalog/` — транспорт каталога, состояние загрузки и presentation;
-- `features/library/` — чистые выборки истории, прогресса и статистики;
-- `features/player/` — части страницы просмотра и действия активного тайтла;
-- `features/ratings/` — чтение/публикация агрегированных оценок;
-- `features/settings/` — вкладки, оформление, профили и Google Drive;
-- `features/storage/` — построение документов и жизненный цикл профилей;
-- `features/tracking/` — загрузка снимка доступных серий;
-- `features/watch-party/` — transport-контракт комнаты.
+## Persistence and boundaries
 
-Feature API-файлы отвечают только за HTTP и нормализацию ответа. Чистые правила
-находятся в `lib/` или selector-файлах. Таймеры, подписки и отмена запросов
-принадлежат hooks/controllers.
+- **Portable:** schema-3 JSON profiles: favorites, folders/notes, progress/rewatches, ratings, tracking and UI preferences. Frontend migrates known fields and preserves unknown root/profile/snapshot fields.
+- **Device-local:** credentials, OAuth pending/tokens, offline files/index, runtime identity, cache, debug and zoom. Download files are not uploaded with a profile.
+- **Per-server:** anonymous community-rating SQLite database. Different local backends do not share a global aggregate.
+- **Ephemeral:** Watch Party rooms, active download jobs, connection pools and request coordination. Restart does not restore a queue or room.
 
-## Backend
+`JsonStorage` validates a usable envelope and shares locks by resolved file path. It writes a temporary file and atomically replaces the save; cloud replacement creates a backup. [Data model](docs/DATA_MODEL.md), [Drive policy](docs/GDRIVE_SYNC.md).
 
-### Application и routes
+## External access
 
-`app/backend/app/main.py` создаёт FastAPI, включает CORS для Vite, регистрирует
-пять router-модулей и при наличии production bundle добавляет static/SPA
-fallback.
+YummyAnime Public token is sent server-side as `X-Application`; no Yummy private token is used. Kodik signing happens in Python; its private key is DPAPI-protected on Windows and kept in the Android private storage path. No private key belongs in frontend responses or exported profiles. Google credentials/tokens are local files. The loopback API has no general user authentication; CORS is not server authentication.
 
-| Router | Контракт | Делегирует |
-| --- | --- | --- |
-| `api/yummy.py` | `/api/yummy` | `YummyAnimeGateway` |
-| `api/storage.py` | `/api/storage` | `JsonStorage`, очередь Drive |
-| `api/watch_party.py` | `/watch-party/*`, `/ws/watch-party/*` | `WatchPartyService` |
-| `api/gdrive.py` | `/api/gdrive/*` | общий `GoogleDriveService` |
-| `api/community_ratings.py` | `/api/community-ratings*` | `CommunityRatingStore` |
+Cast sends a direct media URL to the receiver while FastAPI remains on loopback. Only the top local-origin WebView page receives the Cast message bridge. Party tokens identify participants and are stored in sessionStorage; REST polling is the active React protocol, not WebSocket.
 
-Router разбирает transport-поля, применяет ограничения HTTP и переводит
-известные ошибки в статус/JSON. Полный контракт — в
-[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md).
+## Extending the system
 
-### Services и policy
+Add upstream calls to a backend service and a frontend transport adapter. Add persistent fields to types, defaults/migration, snapshot builders, merge rules and both language guides. Keep timers/listeners in hooks with cleanup. Preserve CSS import order and unknown JSON fields during refactoring. Moving code does not by itself change the product version or save schema.
 
-- `services/yummy.py` — заголовки, таймауты, общий HTTP connection pool, поиск
-  с вариантами, cache/in-flight dedup и рекурсивная нормализация URL;
-- `services/response_cache.py` — общий для Windows и Android SQLite cache с
-  memory hot-layer и stale-if-error резервом;
-- `services/storage.py` — последовательная атомарная JSON-запись и одноразовый
-  импорт legacy-сохранения;
-- `services/watch_party.py` — комнаты, участники, роли и playback в памяти;
-- `services/gdrive.py` — OAuth, refresh token, Drive I/O и очередь autosave;
-- `services/gdrive_merge.py` — чистые детерминированные правила merge;
-- `services/community_ratings.py` — SQLite, одна заменяемая оценка на
-  `(voter_id, anime_id)` и публичные агрегаты.
-
-`gdrive_merge.py` не выполняет сеть или файловые операции. Это намеренная
-граница: конфликтную политику можно тестировать без OAuth.
-
-## Данные и сохранение
-
-Основной документ имеет `schemaVersion: 3`, содержит список профилей и активный
-профиль. Backend проверяет наличие массива `profiles`, после чего обращается с
-остальной частью как с непрозрачным JSON. Миграция известных полей выполняется
-в frontend через `migrateDocument`/`migrateSnapshot`.
-
-Неизвестные поля сохраняются на трёх уровнях:
-
-- корень `StorageDocument`;
-- `ConfigProfile`;
-- `ConfigSnapshot` при построении следующего снимка.
-
-Это обеспечивает двустороннюю совместимость с legacy и будущими версиями.
-Полная схема и localStorage-ключи описаны в
-[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
-
-## Основные потоки
-
-### Загрузка профиля
-
-```text
-main.tsx -> App -> useProfileStorage
-         -> GET /api/storage
-         -> JsonStorage.read
-         -> resolveActiveProfileDocument
-         -> migrateDocument + migrateSnapshot
-         -> React state + localStorage mirror
-```
-
-### Сохранение
-
-```text
-изменение React state
--> useProfileStorage (debounce 400 ms)
--> buildProfileSnapshot -> buildStorageDocument
--> PUT /api/storage?auto_sync=...
--> JsonStorage.write (temp + atomic replace)
--> optional GoogleDriveService.schedule_write
-```
-
-### Каталог
-
-```text
-UI -> useCatalogController -> features/catalog/api.ts
--> GET /api/yummy -> api/yummy.py
--> YummyAnimeGateway -> https://api.yani.tv
--> нормализованный JSON -> selectors/components
-```
-
-### Совместный просмотр
-
-```text
-Player -> useWatchParty (раз в 1 секунду)
--> POST /watch-party/update
--> GET /watch-party/state
--> guard playbackChangedByUser / roomPlaybackRevision
--> onHostState -> Player
-```
-
-WebSocket endpoint существует для push-совместимости, но текущий React-клиент
-считает REST-поллинг авторитетным и WebSocket не открывает.
-
-Подробные цепочки с именами функций находятся в
-[`docs/ENTRY_POINTS_AND_FLOWS.md`](docs/ENTRY_POINTS_AND_FLOWS.md).
-
-## Стили
-
-`src/main.tsx` импортирует `globals.css`; он последовательно импортирует общий
-манифест и feature-файлы. Порядок — часть контракта каскада. Темы и масштабы
-применяются через CSS custom properties из `useProfileStorage`, а desktop zoom
-дополнительно устанавливает `documentElement.style.zoom`.
-
-Владельцы файлов, токены, точки inline-стилей и правила изменения описаны в
-[`docs/STYLES.md`](docs/STYLES.md).
-
-## Внешние границы и безопасность
-
-- Public token YummyAnime остаётся на backend и передаётся upstream в
-  `X-Application`; приватный token YummyAnime не используется.
-- Публичный и приватный ключи Kodik используются только локальным backend для
-  подписания `/api/video-links`. Приватный ключ защищён Windows DPAPI и никогда
-  не включается в профиль, экспорт или JSON-ответ frontend.
-- Google OAuth-токены и credentials хранятся в локальном data-каталоге и не
-  входят в профиль/экспорт.
-- Cookie общих оценок — `HttpOnly`, `SameSite=Lax`; API возвращает только
-  агрегаты, не `voter_id`.
-- Watch Party token является идентификатором участника комнаты и хранится в
-  `sessionStorage`; комнаты исчезают при завершении процесса.
-- Frontend получает iframe URL как резервный источник. Для Kodik backend может
-  выдать подписанные HLS-варианты, субтитры и сегменты собственному плееру;
-  встроенный iframe остаётся переключаемым fallback.
-
-## Правила расширения
-
-1. Новый upstream-вызов добавляется в backend service и feature API, не в JSX.
-2. Новое сохраняемое поле добавляется в тип, миграцию, документацию данных и
-   тест round-trip/merge.
-3. Расчёт без I/O оформляется чистой функцией и тестируется напрямую.
-4. Подписка или таймер оформляются hook с явным cleanup.
-5. Новый CSS владелец подключается через существующий манифест; порядок импорта
-   меняется только после визуальной проверки.
-6. Изменение HTTP/WS-контракта одновременно отражается в ручном API-справочнике
-   и тестах вызывающей стороны.
-7. Перемещение кода без изменения поведения не повышает версию продукта или
-   схему сохранения.
+[Function flows](docs/ENTRY_POINTS_AND_FLOWS.md) · [Project map](docs/PROJECT_MAP.md) · [API](docs/API_REFERENCE.md) · [CSS](docs/STYLES.md)

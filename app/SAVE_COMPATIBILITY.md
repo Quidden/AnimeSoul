@@ -1,153 +1,43 @@
-# Совместимость и перенос сохранений
+[English](SAVE_COMPATIBILITY.md) | [Русский](SAVE_COMPATIBILITY.ru.md)
 
-Актуальный Python/React-стек и архивный Vinext/Electron-стек используют общий
-versioned JSON document схемы **3**. Перенос возможен в обе стороны, но перед
-операцией оба приложения нужно полностью закрыть.
+# Save compatibility and transfer
 
-## Что переносится
+The current Python/React app and archived Vinext/Electron app read versioned JSON schema **3**. Close both runtimes before copying a complete save. [Data model](docs/DATA_MODEL.md) · [Drive policy](docs/GDRIVE_SYNC.md).
 
-Полный `animesoul-storage.json` содержит:
+## What transfers
 
-- все профили и активный profile ID;
-- избранное, папки, порядок и заметки;
-- прогресс, позиции, завершения и пересмотры;
-- личные оценки;
-- tracking baselines и выбранные озвучки;
-- тему, положение toolbar и player preferences;
-- настройки истории и библиотечных секций.
+The complete animesoul-storage.json includes all profiles and active ID; favorites/folders/order/notes; progress/positions/completions/rewatches/reset markers; personal scores; tracking baselines/dubs; themes, toolbar, player preferences and library/history settings. Unknown envelope/profile/snapshot fields, including newer field revisions, survive normal round-trip. Readable animeTitles and progress title labels do not change numeric identity.
 
-`snapshot.animeTitles` и `progress[animeId].title` дублируют читаемое название
-для удобства просмотра JSON. Идентичность всегда определяется numeric anime ID;
-редактирование подписи не переносит progress на другой тайтл.
+Device data is separate: Yummy/Kodik credentials, port/configuration, Google OAuth/tokens/choice, community database and voter cookie, downloads/index, runtime identity, debug, party session and desktop zoom. A profile transfer does not move video files or connect cloud accounts.
 
-Не входят в portable document:
+## One profile through the UI
 
-- YummyAnime token и машинный port;
-- Google credentials/tokens и состояние первой синхронизации;
-- community ratings database и anonymous voter cookie;
-- runtime state, debug log и Watch Party session;
-- desktop zoom текущего устройства.
+Open the source profile, Settings → Profiles → export; save `AnimeSoul-<name>.json`. In the destination import the file, choose a new name and optionally switch. Export contains one ConfigSnapshot, not the whole document; import creates a new UUID and preserves other profiles. This works across installed builds/devices.
 
-## Вариант 1: один профиль через интерфейс
+## Complete document between source directories
 
-1. Откройте исходную версию и нужный профиль.
-2. В настройках профилей выберите экспорт конфигурации.
-3. Сохраните `AnimeSoul-<имя>.json`.
-4. В целевой версии выберите импорт и этот файл.
-5. Задайте имя нового профиля и при необходимости сразу переключитесь.
-
-Экспорт содержит один `ConfigSnapshot`, а не всю оболочку. Импорт создаёт новый
-profile UUID и не заменяет другие профили. Способ удобен для установленной
-сборки и другого компьютера.
-
-## Вариант 2: полный документ между каталогами репозитория
-
-Из legacy в текущий source data:
+Run from `app/` after both runtimes are closed:
 
 ```powershell
-cd app
 .\.venv\Scripts\python.exe -m tools.transfer_saves to-main
-```
-
-Из текущего source data в legacy:
-
-```powershell
-cd app
+# Or reverse the direction:
 .\.venv\Scripts\python.exe -m tools.transfer_saves to-legacy
 ```
 
-Фиксированные пути утилиты:
+Fixed endpoints are `legacy-old-stack/data/animesoul-storage.json` and `app/data/animesoul-storage.json`. The tool does not discover LocalAppData or custom data_directory. For those locations use UI export/import or copy the full file between actual configured directories with the runtimes stopped.
 
-```text
-legacy-old-stack/data/animesoul-storage.json
-app/data/animesoul-storage.json
-```
+The tool checks source existence/UTF-8 JSON and envelope fields, copies an existing destination to `animesoul-storage.backup-YYYYMMDD-HHMMSS-microseconds.json`, writes `animesoul-storage.json.transfer.tmp`, then atomically replaces destination. Source remains unchanged; JSON whitespace is normalized, unknown nested content retained.
 
-Утилита не определяет `%LOCALAPPDATA%` и custom `data_directory`. Для
-установленной сборки используйте UI export/import либо заранее скопируйте полный
-файл между фактическим data-каталогом и `app/data` при закрытом приложении.
+## First legacy import
 
-## Что делает transfer tool
+JsonStorage.read tries the configured legacy candidate only when the current save is absent. Valid legacy data is copied, never removed; invalid legacy JSON is ignored; an existing current save is not replaced. Backend validation requires usable profiles/IDs/snapshots. Corruption in an existing current save must not be interpreted as a missing file by the frontend.
 
-`app/tools/transfer_saves.py`:
+Compatibility means the file can be opened and returned without silently stripping unknown fields. It does not guarantee that the archived UI exposes new features. Current merge additionally respects per-field revisions/reset markers; avoid editing those by hand.
 
-1. Проверяет существование source.
-2. Разбирает UTF-8 JSON.
-3. Проверяет root object, `profiles: array`, `activeProfile: string`,
-   `schemaVersion: integer`.
-4. Если destination существует, копирует его в
-   `animesoul-storage.backup-YYYYMMDD-HHMMSS-microseconds.json`.
-5. Сериализует полный source document во временный
-   `animesoul-storage.json.transfer.tmp`.
-6. Атомарно заменяет destination.
+## Installed/custom paths and recovery
 
-Source не изменяется. Неизвестные вложенные поля сохраняются на уровне модели
-данных, хотя whitespace/форматирование JSON нормализуются.
+Find data_directory in the actual config; close launcher/client/runtime; back up destination; validate source JSON; copy as animesoul-storage.json; start only the target app and verify/export a profile. Never replace a file while a running client can autosave its in-memory state over it.
 
-## Автоматический первый импорт
+To undo a bad transfer, stop both runtimes, keep the bad file separately, restore the newest matching backup as animesoul-storage.json, then check the active profile. Alternatives are profile export, cloud copy or the other implementation's source file. Cloud restore creates a local backup before replacement; verify which side has the desired data before a directional restore.
 
-`backend/app/services/storage.py::JsonStorage.read` при отсутствии main save
-проверяет `legacy-old-stack/data/animesoul-storage.json`. Корректный документ
-копируется в current data directory.
-
-- импорт выполняется только если current save отсутствует;
-- существующий current document никогда не перезаписывается;
-- legacy source не удаляется и не редактируется;
-- повреждённый legacy JSON игнорируется.
-
-## Гарантии совместимости
-
-- Оба frontend понимают schema version 3.
-- Известные поля получают безопасные defaults при migration.
-- Неизвестные root/profile/snapshot fields сохраняются при обычной загрузке,
-  автоматической записи и profile round-trip.
-- Backend main-версии валидирует оболочку, но не удаляет незнакомое содержимое.
-- Transfer tool переносит весь document без выборочного преобразования.
-- Google Drive merge начинает с unknown fields выбранной стороны и применяет
-  явные правила к известным collections.
-
-Совместимость означает «файл можно открыть и вернуть без молчаливой потери
-неизвестных полей». Возможность новой функции в старом UI не гарантируется:
-старая версия просто не показывает то, чего не понимает.
-
-## Device-specific настройки после переноса
-
-Проверьте отдельно:
-
-- `watchPartyServer`: адрес может быть недоступен на другом компьютере;
-- Google Drive: подключается заново на целевом устройстве;
-- port и YummyAnime Public token: находятся в машинном config, не в профиле;
-- desktop zoom и раскрытые локальные панели: часть состояния имеет device-first
-  приоритет.
-
-## Ручное копирование
-
-Если нужно перенести полный файл из установленной сборки:
-
-1. Узнайте `data_directory` в её `animesoul.python.json`.
-2. Закройте launcher, browser/desktop client и runtime server.
-3. Создайте отдельную копию destination.
-4. Проверьте source как JSON с root `schemaVersion`, `activeProfile`, `profiles`.
-5. Скопируйте с именем `animesoul-storage.json`.
-6. Запустите целевую версию и экспортируйте один profile как дополнительную
-   проверку.
-
-Не редактируйте/не заменяйте файл, пока FastAPI process работает: следующий
-debounced save может перезаписать ручное изменение состоянием из памяти.
-
-## Восстановление
-
-После ошибочного transfer:
-
-1. Закройте обе версии.
-2. Переименуйте повреждённый destination для диагностики, не удаляя его сразу.
-3. Найдите самый свежий `*.backup-*.json`.
-4. Скопируйте/переименуйте его обратно в `animesoul-storage.json`.
-5. Запустите только целевую версию и проверьте активный профиль.
-
-Если backup отсутствует, используйте UI export, cloud copy или исходный файл
-другой реализации. Google Drive full restore выполняйте только после проверки,
-какая сторона содержит нужные изменения.
-
-Полная структура полей: [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md). Правила
-облачного конфликта: [`docs/GDRIVE_SYNC.md`](docs/GDRIVE_SYNC.md).
+On the destination recheck Watch Party server address, local API keys, Google connection, port and device UI scale. Google/Kodik credentials are deliberately outside portable saves.

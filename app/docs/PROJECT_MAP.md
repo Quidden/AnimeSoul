@@ -1,258 +1,90 @@
-# Карта проекта AnimeSoul
+[English](PROJECT_MAP.md) | [Русский](PROJECT_MAP.ru.md)
 
-Документ отвечает на два вопроса: где находится нужная логика и за что отвечает
-каждый важный файл. Пути указаны от корня репозитория.
+# Project map
 
-## Корень репозитория
+All paths are repository-relative. Maintained code is under `app/`; `legacy-old-stack/` is archived. [UI owners](UI.md) · [Backend owners](BACKEND.md) · [Calls](ENTRY_POINTS_AND_FLOWS.md).
 
-| Путь | Назначение |
+## Runtime and packaging
+
+| Path | Purpose |
 | --- | --- |
-| `Start AnimeSoul.bat` | передаёт аргументы в актуальный `app/Start AnimeSoul.bat` |
-| `README.md` | граница между актуальным и архивным стеками, общий старт |
-| `app/` | поддерживаемая реализация |
-| `legacy-old-stack/` | архив Vinext/Electron и источник совместимого сохранения |
-| `build/`, `dist/`, `release-work/` | результаты локальной упаковки; не являются исходниками приложения |
+| `Start AnimeSoul.bat` | Delegates to the current app |
+| `app/run.py` | CLI configuration, port selection, browser/PyWebView, Uvicorn and desktop zoom |
+| `app/launcher.py` | Installed launcher HTML and `LauncherApi` bridge; runtime launch/status/stop |
+| `app/runtime_instance.py` | Runtime state, free-port lookup, identity/capability checks |
+| `app/animesoul.python.example.json` | Non-secret example config |
+| `app/tools/prepare_runtime.py` | Changed-only dependency/frontend preparation |
+| `app/tools/transfer_saves.py` | Full document migration/backup between fixed source paths |
+| `app/tools/check_docs.py` | Bilingual/local-link validation and static API inventory generation |
+| `app/packaging/build_windows.ps1` | Windows build coordinator |
+| `app/packaging/launcher.spec`, `runtime.spec`, `AnimeSoul.iss` | PyInstaller launcher/runtime and Inno Setup installer |
+| `app/mobile/build_android.ps1`, `mobile/android/` | Gradle/Chaquopy Android packaging |
+| `app/mobile/android/app/src/main/python/mobile_runtime.py` | Embedded backend bootstrap |
+| `.github/workflows/quality.yml` | Windows backend/frontend quality gates |
+| `release-work/`, `app/build/`, `app/dist/` | Local build output, not maintained source |
 
-## Запуск, конфигурация и упаковка `app/`
+## Frontend `app/frontend/`
 
-| Путь | Назначение / публичная поверхность |
+| Path | Responsibility |
 | --- | --- |
-| `app/run.py` | CLI runtime: конфигурация, порт, Uvicorn, браузер/PyWebView, desktop zoom; точка `main()` |
-| `app/launcher.py` | WebView-лаунчер установленной сборки; JS bridge `LauncherApi`, безопасная остановка только собственного runtime |
-| `app/runtime_instance.py` | атомарный `animesoul.runtime.json`, поиск свободного порта и проверка instance ID |
-| `app/animesoul.python.example.json` | пример машинной конфигурации без рабочих токенов |
-| `app/Start AnimeSoul.bat` | venv, changed-only prepare, затем `run.py` |
-| `app/Start AnimeSoul in Browser.bat` | добавляет `--mode browser` |
-| `app/Start AnimeSoul Desktop.bat` | добавляет `--mode desktop` |
-| `app/Configure AnimeSoul.bat` | добавляет `--configure` |
-| `app/packaging/build_windows.ps1` | сборка launcher/runtime и Windows-установщика |
-| `app/packaging/launcher.spec` | PyInstaller-описание лаунчера |
-| `app/packaging/runtime.spec` | PyInstaller-описание runtime |
-| `app/packaging/AnimeSoul.iss` | Inno Setup-сценарий |
-| `app/packaging/assets/` | общая иконка installer, launcher и runtime |
-| `app/mobile/android/app/src/main/java/com/animesoul/mobile/MainActivity.java` | Android Activity: WebView, embedded runtime, lifecycle, PiP и native bridges |
-| `app/mobile/android/app/src/main/java/com/animesoul/mobile/PlaybackSessionController.java` | MediaSession, системное playback-уведомление и transport-команды WebView |
-| `app/mobile/android/app/src/main/java/com/animesoul/mobile/DownloadNetworkMonitor.java` | наблюдение за типом Android-сети и публикация состояния embedded download API |
+| `index.html`, `src/main.tsx`, `src/App.tsx` | DOM, bootstrap, application composition |
+| `vite.config.ts` | API/WS proxy, desktop/Android output separation, chunks and source maps |
+| `src/version.ts`, `lib/changelog.ts` | Displayed version and in-app release history |
+| `src/pages/` | Home, catalogue, ratings, statistics, folder view |
+| `src/pages/home/` | Hero, dashboard widgets, library cards/tabs and pagination |
+| `src/components/` | Reusable cards/toggles/ratings; Header, Watch/Player, SettingsCenter; debug/changelog and overlays |
+| `src/features/catalog/` | API, query/filter controller and franchise/card presentation |
+| `src/features/library/` | Pure history/statistics/progress selectors; folder management |
+| `src/features/navigation/` | Screen/native-back actions |
+| `src/features/storage/` | Snapshot/document builders, profile lifecycle and autosave |
+| `src/features/player/` | HLS player/menus, toolbar, seasons, watch metadata, dates, previews, party, downloads/offline and Cast |
+| `src/features/downloads/` | Download picker and offline library page |
+| `src/features/settings/` | Settings catalogue, row primitives, appearance/playback/profile/credentials/offline/cloud/party groups |
+| `src/features/ratings/`, `tracking/`, `watch-party/`, `header/` | Feature transport and lifecycle boundaries |
+| `src/hooks/` | Watch Party loop, release tracking, API activity and published save status |
+| `src/lib/types.ts`, `settings.ts`, `events.ts` | Domain contracts, defaults/storage keys, typed events |
+| `src/lib/http.ts`, `apiCredentials.ts`, `downloads.ts`, `gdrive.ts`, `episodeDates.ts` | Transport adapters and error translation |
+| `src/lib/anime.ts`, `tracking.ts`, `ratings.ts`, `playerProgress.ts`, `watchPartyLogic.ts` | Domain normalization and pure rules |
+| `src/lib/kodik.ts`, `kodikStream.ts`, `cast.ts`, `platform.ts` | Playback/provider/native adapters |
+| `src/lib/storage.ts`, `storageSafety.ts` | Migration, storage I/O, field revisions and overwrite guards |
+| `src/lib/debugLog.ts`, `sourceDiagnostics.ts` | Diagnostic journal and provider status |
+| `src/lib/trailer.ts`, `playerPreferences.ts`, `modalAccessibility.ts` | Trailer normalization, preference rules and modal/back lifecycle |
+| `src/globals.css`, `src/styles/` | Ordered global cascade; [stylesheet owners](STYLES.md) |
+| `tests/critical-logic.test.ts` | Domain characterization tests |
+| `tests/player-browser.*`, `tests/cast-harness.*` | Browser integration harnesses |
 
-## Backend
+## Backend `app/backend/`
 
-### Application и конфигурация
+`app/main.py` creates the server; `app/config.py` loads settings. `app/api/` contains eight transport adapters. Each handler and its request model is linked in [API_SCHEMA](API_SCHEMA.md).
 
-| Путь | Назначение |
+| Services | Responsibility |
 | --- | --- |
-| `app/backend/app/main.py` | объект `FastAPI`, CORS, routers, `/api/health`, static assets и SPA fallback |
-| `app/backend/app/config.py` | `Settings`, чтение `.env`, JSON-конфига и environment overrides; вычисление data/dist/legacy paths |
-| `app/backend/app/api/__init__.py` | граница пакета HTTP-адаптеров |
-| `app/backend/app/services/__init__.py` | граница пакета сервисов |
-| `app/backend/requirements.txt` | runtime/test зависимости Python |
+| `catalog.py`, `anime_identity.py` | Hybrid catalogue and identity mapping/matching |
+| `yummy.py`, `kodik.py`, `http_client.py` | Upstream gateways and reusable HTTP behavior |
+| `episode_links.py`, `kodik_helpers.py` | Exact episode URL/number/metadata normalization |
+| `kodik_resolver.py` | Private signed direct-video resolution |
+| `offline_library.py` | Settings, download worker, index, file access and MediaStore coordination |
+| `episode_dates.py` | Jikan dates, rate limit and cache |
+| `response_cache.py` | Persistent SQLite JSON cache and hot memory layer |
+| `storage.py` | Envelope validation, path-shared locks, atomic writes and backups |
+| `gdrive.py`, `gdrive_merge.py` | OAuth/cloud I/O and pure per-field/episode merge policy |
+| `community_ratings.py`, `watch_party.py` | Shared rating storage and in-memory room protocol |
 
-### HTTP и WebSocket adapters
+Tests cover runtime/startup, services, storage safety, Drive, offline library, cache, hybrid catalogue fallback, episode identity/dates/links, ratings and Yummy search. `requirements.txt` is runtime; `requirements-dev.txt` adds development tools.
 
-| Путь | Маршруты | Что делает |
-| --- | --- | --- |
-| `api/yummy.py` | `GET /api/yummy` | выбирает proxy mode, валидирует query, собирает составные ответы |
-| `api/storage.py` | `GET/PUT /api/storage` | проверяет оболочку, читает/пишет JSON, планирует autosync |
-| `api/watch_party.py` | `/watch-party/*`, `/ws/watch-party/*`, `/health` | переводит JSON в команды комнаты и стабильные ошибки |
-| `api/gdrive.py` | `/api/gdrive/*` | OAuth callback, credentials, status и явная sync-координация |
-| `api/community_ratings.py` | `/api/community-ratings*` | валидация оценок, anonymous cookie и публичные агрегаты |
-| `api/episode_dates.py` | `GET /api/episode-dates/{anime_id}` | принимает идентификаторы тайтла и отдаёт нормализованные даты серий |
+## Android native owners
 
-### Services и чистые правила
+Under `app/mobile/android/app/src/main/java/com/animesoul/mobile/`:
 
-| Путь | Назначение / ключевые функции |
-| --- | --- |
-| `services/yummy.py` | `YummyAnimeGateway`, варианты поискового запроса, cache/in-flight dedup, URL normalization |
-| `services/http_client.py` | lazy lifecycle общего `httpx.AsyncClient` для upstream gateway |
-| `services/response_cache.py` | SQLite + memory cache публичных upstream-ответов, TTL и stale-if-error |
-| `services/storage.py` | `JsonStorage.read/write`, temp-файл и atomic replace, первый импорт legacy |
-| `services/watch_party.py` | `WatchPartyService`, `Room`, `Participant`, REST-authoritative state и WS broadcast |
-| `services/gdrive.py` | `GoogleDriveService`: credentials/tokens, OAuth, Drive folder/file I/O, coalesced autosave |
-| `services/gdrive_merge.py` | `merge_storage_documents`, `merge_profile`, `merge_snapshot`, episode conflict policy |
-| `services/community_ratings.py` | `CommunityRatingStore`, SQLite WAL, replace/delete vote и aggregate |
-| `services/kodik_helpers.py` | чистая валидация ссылок Kodik, подписи private API и нормализация sources/subtitles/skip-маркеров |
-| `services/kodik_resolver.py` | проверка ключей и подписанный клиент Kodik private API для playback/download sources |
-| `services/anime_identity.py` | нормализация и проверка идентичности тайтла, сезона, озвучки и набора эпизодов |
-| `services/episode_dates.py` | best-effort сопоставление тайтла с Jikan/MAL и кеш дат выхода эпизодов |
-| `services/offline_library.py` | очередь загрузок, локальный индекс, HLS/MP4 transfer и Android MediaStore integration |
+- `MainActivity.java`: WebView, embedded runtime, navigation, native bridges and lifecycle/PiP integration.
+- `PlaybackSessionController.java`, `PlaybackControlReceiver.java`: MediaSession and playback notifications/actions.
+- `DownloadForegroundService.java`: queue monitoring and wake lock while active.
+- `DownloadNetworkMonitor.java`: connectivity reporting to Python.
+- `NativeDownloadSupport.java`: native media/download helpers and MediaStore/FFmpeg integration.
+- `CastController.java`, `CastOptionsProvider.java`: Cast session bridge and receiver configuration.
 
-### Backend tests
+Manifest/resources define permissions, network policy, backup/extraction rules and appearance. `CastSmokeTest.java` is under androidTest. Signing data and toolchain caches are Git-ignored. [Build/platform guide](PLATFORMS.md).
 
-| Путь | Проверяет |
-| --- | --- |
-| `backend/tests/test_services.py` | storage и Watch Party lifecycle |
-| `backend/tests/test_yummy_search.py` | раскладка, транслитерация, псевдонимы, cache/in-flight search |
-| `backend/tests/test_gdrive.py` | merge, autosave и конфликтные правила |
-| `backend/tests/test_community_ratings.py` | SQLite aggregate, валидация и HTTP-контракт |
-| `backend/tests/test_run_startup.py` | выбор занятого/свободного порта и startup branches |
-| `backend/tests/test_runtime_instance.py` | runtime state, instance ownership и атомарность |
-| `backend/tests/test_offline_library.py` | Kodik helper-контракт, очередь/отмена загрузок, локальный индекс, HLS и Android MediaStore |
-| `backend/tests/test_episode_identity.py` | отбрасывание чужих сезонов, озвучек и ещё не вышедших эпизодов |
-| `backend/tests/test_episode_dates.py` | нормализация и резервное поведение сервиса дат выхода |
+## Choosing a change location
 
-## Frontend bootstrap
-
-| Путь | Назначение |
-| --- | --- |
-| `app/frontend/index.html` | HTML shell, `#root`, favicon и preconnect к trailer-хостам |
-| `app/frontend/vite.config.ts` | React plugin, dev port, proxy `/api`, `/watch-party`, `/ws`, output `dist` |
-| `app/frontend/src/main.tsx` | debug capture, глобальный CSS, `createRoot(<App />)` |
-| `app/frontend/src/App.tsx` | состояние навигации, композиция feature controllers и lazy boundaries тяжёлых pages/player/modals |
-| `app/frontend/src/version.ts` | отображаемая версия приложения |
-
-## Frontend pages
-
-| Путь | Экран / ответственность |
-| --- | --- |
-| `pages/HomePage.tsx` | композиция главной страницы из hero, widgets и library sections |
-| `pages/CatalogPage.tsx` | фильтры, сортировка, карточки, пагинация и случайный выбор |
-| `pages/RatingsPage.tsx` | сохранённые личные/общие оценки и быстрое редактирование |
-| `pages/StatisticsPage.tsx` | итоговые метрики, календарь, месяцы, дни недели и жанры |
-| `pages/FolderView.tsx` | содержимое одной пользовательской папки, заметки и сортировка |
-| `pages/home/types.ts` | `HomePageModel` и `HomePageActions` — контракт главной страницы |
-| `pages/home/HomeHero.tsx` | cinematic hero, продолжение и активная Watch Party |
-| `pages/home/DashboardWidgets.tsx` | компактные показатели главной страницы |
-| `pages/home/LibrarySections.tsx` | вкладки «смотрю», отслеживание, папки и история без внутреннего скролла |
-| `pages/home/LibraryToolbar.tsx` | единая навигация и счётчики разделов библиотеки |
-| `pages/home/HomeCardList.tsx` | широкие карточки с постером, прогрессом, метаданными и действиями |
-| `pages/home/useHomeCardLimit.ts` | раскрытие длинного списка порциями по 10 элементов |
-
-## Frontend features
-
-### Catalog
-
-| Путь | Назначение |
-| --- | --- |
-| `features/catalog/api.ts` | typed transport для catalog/details/videos/trailers/schedule, frontend search cache |
-| `features/catalog/useCatalogController.ts` | view, query, filters, pagination, загрузка сохранённых ID и video statistics |
-| `features/catalog/useCatalogPresentation.ts` | franchise grouping, card metadata, genres, visible collections |
-
-### Library, player и tracking
-
-| Путь | Назначение |
-| --- | --- |
-| `features/library/selectors.ts` | чистые history/watching/folder/statistics selectors |
-| `features/library/useFolderManagement.ts` | состояние folder picker/view, создание, удаление/отмена, заметки и сортировка пользовательских папок |
-| `features/navigation/useAppNavigation.ts` | стабильные переходы между экранами, открытие тайтла и обработка native back |
-| `features/player/types.ts` | props/контракты экрана просмотра |
-| `features/player/useResumePreview.ts` | выбор последнего доступного продолжения и его preview |
-| `features/player/activeWatchActions.ts` | запись прогресса и подтверждение новой серии |
-| `features/player/useOfflinePlayback.ts` | обнаружение локальной библиотеки, polling загрузок, доступ Kodik и offline video mapping |
-| `features/player/useDownloadManager.ts` | выбор серий/озвучки/качества, availability-check, очередь и отмена offline-загрузок |
-| `features/player/PlayerToolbar.tsx` | настройки источника, озвучки и действий плеера |
-| `features/player/SeasonList.tsx` | сезоны, серии, прогресс и ручные отметки |
-| `features/player/PlayerTimelinePreview.tsx` | кадр и отметка времени над шкалой собственного плеера |
-| `features/player/useEpisodeAirDates.ts` | загрузка и объединение исходных и резервных дат серий |
-| `features/player/ReleaseSchedule.tsx` | сведения о следующем/предыдущем выпуске |
-| `features/player/WatchInfo.tsx` | метаданные и информация о выбранном тайтле |
-| `features/player/WatchPartyPanel.tsx` | UI комнаты и участников |
-| `features/tracking/api.ts` | детали франшизы и последовательная загрузка videos для tracking snapshot |
-| `lib/episodeDates.ts` | нормализация frontend-контракта дат выхода серий |
-
-### Storage и settings
-
-| Путь | Назначение |
-| --- | --- |
-| `features/storage/profileDocument.ts` | чистая сборка/разрешение `StorageDocument` и сохранение неизвестных полей |
-| `features/storage/useProfileStorage.ts` | состояние профиля, startup hydrate, localStorage mirror, import/export/switch profile |
-| `features/storage/useProfileAutosave.ts` | debounce, retry и abort lifecycle записи активного профиля в файловое хранилище |
-| `features/settings/settingsCatalog.ts` | вкладки и поисковые термины настроек |
-| `features/settings/Setting.tsx` | единая строка настройки и фильтрация по поиску |
-| `features/settings/AppearanceSettings.tsx` | темы, цвета и CSS-масштабы |
-| `features/settings/PlaybackSettings.tsx` | продолжение, плеер, панель управления и история |
-| `features/settings/WatchPartySettings.tsx` | параметры комнат и инструкция совместного просмотра |
-| `features/settings/ProfileSettings.tsx` | профили, import/export и переключение |
-| `features/settings/useGoogleDriveSettings.ts` | статус OAuth/sync, команды подключения и presentation state |
-| `features/settings/CloudSettings.tsx` | UI Google Drive |
-| `features/settings/GoogleOAuthSetup.tsx` | ввод Client ID/Secret и инструкция OAuth |
-| `features/settings/GoogleDriveInitialSyncModal.tsx` | обязательный первоначальный выбор при существующем cloud-файле |
-
-### Ratings и Watch Party
-
-| Путь | Назначение |
-| --- | --- |
-| `features/ratings/api.ts` | пакетное чтение агрегатов и PUT полного дерева личной оценки |
-| `features/ratings/useCommunityRatings.ts` | retry, очередь удалений и публикация при изменении `updatedAt` |
-| `features/watch-party/api.ts` | sessionStorage, REST transport, protocol guard и ошибки |
-| `features/watch-party/types.ts` | локальная сессия `{roomId, token, role}` |
-| `features/watch-party/usePartyHostPlayback.ts` | разрешение playback ведущего комнаты в полную запись каталога |
-
-## Shared components
-
-| Путь | Назначение |
-| --- | --- |
-| `components/Header.tsx` | бренд, навигация, поиск, профили и статусы API/save/cloud/party |
-| `features/header/useHeaderCloudSync.ts` | polling, lifecycle merge, interval sync и presentation Google Drive в header |
-| `components/Player.tsx` | выбор direct/iframe-плеера, сезоны, sources, progress, Kodik messages и Watch Party |
-| `features/player/AnimeSoulPlayer.tsx` | собственные HLS controls, качество, субтитры, continuity и skip-маркеры |
-| `features/player/AnimeSoulPlayerMenus.tsx` | панель настроек и быстрый выбор сезона/серии собственного плеера |
-| `components/SettingsCenter.tsx` | modal shell, вкладки, поиск и orchestration настроек |
-| `components/AnimeCard.tsx` | карточка каталога и progress bar |
-| `components/RatingBoard.tsx` | сводка источников рейтинга |
-| `components/ScorePicker.tsx` | выбор личной оценки 1–10 |
-| `components/CollectionOverview.tsx` | подробности избранного, папок и tracking |
-| `components/FolderPicker.tsx` | добавление/удаление тайтла из папок |
-| `components/EpisodeSlideshow.tsx` | кадры серии или fallback poster |
-| `components/EpisodeHoverPreview.tsx` | позиционируемое preview серии |
-| `components/Toggle.tsx` | общий доступный переключатель |
-| `components/ReleaseMark.tsx` | статус релиза/следующей серии |
-| `components/FAQBlock.tsx` | справка на главной |
-| `components/DebugPanel.tsx` | журнал отладки и экспорт |
-| `components/ChangelogModal.tsx` | встроенная история версий |
-| `components/AppFooter.tsx` | общий footer продукта |
-
-## Hooks и `lib/`
-
-| Путь | Назначение |
-| --- | --- |
-| `hooks/useApiActivity.ts` | сетевой статус и latency для header |
-| `hooks/usePublishedSaveStatus.ts` | публикация статуса файла в typed event |
-| `hooks/useEpisodeTracking.ts` | запуск сразу и каждые 5 минут, защита от частичного сбоя |
-| `hooks/useWatchParty.ts` | create/join/update/state/leave, REST polling и feedback-loop guard |
-| `lib/types.ts` | все общие API, storage, player, rating и party типы |
-| `lib/http.ts` | общий JSON transport, извлечение backend error и typed HTTP status/code |
-| `lib/settings.ts` | schema version, localStorage keys, themes и player defaults |
-| `lib/storage.ts` | localStorage helpers, document/snapshot migrations, PUT helper |
-| `lib/anime.ts` | поиск, franchise/grouping, прогресс, resume и форматирование |
-| `lib/tracking.ts` | episode keys, reconciliation, sort и acknowledge |
-| `lib/ratings.ts` | rating tree, averages и mapping внешних источников |
-| `lib/kodik.ts` | iframe identity/URL и нормализация Kodik postMessage fields |
-| `lib/kodikStream.ts` | typed запрос прямого потока и кратковременный cache ссылок |
-| `lib/playerPreferences.ts` | приоритет любимой озвучки и плеера тайтла |
-| `lib/watchPartyLogic.ts` | user-change/target/revision guards |
-| `lib/gdrive.ts` | typed frontend client `/api/gdrive/*` |
-| `lib/events.ts` | typed event map и emit/listen adapters |
-| `lib/debugLog.ts` | кольцевой журнал UI/fetch событий |
-| `lib/changelog.ts` | данные встроенного changelog |
-| `lib/trailer.ts` | выбор trailer/preview для домашнего hero |
-
-## Стили
-
-Все CSS-файлы расположены в `app/frontend/src/styles/`. `globals.css` и
-`styles/base.css` задают порядок импорта; тематические файлы не импортируются
-из компонентов. Детальная карта каждого файла, токенов и runtime-стилей — в
-[`STYLES.md`](STYLES.md).
-
-## Инструменты
-
-| Путь | Назначение |
-| --- | --- |
-| `app/tools/transfer_saves.py` | проверяемый двусторонний перенос полного сохранения с backup |
-| `app/tools/prepare_runtime.py` | hash-based install/build только при изменении входов source runtime |
-| `app/tools/split-base-css.mjs` | механическое разбиение исторического base CSS |
-| `app/tools/format-css.mjs` | форматирование CSS через frontend script `format:css` |
-| `app/tools/audit-css.mjs` | проверка полной import-цепочки на точные дубли CSS rules/declarations |
-| `app/tools/audit-bundle.mjs` | бюджеты entry JS/CSS/lazy chunk и защита route/player chunks от eager preload |
-| `app/frontend/tests/critical-logic.test.ts` | регрессии чистой клиентской логики |
-
-## Где вносить изменение
-
-| Требование | Первое место поиска |
-| --- | --- |
-| новый внутренний маршрут | `backend/app/api/` + `docs/API_REFERENCE.md` |
-| новый внешний запрос | `backend/app/services/` и feature `api.ts` |
-| новое поле сохранения | `lib/types.ts`, `lib/storage.ts`, `features/storage/profileDocument.ts` |
-| изменение merge | `services/gdrive_merge.py` + `test_gdrive.py` |
-| изменение прогресса | `lib/anime.ts`, `features/player/activeWatchActions.ts`, `Player.tsx` |
-| новая страница | `pages/`, типизированная model/actions, координатор `App.tsx` |
-| новая настройка | `features/settings/`, `lib/settings.ts`, при хранении — data docs |
-| визуальное изменение | определить владельца в `docs/STYLES.md`, затем соответствующий CSS |
+HTTP request → feature/lib adapter and backend router. Provider behavior → gateway/resolver. Merge conflict → pure gdrive_merge. Persistent field → type/default/migration/builder/merge/docs. Player lifetime → Watch/controller, not a library card. Visual override → stylesheet owner and cascade audit. Update both language guides and regenerate API inventory when contracts move.

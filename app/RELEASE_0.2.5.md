@@ -1,52 +1,34 @@
+[English](RELEASE_0.2.5.md) | [Русский](RELEASE_0.2.5.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.2.5
 
-Обновление делает каталог и плеер устойчивее к сбоям внешних источников,
-ускоряет повторные открытия и расширяет управление офлайн-библиотекой на
-Windows и Android.
+Provider resilience, faster repeated opens and expanded offline controls on Windows/Android.
 
-## Каталог и источники
+## Catalogue and sources
 
-- Добавлен постоянный SQLite-кеш публичных ответов YummyAnime и Kodik с
-  быстрым memory-слоем и stale-if-error резервом.
-- Kodik дополняет или временно заменяет YummyAnime для каталога, карточек и
-  серий, сохраняя стабильные идентификаторы тайтлов.
-- Одинаковые сетевые запросы объединяются, а выбранный сезон и ближайшие к
-  viewport карточки загружаются раньше фоновых данных.
-- На карточках и странице просмотра доступны корректные ссылки на Shikimori по
-  внешнему ID либо поиску по названию.
+- Persistent SQLite cache for public Yummy/Kodik responses, memory hot layer and stale-if-error fallback.
+- Kodik supplements/temporarily replaces Yummy for catalogue/cards/episodes while preserving stable IDs.
+- Identical requests coalesce; selected season and near-viewport cards load before background data.
+- Correct Shikimori links by external ID or title search on cards/watch screen.
 
-## Плеер и прогресс
+## Player and progress
 
-- Автопереход остаётся внутри текущего сезона и не перескакивает в
-  альтернативный монтаж или следующий сезон.
-- Поздние события медиаплеера сохраняют прогресс исходной серии и не
-  перезаписывают уже выбранный эпизод.
-- Повторные запросы семьи тайтла и видео переиспользуются или отменяются без
-  лишних фоновых повторов.
+- Auto-next stays within the current season instead of jumping to alternate edits/next seasons.
+- Late media events save the original episode without overwriting the newly selected episode.
+- Family/video requests are reused/cancelled without unnecessary background retries.
 
-## Загрузки и Android
+## Downloads and Android
 
-- Загрузки можно выбирать по нескольким сезонам, диапазонам и отдельным
-  сериям; новые наборы добавляются в последовательную очередь отдельными
-  задачами.
-- Экран скачанного показывает просмотренные серии и позволяет удалить
-  выбранные серии, сезон или весь тайтл.
-- После переустановки Android умеет просканировать `Movies/AnimeSoul` и
-  восстановить офлайн-индекс по сохранённым MP4.
-- Добавлена обработка системного разрешения на чтение видео и подтверждения
-  удаления MediaStore-файлов.
+- Multi-season/range/individual selection; new sets enqueue as separate sequential jobs.
+- Watched markers and deletion of selected episodes, season or title.
+- Rescan Movies/AnimeSoul after reinstall to rebuild the index from MP4 files.
+- System video-read permission and MediaStore deletion confirmation handling.
 
-## Запуск и совместимость
+## Startup, compatibility and files
 
-- Исходный Windows-запуск устанавливает зависимости и пересобирает интерфейс
-  только при изменении входных файлов.
-- Формат профилей и прогресса совместим с 0.2.4.
-- Файл `animesoul-response-cache.sqlite3` является восстановимым кешем и может
-  быть удалён без потери профиля.
-- Android APK рассчитан на ARM64 и Android 7.0 или новее и подписан тем же
-  release-ключом, что предыдущая версия.
+Source Windows startup installs/builds only when inputs change. Profiles/progress remain compatible with 0.2.4. animesoul-response-cache.sqlite3 is reconstructible cache and can be deleted without losing the profile. Android ARM64/7.0+ retains the release signing key.
 
-## Файлы релиза
-
-- `AnimeSoul-Setup-0.2.5.exe` — установщик Windows x64.
-- `AnimeSoul-0.2.5-android-arm64.apk` — Android ARM64.
+- AnimeSoul-Setup-0.2.5.exe — Windows x64.
+- AnimeSoul-0.2.5-android-arm64.apk — Android ARM64.

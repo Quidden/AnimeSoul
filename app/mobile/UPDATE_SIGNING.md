@@ -1,24 +1,18 @@
-# Обновления Android без потери данных
+[English](UPDATE_SIGNING.md) | [Русский](UPDATE_SIGNING.ru.md)
 
-Android устанавливает новую версию AnimeSoul поверх старой, когда одновременно соблюдены три условия:
+# Android updates without losing data
 
-- `applicationId` остаётся `com.animesoul.mobile`;
-- `versionCode` у новой сборки больше предыдущего;
-- APK подписан тем же постоянным ключом выпуска.
+An APK updates an installed AnimeSoul release in place only when applicationId remains `com.animesoul.mobile`, versionCode increases and the APK uses the same permanent release signing key. The release build intentionally fails without that key. Debug has a separate app ID/key and is not the public update channel.
 
-Проект фиксирует идентификатор пакета и увеличивает `versionCode` для каждого APK. Release-сборка намеренно не запускается без постоянного ключа: это защищает от случайной раздачи APK, который затем нельзя будет обновить.
-
-Перед первой публичной сборкой создайте ключ один раз:
+From `app/mobile/`, create the release key once:
 
 ```powershell
 .\create_release_keystore.ps1
 ```
 
-Скрипт создаёт игнорируемую Git папку `android/signing` с PKCS12-ключом и
-случайным паролем. Сохраните две защищённые резервные копии **всей папки** вне
-репозитория. Потерянный ключ или пароль восстановить нельзя.
+The script creates the Git-ignored `android/signing` directory with a PKCS12 key and random password. Keep two protected backups of the entire directory outside the repository. A lost key/password cannot be reconstructed.
 
-На build-сервере вместо локального файла можно задать переменные окружения:
+For a build server, use:
 
 ```text
 ANIMESOUL_RELEASE_KEYSTORE=C:\secure\animesoul-release.jks
@@ -27,6 +21,4 @@ ANIMESOUL_RELEASE_KEY_ALIAS=animesoul
 ANIMESOUL_RELEASE_KEY_PASSWORD=...
 ```
 
-Затем собирайте `assembleRelease`. Все будущие версии должны использовать этот же ключ и увеличенный `versionCode`. Установка такого APK поверх предыдущего release-APK сохранит приватные настройки, прогресс, авторизацию и индекс библиотеки. Видимые MP4 дополнительно находятся в `Movies/AnimeSoul`.
-
-Debug-APK подписывается системным debug-ключом Android Studio и обновляет только другие сборки с тем же debug-ключом. Он не является публичным каналом обновлений.
+Run assembleRelease with this key for every release and increase versionCode. An in-place update preserves private settings, progress, authorization and library index; visible MP4 files remain in Movies/AnimeSoul. Validate using `adb install -r <apk>` and existing data. Debug APKs update only matching debug builds. [Android guide](README.md).

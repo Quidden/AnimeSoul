@@ -1,92 +1,55 @@
-# Данные, сохранение и локальное состояние AnimeSoul
+[English](DATA_MODEL.md) | [Русский](DATA_MODEL.ru.md)
 
-Источник типов frontend — `app/frontend/src/lib/types.ts`, defaults и ключей —
-`app/frontend/src/lib/settings.ts`. Текущая версия схемы документа и профиля —
-**3**.
+# Data model and local state
 
-## Где хранятся данные
+Profile/document schema **3**. Domain types: [types.ts](../frontend/src/lib/types.ts); defaults and keys: [settings.ts](../frontend/src/lib/settings.ts); builders: [profileDocument.ts](../frontend/src/features/storage/profileDocument.ts). [Save portability](../SAVE_COMPATIBILITY.md) · [Cloud merge](GDRIVE_SYNC.md).
 
-| Среда | Конфигурация | Основные данные |
+## Storage locations
+
+| Environment | Configuration | Default data |
 | --- | --- | --- |
-| запуск из исходников | `app/animesoul.python.json` | `app/data/` по умолчанию |
-| установленная Windows-сборка | `%LOCALAPPDATA%\AnimeSoul\animesoul.python.json` | `%LOCALAPPDATA%\AnimeSoul\data\` |
-| явный CLI config | путь из `run.py --config` | `data_directory` из этого JSON |
+| Source | `app/animesoul.python.json` | `app/data/` |
+| Installed Windows | `%LOCALAPPDATA%\AnimeSoul\animesoul.python.json` | `%LOCALAPPDATA%\AnimeSoul\data\` |
+| Explicit CLI | `run.py --config <path>` | Configured data_directory |
+| Android | App-private configuration/runtime | Private app data/index; completed movies in MediaStore `Movies/AnimeSoul` |
 
-Файлы data-каталога:
-
-| Файл | Формат | Владелец | Назначение |
-| --- | --- | --- | --- |
-| `animesoul-storage.json` | JSON UTF-8 | `JsonStorage` | профили, библиотека, прогресс и переносимые настройки |
-| `animesoul-storage.tmp.json` | JSON UTF-8 | `JsonStorage` | временный файл атомарной записи |
-| `gdrive-credentials.json` | JSON | `GoogleDriveService` | OAuth `client_id`/`client_secret` текущего устройства |
-| `gdrive-tokens.json` | JSON | `GoogleDriveService` | access/refresh tokens, user info и cached sync status |
-| `community-ratings.sqlite3` | SQLite WAL | `CommunityRatingStore` | анонимные оценки текущего сервера |
-| `animesoul-response-cache.sqlite3` | SQLite WAL | `PersistentJsonCache` | публичные ответы YummyAnime/Kodik; можно удалить без потери профиля |
-
-Рядом с машинным config runtime публикует `animesoul.runtime.json`. Это не
-пользовательское сохранение, а подтверждение владельца процесса.
-
-## Машинная конфигурация
-
-Пример:
-
-```json
-{
-  "port": 8000,
-  "yummy_public_token": "personal-public-token",
-  "data_directory": "data",
-  "launch_mode": "desktop",
-  "gdrive_client_id": "",
-  "gdrive_client_secret": ""
-}
-```
-
-| Поле | Default | Использование |
+| File | Owner / role | Portable profile? |
 | --- | --- | --- |
-| `port` | `8000` в source runtime, `3001` в packaged launcher | loopback FastAPI port |
-| `yummy_public_token` | пусто | Public token для header `X-Application` |
-| `data_directory` | `data`/путь LocalAppData | data-каталог |
-| `launch_mode` | `browser` | `browser` или `desktop` |
-| `gdrive_client_id` | пусто | fallback OAuth client |
-| `gdrive_client_secret` | пусто | optional fallback secret |
+| `animesoul-storage.json` | JsonStorage; complete profile document | Yes |
+| `animesoul-storage.tmp.json`, backups | Atomic save/recovery | Separate copies |
+| `api-credentials.json` | Saved device Yummy Public token | No |
+| `animesoul-offline-settings.json` | Download directory, public Kodik key, mobile policy | No |
+| `animesoul-kodik-private.dpapi` | Protected private Kodik key; platform-specific protection | No |
+| `.animesoul-library.json` in library directory | Download index | No |
+| `animesoul-anime-identities.json` | Hybrid catalogue identity registry | No |
+| `gdrive-credentials.json` | OAuth client_id/client_secret | No |
+| `gdrive-tokens.json` | OAuth tokens, user info, cached cloud choice/state | No |
+| `gdrive-pending-oauth.json` | Pending Android code exchange | No |
+| `community-ratings.sqlite3` | Anonymous rating trees, SQLite WAL | No |
+| `animesoul-response-cache.sqlite3` | Public provider JSON cache, SQLite WAL | No |
+| `animesoul.runtime.json` beside config | Runtime identity, not user data | No |
 
-Поддерживается legacy-имя `yummyAnimeToken`. Приоритет имеет environment,
-затем JSON:
+Downloaded videos, thumbnails and index are independent of the profile. Moving the profile does not copy media, credentials or native permissions.
 
-| Environment | Что переопределяет |
+## Configuration precedence
+
+Backend `load_settings` reads `.env` with setdefault, then JSON and environment overrides. Source defaults: port 8000, browser launch mode, data directory `app/data`. Packaged launcher commonly uses port 3001. JSON: port, yummy_public_token (legacy yummyAnimeToken), data_directory, launch_mode, gdrive_client_id/gdrive_client_secret.
+
+| Variable | Override |
 | --- | --- |
-| `ANIMESOUL_CONFIG_FILE` | путь config |
-| `ANIMESOUL_PYTHON_PORT` | `port` |
-| `YUMMYANIME_TOKEN` | Public token |
-| `GOOGLE_CLIENT_ID` | Drive Client ID |
-| `GOOGLE_CLIENT_SECRET` | Drive Client Secret |
-| `ANIMESOUL_DATA_DIR` | data-каталог |
-| `ANIMESOUL_FRONTEND_DIST` | production bundle |
-| `ANIMESOUL_INSTANCE_ID` | instance ID в health/runtime |
-| `ANIMESOUL_RUNTIME_STATE_FILE` | явный runtime state path |
+| `ANIMESOUL_CONFIG_FILE` | Config path |
+| `ANIMESOUL_PYTHON_PORT` | Port |
+| `ANIMESOUL_DATA_DIR` | Data directory |
+| `ANIMESOUL_FRONTEND_DIST` | Frontend build directory |
+| `YUMMYANIME_TOKEN` | Base Yummy token; a UI-saved device token takes precedence in the Yummy router |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth config fallback; saved Drive credentials take precedence |
+| `ANIMESOUL_INSTANCE_ID`, `ANIMESOUL_RUNTIME_STATE_FILE` | Runtime identity/state path |
+| `ANIMESOUL_MOBILE=android` | Backend Android behavior / exclude party |
+| `VITE_ANIMESOUL_PLATFORM=android` | Build-time frontend platform; outputs dist-android |
 
-`backend/app/config.py` также читает `app/.env`, не перезаписывая уже заданные
-environment values.
+Relative data_directory resolves against `app/`. Runtime identity contains instance_id, pid, port, mode, started_at; launcher validates health identity before stop and requires API capabilities for reuse.
 
-## Runtime state
-
-`runtime_instance.write_runtime_state` записывает атомарно:
-
-```json
-{
-  "instance_id": "uuid-or-hex",
-  "pid": 1234,
-  "port": 8000,
-  "mode": "browser",
-  "started_at": "2026-08-14T00:00:00+00:00"
-}
-```
-
-Launcher разрешает остановку только когда `instance_id`, `pid` и `port`
-совпадают с `/api/health` и runtime state. При нормальном завершении файл
-удаляется только владельцем того же `instance_id`.
-
-## StorageDocument
+## Document envelope
 
 ```ts
 type StorageDocument = {
@@ -96,7 +59,6 @@ type StorageDocument = {
   profiles: ConfigProfile[];
   [unknownField: string]: unknown;
 };
-
 type ConfigProfile = {
   id: string;
   name: string;
@@ -105,334 +67,59 @@ type ConfigProfile = {
 };
 ```
 
-| Поле | Смысл |
+`migrateDocument` supplies known defaults and a usable default/active profile; migrations preserve unknown fields. `buildProfileSnapshot` starts from the previous snapshot, then overrides known state. `buildStorageDocument` retains the previous envelope. Backend validates nonempty profiles with string IDs/object snapshots and a valid active ID when present, but does not migrate domain fields. Shared path locks serialize all JsonStorage instances; writes use temp+replace. Full cloud restoration backs up the old file.
+
+## Snapshot fields
+
+| Field | Meaning |
 | --- | --- |
-| `schemaVersion` | версия оболочки, сейчас 3 |
-| `updatedAt` | ISO timestamp сборки документа; используется для cloud last-writer policy |
-| `activeProfile` | ID профиля, который следует загрузить |
-| `profiles` | полные переносимые профили |
+| version/name/createdAt | Schema 3 and exported snapshot metadata |
+| fieldUpdatedAt | Per-field revision map; changes only when that field changes |
+| favorites | Unique ordered anime IDs |
+| folders | `{id,name,animeIds,notes?}`; note keys are anime IDs |
+| progress | Anime ID → current selection plus per-episode progress |
+| ratings | Personal anime/season/episode score tree |
+| animeTitles | Readable ID → title labels; never identity keys |
+| tracked | Franchise subscriptions and episode baselines |
+| theme | `{name,accent,background}` |
+| toolbar | top/bottom/left/right |
+| playerPrefs | Playback/UI preferences; defaults in settings.ts |
+| historyClearedAt/historyEnabled | History visibility and cutoff; progress remains independent |
+| libraryExpanded/watchingExpanded/historyExpanded/watchingHidden | Library presentation state |
 
-`migrateDocument` всегда обеспечивает хотя бы профиль `default`, проверяет
-существование `activeProfile`, мигрирует каждый snapshot и сохраняет неизвестные
-root/profile fields через object spread.
+## Progress and completion
 
-## ConfigSnapshot
+`Progress = Record<number, AnimeProgress>`. AnimeProgress has episode (string), dub, episodes map, optional title/season/seasonLabel/totalEpisodes/totalDuration/originAnimeId/originEpisode. Episode map keys normally use `<season>:<episode>`.
 
-```ts
-type ConfigSnapshot = {
-  version: number;
-  name: string;
-  createdAt: string;
-  favorites: number[];
-  folders: Folder[];
-  progress: Progress;
-  ratings: UserRatings;
-  animeTitles?: Record<number, string>;
-  tracked: Tracker[];
-  theme: Theme;
-  toolbar: "top" | "bottom" | "left" | "right";
-  playerPrefs?: PlayerPrefs;
-  historyClearedAt?: number;
-  historyEnabled?: boolean;
-  libraryExpanded?: boolean;
-  watchingExpanded?: boolean;
-  historyExpanded?: boolean;
-  watchingHidden?: number[];
-};
-```
-
-| Поле | Для чего нужно |
+| EpisodeState field | Semantics |
 | --- | --- |
-| `version` | версия переносимого профиля, нормализуется к 3 |
-| `name`, `createdAt` | метаданные профиля/экспорта |
-| `favorites` | уникальные anime ID в избранном |
-| `folders` | коллекции пользователя и заметки |
-| `progress` | активная серия и состояние каждой серии |
-| `ratings` | личное дерево оценок, входит в portable profile |
-| `animeTitles` | читаемые подписи для JSON; логика остаётся ID-based |
-| `tracked` | подписки и baselines новых серий |
-| `theme` | переносимые цвета темы |
-| `toolbar` | положение панели плеера |
-| `playerPrefs` | переносимые настройки просмотра/UI |
-| `history*`, `*Expanded`, `watchingHidden` | история и состояние библиотечных секций |
+| position/duration/percent | Last known position and proportion |
+| updatedAt | Milliseconds; resume and conflict priority |
+| originAnimeId/originEpisode | Original source episode identity across franchise regrouping |
+| completed/completions | Watched state and repeat completions |
+| completionHistory | Completion timestamps in ms |
+| rewatchArmed | Rewound to count a new completion |
+| watchedSeconds | Accumulated viewing time for statistics |
+| manuallyCompleted/manualPrevious | Manual mark and reversible previous state |
 
-`buildProfileSnapshot` начинает с `...previous`, поэтому неизвестные snapshot
-fields переживают обычное сохранение. Известные поля затем заменяются актуальным
-React state.
+`latestResumePoint` chooses by update time; `episodeResumePosition` avoids resuming at the end of a completed episode. `toggleEpisodeWatched` restores manualPrevious on undo. Removing a favorite/folder does not erase progress; changing a title label does not move identity.
 
-## Папки
-
-```ts
-type Folder = {
-  id: string;
-  name: string;
-  animeIds: number[];
-  notes?: Record<number, string>;
-};
-```
-
-`id` создаётся через `crypto.randomUUID()` при отсутствии. `notes` связываются
-с numeric anime ID. Удаление тайтла из папки не удаляет его progress.
-
-## Прогресс просмотра
-
-```ts
-type Progress = Record<number, AnimeProgress>;
-
-type AnimeProgress = {
-  title?: string;
-  episode: string;
-  dub: string;
-  episodes: Record<string, EpisodeState>;
-  totalEpisodes?: number;
-  totalDuration?: number;
-  season?: number;
-  seasonLabel?: string;
-  originAnimeId?: number;
-  originEpisode?: string;
-};
-```
-
-Ключ `Progress` — основной anime ID. Ключ `episodes` обычно имеет форму
-`<season>:<episode>`. `title` — читаемая метаинформация, не ключ.
-
-```ts
-type EpisodeState = {
-  position: number;
-  duration: number;
-  percent: number;
-  updatedAt: number;
-  originAnimeId?: number;
-  originEpisode?: string;
-  completed?: boolean;
-  completions?: number;
-  completionHistory?: number[];
-  rewatchArmed?: boolean;
-  watchedSeconds?: number;
-  manuallyCompleted?: boolean;
-  manualPrevious?: {
-    position: number;
-    duration: number;
-    percent: number;
-    updatedAt: number;
-    originAnimeId?: number;
-    originEpisode?: string;
-    completed?: boolean;
-    completions?: number;
-    completionHistory?: number[];
-    rewatchArmed?: boolean;
-    watchedSeconds?: number;
-  };
-};
-```
-
-| Поле | Семантика |
-| --- | --- |
-| `position`, `duration`, `percent` | последняя известная позиция и доля |
-| `updatedAt` | конфликтный приоритет и выбор resume |
-| `originAnimeId`, `originEpisode` | исходная запись YummyAnime внутри объединённой франшизы |
-| `completed` | серия считается просмотренной |
-| `completions` | количество завершений/пересмотров |
-| `completionHistory` | timestamps завершений в миллисекундах |
-| `rewatchArmed` | серия возвращена к началу и готова считать новое завершение |
-| `watchedSeconds` | реально накопленное время для статистики |
-| `manuallyCompleted` | отметка сделана вручную |
-| `manualPrevious` | состояние для точного отката ручной отметки |
-
-`latestResumePoint` выбирает незавершённую/актуальную серию по времени
-обновления, а `episodeResumePosition` не продолжает завершённую серию с самого
-конца. Ручная отметка проходит через `toggleEpisodeWatched` и может быть
-отменена через `manualPrevious`.
+`AnimeProgress.resetAt` is a reset tombstone: cloud merge discards episode records whose updatedAt is at or before the latest resetAt from either side. `changedFieldRevisions` tracks edits independently for collections/preferences so a later progress save on an old device does not revert a newer theme. Profile IDs are unioned during merge; there is no profile-deletion tombstone.
 
 ## Tracking
 
-```ts
-type Tracker = {
-  animeId: number;
-  animeIds?: number[];
-  title: string;
-  knownEpisodes: number;
-  knownEpisodeKeys?: string[];
-  episodeIdentityCheckedIds?: number[];
-  pendingEpisodeKeys?: string[];
-  newEpisodes: number;
-  knownAnyEpisodeKeys?: string[];
-  pendingOtherDubEpisodeKeys?: string[];
-  otherDubEpisodes?: number;
-  dubs?: string[];
-  lastCheckedAt?: number;
-  lastNewEpisodeAt?: number;
-};
-```
+Tracker has animeId/title/knownEpisodes/newEpisodes plus optional animeIds, selected dubs, lastCheckedAt/lastNewEpisodeAt. `knownEpisodeKeys/pendingEpisodeKeys` cover selected dubs; `knownAnyEpisodeKeys/pendingOtherDubEpisodeKeys/otherDubEpisodes` describe availability in other dubs. `episodeIdentityCheckedIds` records successful one-time repair of an old numbering baseline.
 
-- `animeId` — корень подписки; `animeIds` — все известные элементы франшизы.
-- `knownEpisodeKeys`/`pendingEpisodeKeys` относятся к выбранным озвучкам.
-- `knownAnyEpisodeKeys`/`pendingOtherDubEpisodeKeys` дают сигнал, что серия уже
-  существует, но ещё не появилась в выбранной озвучке.
-- Полностью неуспешний tracking snapshot не заменяет baseline.
-- `episodeIdentityCheckedIds` отмечает тайтлы, для которых однократно убраны
-  фантомные номера из старой базы. Очистка выполняется по успешному снимку
-  обоих источников с `episode_identity_version: 1`; тайтлы с ошибками и ответы
-  старого backend сохраняют прежнюю базу. После исправления база снова только
-  растёт, поэтому временное исчезновение серии не создаёт повторное уведомление.
-  Поле необязательное, сохраняется в schema 3 и переносится вместе с профилем.
-- Проверка запускается сразу, пропускает запись моложе 240 секунд и повторяется
-  каждые 300 секунд.
+Baseline repair requires episode_identity_version 1 plus successful source states; failed titles/old backend responses retain their previous baseline. After repair, known keys grow to prevent repeated notifications when a provider temporarily loses an episode. Poll every 300 seconds, skip checks younger than 240 seconds, preserve baseline on total failure.
 
-## Личные и общие оценки
+## Ratings, preferences and local mirrors
 
-Portable личная оценка:
+Personal ratings contain optional anime score/title/updatedAt and season/episode maps. Scores are 1–10; episode keys are `<season>:<episode>`. They travel in the profile. Server community aggregates are separate `{average,count}` trees and identify browsers by HttpOnly cookie.
 
-```ts
-type AnimeUserRatings = {
-  title?: string;
-  anime?: number;
-  seasons: Record<string, number>;
-  episodes: Record<string, number>;
-  updatedAt?: number;
-};
-```
+Theme presets are Amethyst, Sakura, Ocean, Mango and Light (Russian labels); custom colors are stored in the profile. `PlayerPrefs` covers resume, auto-next/skips, previews, quality/player behavior, watched colors and UI size scales. Read the actual type/defaults when adding a preference; not every device/bridge capability can honor every preference.
 
-Score лежит в диапазоне 1–10. Season key — номер строкой, episode key —
-`<season>:<episode>`. `updatedAt` определяет победителя при cloud merge.
+`localStorage` mirrors known state with keys in `lib/settings.ts::STORAGE_KEYS` (usually imported as `K`); profile hydration refreshes it from the file. Cloud scheduling/first-choice markers, debug journal, device UI scale and publication tombstones are local state, not a portable document. Watch Party uses sessionStorage. Do not infer a successful file/cloud save merely from an updated mirror.
 
-Общая оценка не входит в профиль. `community-ratings.sqlite3` хранит одну
-заменяемую запись на `(voter_id, anime_id)`, а API отдаёт только:
+## Migration and recovery
 
-```ts
-type CommunityRatingSummary = { average: number; count: number };
-```
-
-и дерево aggregate по anime/season/episode. Удаление всех личных score
-публикуется как пустое дерево и удаляет серверную запись этого browser.
-
-## Theme и PlayerPrefs
-
-```ts
-type Theme = { name: string; accent: string; background: string };
-```
-
-Preset themes: Аметист, Сакура, Океан, Манго, Светлая. Custom theme получает
-имя `Своя`. Применение к CSS описано в [`STYLES.md`](STYLES.md).
-
-Все поля `PlayerPrefs`:
-
-| Поле | Тип/default | Назначение |
-| --- | --- | --- |
-| `autoSkipOpening` | boolean / `false` | автоматический пропуск опенинга |
-| `autoSkipEnding` | boolean / `false` | автоматический пропуск эндинга |
-| `autoNext` | boolean / `true` | переход к следующей серии |
-| `autoPlayResume` | boolean / `true` | автозапуск продолжения |
-| `autoScrollPlayer` | boolean / `true` | прокрутка к плееру |
-| `homeEpisodePreview` | boolean / `true` | preview продолжения на главной |
-| `homePreviewMode` | `screenshots|poster` / `poster` | тип preview |
-| `playerEpisodeCarousel` | boolean / `true` | карусель серий |
-| `episodeHoverPreview` | boolean / `true` | preview при наведении |
-| `watchedEpisodeColor` | string / `#9a78ff` | CSS-цвет просмотренной серии |
-| `interfaceFontScale` | number / `1` | обычный текст |
-| `headingFontScale` | number / `1` | заголовки |
-| `posterScale` | number / `1` | постеры |
-| `previewScale` | number / `1` | preview продолжения |
-| `favoriteDubbings` | string[] / `[]` | упорядоченное общее избранное озвучек |
-| `titleDubbings` | Record<string,string> / `{}` | любимая озвучка конкретного тайтла |
-| `titlePlayers` | Record<string,string> / `{}` | выбранный плеер конкретного тайтла |
-| `watchPartyEnabled` | boolean / `false` | UI/логика комнат |
-| `watchPartyServer` | string / current origin | адрес сервера комнаты |
-| `watchPartyName` | string / `Участник` | имя участника |
-| `watchPartyMode` | `follow|free` / `follow` | следовать playback или смотреть свободно |
-| `watchPartyRoomMode` | `host|shared` / `host` | кто может управлять комнатой |
-| `watchPartyDubMode` | `own|suggest|follow` / `suggest` | политика озвучки |
-| `watchPartyPanelPosition` | `top|bottom|overlay` / `bottom` | размещение панели комнаты |
-| `watchPartyAutoCatchUp` | boolean / `true` | автоматически догонять host |
-
-## localStorage mirror и device state
-
-`useProfileStorage` сначала восстанавливает browser mirror, затем пытается
-загрузить файловый документ. Файл — основной переносимый источник; mirror
-позволяет пережить временную недоступность backend и мигрировать старые данные.
-
-### Portable/profile mirrors
-
-| Ключ | Значение |
-| --- | --- |
-| `animesoul:favorites` | `number[]` |
-| `animesoul:folders` | `Folder[]` |
-| `animesoul:progress-v2` | `Progress` |
-| `animesoul:ratings-v1` | `UserRatings` |
-| `animesoul:tracked` | `Tracker[]` |
-| `animesoul:theme` | `Theme` |
-| `animesoul:toolbar` | toolbar position |
-| `animesoul:player-prefs` | `PlayerPrefs` |
-| `animesoul:profiles` | `ConfigProfile[]` |
-| `animesoul:active-profile` | profile ID string |
-| `animesoul:history-cleared-at` | timestamp ms |
-| `animesoul:history-enabled` | boolean |
-| `animesoul:section-library-expanded` | boolean |
-| `animesoul:section-watching-expanded` | boolean |
-| `animesoul:section-history-expanded` | boolean |
-| `animesoul:watching-hidden` | `number[]` |
-
-Раскрытие секций имеет device-first приоритет при обычной загрузке. При явном
-переключении/импорте профиля может применяться snapshot layout.
-
-### Device-only/UI keys
-
-| Ключ | Назначение |
-| --- | --- |
-| `animesoul:last-deleted-folder` | последний удалённый folder + index для Undo |
-| `animesoul:collapsed-seasons:<anime_id>` | свёрнутые сезоны конкретного player |
-| `animesoul:debug-log:v1` | локальный журнал диагностики |
-| `animesoul:save-status` | опубликованный UI status локальной записи |
-| `animesoul:api-status` | latency/status YummyAnime |
-| `animesoul:community-ratings-published-v1` | последний опубликованный `updatedAt` по anime |
-| `animesoul:community-rating-removals-v1` | offline tombstones оценок |
-| `animesoul:gdrive-folder-mode` | `visible|appdata` |
-| `animesoul:gdrive-prefer-watched` | merge preference |
-| `animesoul:gdrive-auto-sync-mode` | `instant|interval|manual` |
-| `animesoul:gdrive-auto-sync-interval` | минуты, 1/5/15/30/60 |
-| `animesoul:gdrive-initial-choice-done` | локальный guard первого merge |
-| `animesoul:gdrive-has-cloud-file` | cached status для save guard |
-| `animesoul.desktop.interfaceScale` | zoom desktop WebView, 0.5–2.0 |
-
-`sessionStorage` ключ `animesoul:watch-party-session` содержит только текущие
-`roomId`, `token`, `role` и исчезает вместе с browser session.
-
-## Миграция
-
-`migrateSnapshot`:
-
-- устанавливает версию 3 и defaults;
-- фильтрует ID до finite numbers;
-- нормализует folders, progress, ratings и tracking collections;
-- дополняет `PlayerPrefs` всеми defaults;
-- сохраняет неизвестные поля через `...input`;
-- не доверяет типам JSON для критических коллекций.
-
-`migrateDocument` мигрирует каждый profile и исправляет отсутствующий active ID.
-Backend специально не дублирует эту доменную миграцию.
-
-## Запись и восстановление
-
-`JsonStorage.write` сериализует JSON с `ensure_ascii=False`, записывает
-`animesoul-storage.tmp.json` и атомарно заменяет основной файл. Async lock не
-даёт двум progress updates смешать содержимое.
-
-При первом `read`, если основного файла нет, сервис пытается скопировать
-`legacy-old-stack/data/animesoul-storage.json`. Существующий main-файл никогда
-не перезаписывается этим импортом.
-
-Полный двусторонний перенос с backup описан в
-[`../SAVE_COMPATIBILITY.md`](../SAVE_COMPATIBILITY.md), cloud merge — в
-[`GDRIVE_SYNC.md`](GDRIVE_SYNC.md).
-
-## Правило изменения схемы
-
-Перед добавлением поля:
-
-1. Добавьте TypeScript-тип и безопасный default/normalizer.
-2. Убедитесь, что `buildProfileSnapshot` сохраняет поле и неизвестные поля.
-3. Определите cloud merge policy, если простого last-writer недостаточно.
-4. Добавьте round-trip, migration и merge тесты.
-5. Обновите этот документ и API-справочник, если поле пересекает HTTP.
-6. Повышайте schema version только при реальном изменении формата, а не при
-   перемещении файлов или компонентов.
+Export/import keeps unknown root/profile/snapshot fields through ordinary round-trip. Legacy may retain fields without presenting their functionality. Full transfer tool uses fixed repository data paths, validates source, backs up destination and atomically replaces it. Close runtimes before manual copies. A backend 404 means absent save; errors/corruption are separate and must not trigger overwrite. [Compatibility and recovery](../SAVE_COMPATIBILITY.md).

@@ -1,57 +1,39 @@
+[English](RELEASE_0.2.4.md) | [Русский](RELEASE_0.2.4.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.2.4
 
-Обновление ускоряет открытие скачанных аниме, исправляет поведение мобильного
-плеера и добавляет безопасную проверку всех ключей перед сохранением.
+Faster downloaded-title startup, mobile player fixes and credential validation before saving.
 
-## Локальный просмотр и скорость
+## Local playback and performance
 
-- Скачанное аниме и локальный файл имеют первый приоритет: плеер запускается по
-  локальным данным, не ожидая удалённый каталог и остальные источники.
-- Страница аниме меньше блокируется медленными запросами, повторно использует
-  уже начатые обращения и отменяет устаревшую загрузку.
-- Локальный просмотр сразу обновляет главное продолжение на домашней странице.
-- Исправлена ложная пометка полной озвучки как сокращённой.
+- Downloaded title/file has first priority without waiting for remote catalogue/providers.
+- Watch screen blocks less on slow requests, reuses in-flight work and cancels stale loading.
+- Local watching immediately updates home resume.
+- Fixed complete dubs incorrectly flagged as shortened.
 
-## Плеер и интерфейс
+## Player and interface
 
-- Убрано наложение индикаторов чтения локального файла, загрузки и элементов
-  управления.
-- Зелёный индикатор локального видео скрывается вместе с интерфейсом плеера.
-- После смены серии из полноэкранного режима плеер автоматически возвращается
-  в полный экран.
-- Полноэкранная настройка масштаба стала удобнее для нажатия на телефоне.
-- Добавлен опциональный компактный вид серий без потери прогресса, оценок,
-  отметок просмотра и выбора сезона.
-- Прокручиваемые разделы настроек можно сворачивать, чтобы они не мешали
-  основному скроллу.
+- Removed overlap among local-file/loading indicators and controls; green local indicator hides with player UI.
+- Changing episode from fullscreen automatically returns to fullscreen.
+- Fullscreen scaling controls are easier to tap on phones.
+- Optional compact episode layout retaining progress, ratings, watched marks and season selection.
+- Scrollable settings sections can collapse to avoid interfering with main scrolling.
 
-## Источники и ключи
+## Sources and credentials
 
-- Для ошибок загрузки доступен подробный список источников и данных, которые не
-  удалось получить.
-- YummyAnime, Kodik Public/Private и Google OAuth Client ID/Secret проверяются
-  по отдельности до сохранения.
-- Рядом с каждым полем показывается результат и причина: ключ работает, не
-  работает либо временно не подтверждён.
-- Неверные и неподтверждённые значения не перезаписывают сохранённые рабочие
-  ключи.
-- Все ключи можно загрузить одним JSON- или TXT-файлом. В настройках приведены
-  готовые примеры обоих форматов и важные нюансы импорта; после импорта каждый
-  ключ проходит ту же проверку.
-- Исправлено редактирование Google OAuth: удалённый Client ID не появляется
-  снова сам, а введённый Client Secret не пропадает.
+- Detailed failed-source/data lists for loading errors.
+- Separate validation for Yummy, Kodik Public/Private and Google OAuth Client ID/Secret before save.
+- Each field shows working/invalid/unconfirmed status with reason; invalid/unconfirmed input never replaces working keys.
+- Import all keys from JSON/TXT with examples and format guidance; imported values use the same validation.
+- Fixed OAuth editing: removed Client ID does not reappear and entered Client Secret does not vanish.
 
-## Совместимость и обновление
+## Compatibility and files
 
-- Windows installer использует прежний AppId и обновляет установленную версию.
-- Формат профилей, прогресса и локальной библиотеки совместим с 0.2.3.
-- Android APK рассчитан на ARM64 и Android 7.0 или новее и подписан тем же
-  release-ключом, что предыдущая версия.
+Windows retains AppId/in-place update. Profile/progress/offline format is compatible with 0.2.3. Android ARM64/7.0+ uses the previous release signing key.
 
-## Файлы релиза
+- AnimeSoul-Setup-0.2.4.exe — Windows x64.
+- AnimeSoul-0.2.4-android-arm64.apk — Android ARM64.
 
-- `AnimeSoul-Setup-0.2.4.exe` — установщик Windows x64.
-- `AnimeSoul-0.2.4-android-arm64.apk` — Android ARM64.
-
-Для проверки ключей нужен доступ к интернету. Если внешний сервис временно не
-ответил, AnimeSoul показывает «Не подтверждён» и не заменяет рабочее значение.
+Credential checks require internet. An unavailable service yields Unconfirmed and does not replace a working value.

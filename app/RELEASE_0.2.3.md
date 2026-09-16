@@ -1,71 +1,49 @@
+[English](RELEASE_0.2.3.md) | [Русский](RELEASE_0.2.3.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.2.3
 
-Первый общий релиз AnimeSoul для Windows и Android. Версия заметно обновляет
-интерфейс, собственный плеер, офлайн-библиотеку, Google Drive и диагностику, а
-также добавляет полноценную мобильную сборку.
+First shared Windows/Android release, updating the UI, player, offline library, Drive and diagnostics with a complete mobile build.
 
-## Главное
+## Highlights
 
-- Android-приложение с edge-to-edge интерфейсом, нижней навигацией,
-  Picture-in-Picture и системным управлением воспроизведением.
-- Новые Android-загрузки сохраняются одним MP4 в видимой папке
-  `Movies/AnimeSoul`; известные таймкоды опенинга и эндинга остаются доступны
-  без сети.
-- Фоновая очередь показывает прогресс в шторке. Мобильный трафик по умолчанию
-  запрещён, а при смене сети загрузка автоматически приостанавливается.
-- Скачанная библиотека показывает свободное место и размер каждого тайтла,
-  сезона и серии.
-- Настройки получили встроенную историю изменений, поиск и подробный debug-log
-  с функциями и исходными файлами.
+- Android edge-to-edge interface, bottom navigation, Picture-in-Picture and system playback controls.
+- New Android downloads become one MP4 in Movies/AnimeSoul; known opening/ending timestamps remain available offline.
+- Background download notification; mobile data blocked by default and network changes pause downloads.
+- Free space and title/season/episode sizes in the offline library.
+- Searchable settings with release history and detailed debug log including functions/source files.
 
-## Плеер и просмотр
+## Player
 
-- Исправлена подмена серии при смене озвучки.
-- Локальное видео запускается до фоновой загрузки удалённых сезонов.
-- Экран телефона не засыпает во время просмотра.
-- Первое касание полноэкранного видео показывает интерфейс, не ставя ролик на
-  паузу; элементы управления автоматически скрываются.
-- Полноэкранный режим использует всё пространство телефона и учитывает
-  системные панели Android.
-- Работают настройки в полном экране, двойное касание для перемотки и удержание
-  для временного ускорения.
-- Если трейлера нет, мобильная главная показывает постер вместо пустого
-  плеера.
+- Fixed wrong episode selection on dub change; local playback starts before remote season loading.
+- Phone screen stays awake while watching.
+- First fullscreen touch reveals controls without pausing; controls auto-hide.
+- Fullscreen uses available space and respects Android system bars.
+- Fullscreen settings, double-tap seek and press-and-hold temporary speed-up.
+- Mobile home shows a poster instead of an empty player when no trailer exists.
 
-## Интерфейс
+## Interface
 
-- Поиск вынесен в лёгкую плавающую верхнюю область и скрывается при чтении.
-- Главная, каталог, настройки и скачанная библиотека адаптированы под телефон.
-- Фильтры каталога не прилипают к поиску и не получают лишнюю подложку.
-- Новые серии визуально отделены от выбранного аниме.
-- Оценки на странице аниме расположены под плеером.
-- Скачанные тайтлы отображаются горизонтальными строками с постером, градиентом
-  и подробной информацией.
+- Lightweight floating search header hides while reading.
+- Mobile home/catalogue/settings/download library layouts.
+- Catalogue filters no longer stick to search or receive an extra backdrop.
+- New episodes visually separate from the selected title; ratings sit below the player.
+- Downloaded titles use horizontal poster/gradient rows with detailed information.
 
-## Синхронизация и надёжность
+## Sync and reliability
 
-- Google Drive выбирает самый свежий реальный прогресс между телефоном и
-  компьютером и не возвращает устаревшее продолжение просмотра.
-- Пустые или повреждённые сохранения не заменяют рабочий профиль.
-- Расширена диагностика API, облака, плеера и локального хранилища.
-- Исправлены наложение вкладок настроек, перекрытые кнопки и пропадающая нижняя
-  навигация.
-- В Android-сборку включены все runtime-зависимости FFmpegKit, необходимые для
-  сборки MP4.
+- Drive selects latest actual phone/computer progress instead of restoring stale resume.
+- Empty/corrupt saves do not replace a working profile.
+- Expanded API/cloud/player/local diagnostics.
+- Fixed overlapping settings tabs, covered buttons and disappearing bottom navigation.
+- Android includes required FFmpegKit runtime dependencies for MP4 assembly.
 
-## Совместимость и обновление
+## Compatibility and files
 
-- Windows installer сохраняет тот же AppId и обновляет предыдущую установку.
-- Формат профилей и прогресса совместим с 0.2.2.
-- Android APK рассчитан на ARM64 и Android 7.0 или новее.
-- Для будущих Android-обновлений необходимо устанавливать APK из одного
-  release-канала, подписанные тем же ключом.
+Windows keeps its AppId and updates the previous installation. Profiles/progress remain compatible with 0.2.2. Android requires ARM64/Android 7.0+; future updates must use the same release channel/signing key.
 
-## Файлы релиза
+- AnimeSoul-Setup-0.2.3.exe — Windows x64 installer.
+- AnimeSoul-0.2.3-android-arm64.apk — Android ARM64.
 
-- `AnimeSoul-Setup-0.2.3.exe` — установщик Windows x64.
-- `AnimeSoul-0.2.3-android-arm64.apk` — Android ARM64.
-
-Для каталога и трейлеров нужен личный Public token YummyAnime. Собственный
-плеер и загрузки требуют полной пары Public/Private ключей Kodik, которая
-хранится только на устройстве пользователя.
+Catalogue/trailers need your Yummy Public token; player/downloads need the Kodik Public/Private pair stored only on the user's device.

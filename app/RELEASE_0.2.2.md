@@ -1,77 +1,42 @@
+[English](RELEASE_0.2.2.md) | [Русский](RELEASE_0.2.2.ru.md)
+
+> Historical release notes; see the [current documentation](docs/README.md) for today's contracts.
+
 # AnimeSoul 0.2.2
 
-Обновление добавляет собственный плеер AnimeSoul и полноценную офлайн-
-библиотеку на базе приватного API Kodik. Основной акцент версии — точное
-соответствие сезона, серии и озвучки, предсказуемый выбор локального видео и
-единый интерфейс для онлайн- и скачанного контента.
+Built-in AnimeSoul player and a complete offline library using Kodik's private API. Focus: exact season/episode/dub identity, predictable local-video selection and one interface for online/downloaded content.
 
-## Что добавлено
+## Added
 
-- Собственный HLS-плеер AnimeSoul с выбором фиксированного качества,
-  отображением фактического битрейта, скоростью, Picture-in-Picture и
-  полноэкранным режимом.
-- Субтитры из API и HLS с выбором языка, а также синхронизация отдельных версий
-  Kodik со вшитыми субтитрами.
-- Отмеченные на прогресс-баре тайминги опенинга и эндинга, ручной и
-  автоматический пропуск.
-- Быстрый выбор сезона, серии, озвучки и источника прямо внутри плеера.
-- Избранные озвучки, любимая озвучка для конкретного тайтла и запоминаемый
-  источник воспроизведения.
-- Офлайн-библиотека: загрузка серии, сезона или всего аниме, выбор качества,
-  прогресс задания, отмена и удаление локальных копий.
-- Настройка официальной пары публичного и приватного ключей Kodik. Приватный
-  ключ защищается Windows DPAPI и не передаётся frontend.
+- HLS player with fixed quality, measured bitrate, speed, Picture-in-Picture and fullscreen.
+- API/HLS subtitles with language selection and synchronization of separate Kodik versions with embedded subtitles.
+- Opening/ending markers, manual/automatic skips, quick season/episode/dub/source controls inside the player.
+- Favorite dubs, per-title preferred dub and remembered playback source.
+- Episode/season/title downloads, quality selection, job progress, cancel and local-copy deletion.
+- Official Kodik Public/Private credentials; private key protected with Windows DPAPI and not sent to frontend.
 
-## Что исправлено
+## Fixed
 
-- При смене озвучки сохраняются выбранные сезон и серия; плеер больше не
-  подставляет эпизод из другого релиза Kodik.
-- Продолжение просмотра использует самый свежий фактический таймкод и хранит
-  исходные сезон, серию и озвучку для каждого эпизода.
-- Качество HLS фиксируется на выбранном уровне, а не остаётся скрытым auto ABR.
-- В собственном плеере работают прогресс-бар, доступные субтитры и выбор языка.
-- Бесшовный режим применяется только к смене озвучки одной серии; ручная смена
-  источника корректно загружает выбранное видео.
-- При временно недоступном каталоге AnimeSoul сохраняет локальные сезоны и
-  скачанные серии вместо пустого экрана.
-- Лаунчер проверяет возможности уже работающего runtime и перезапускает
-  устаревший экземпляр, если в нём нет новых API-маршрутов.
+- Dub changes retain season/episode instead of selecting another Kodik release.
+- Resume uses latest actual position and retains source season/episode/dub identity.
+- Selected HLS quality is fixed instead of remaining hidden auto ABR; progress bar, available subtitles and language selection work.
+- Seamless switching applies only to a dub change of the same episode; manual source selection loads the chosen video.
+- Temporary catalogue failures retain local seasons/downloaded episodes.
+- Launcher checks runtime capabilities and restarts outdated owned instances missing required API routes.
 
-## Что улучшено
+## Improved
 
-- Скачанное видео имеет приоритет. Если пользователь вернулся к озвучке, для
-  которой есть локальная копия, AnimeSoul снова открывает локальный файл.
-- Все скачанные видео запускаются через AnimeSoulPlayer и постоянно помечены
-  зелёной плашкой «Локальное видео».
-- Совместный просмотр работает исключительно с онлайн-источниками: при входе в
-  комнату локальная копия временно исключается из выбора.
-- При совместимой смене озвучки новый аудиопоток подготавливается отдельно, а
-  изображение, таймкод и полноэкранный режим не сбрасываются.
-- Озвучка с заметно меньшей длительностью получает аккуратное предупреждение о
-  возможной сокращённой версии.
-- Трейлер продолжения просмотра на главной странице автоматически
-  зацикливается без playlist-навигации YouTube.
-- Встроенное скачивание доступно из настроек собственного плеера, даже если
-  внешняя боковая панель выключена.
-- Диагностика раздельно показывает доступность YummyAnime, Kodik, локального
-  сохранения и облака.
+- Downloaded video takes priority and is reselected when returning to a dub with a local copy.
+- All downloaded videos use AnimeSoulPlayer and a green Local video badge.
+- Watch Party uses online sources only; local copies are temporarily excluded while in a room.
+- Compatible dub switching prepares new audio separately while preserving picture, position and fullscreen.
+- Notice for a possibly shortened dub with substantially lower duration.
+- Home resume trailer loops without YouTube playlist navigation.
+- Downloads remain available in player settings when the outer side panel is hidden.
+- Separate Yummy/Kodik/local/cloud diagnostics.
 
-## Совместимость
+## Compatibility and installer
 
-Формат сохранений и номер схемы не менялись. Данные 0.2.1 совместимы с 0.2.2;
-неизвестные поля профиля по-прежнему сохраняются при локальной записи, импорте
-и синхронизации Google Drive.
+Unchanged save format/schema; 0.2.1 data and unknown profile fields remain compatible across local save/import/Drive. AnimeSoul-Setup-0.2.2.exe includes launcher/runtime/browser/desktop modes without requiring Python/Node.js.
 
-## Windows installer
-
-`AnimeSoul-Setup-0.2.2.exe` устанавливает автономную сборку с лаунчером,
-runtime, браузерным и desktop-режимами. Python и Node.js пользователю не нужны.
-
-## Важно
-
-Для каталога и трейлеров нужен личный Public token YummyAnime. Собственный
-плеер и скачивание доступны только после ввода полной пары публичного и
-приватного ключей Kodik. Закрытый ключ остаётся на текущем компьютере.
-
-Скачанные файлы хранятся в выбранной пользователем папке и не передаются
-участникам комнаты совместного просмотра.
+Catalogue/trailers need your Yummy Public token. Built-in player/downloads require the complete Kodik Public/Private pair; the private key remains on the computer. Downloads stay in the selected directory and are not transmitted to Watch Party participants.
