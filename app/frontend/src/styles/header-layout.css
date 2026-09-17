@@ -1,34 +1,143 @@
-/* Search participates in desktop layout instead of covering navigation. */
+.header-start {
+  display: none;
+}
+
+/* Equal side columns keep search centered regardless of the status text. */
 @media (min-width: 801px) {
   html:not([data-platform="android"]) .app > .app-header {
     --header-gutter: clamp(20px, 3vw, 48px);
     display: grid;
-    grid-template-columns: auto auto minmax(180px, 1fr) auto;
+    grid-template-columns: minmax(220px, 1fr) minmax(240px, 680px) minmax(220px, 1fr);
     align-items: center;
-    gap: 20px;
+    gap: 24px;
     height: auto;
     min-height: 76px;
     padding: 12px var(--header-gutter);
   }
-  html:not([data-platform="android"]) .app-header > .brand { padding: 0; white-space: nowrap; }
-  html:not([data-platform="android"]) .app-header > .app-navigation { min-width: 0; gap: 16px; flex-wrap: wrap; }
-  html:not([data-platform="android"]) .app-header > .app-navigation > button { padding: 10px 0; white-space: nowrap; }
+  html:not([data-platform="android"]) .app-header > .header-start {
+    display: flex;
+    grid-column: 1;
+    grid-row: 1;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .header-start .brand {
+    padding: 0;
+    white-space: nowrap;
+  }
+
+  .header-menu {
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .header-menu-trigger {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--ink);
+  }
+
+  .header-menu-trigger:hover,
+  .header-menu-trigger[aria-expanded="true"] {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+    color: var(--accent);
+  }
+
+  .header-menu-trigger:focus-visible,
+  .header-menu-panel button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .header-menu-panel {
+    position: absolute;
+    z-index: 100;
+    top: calc(100% + 14px);
+    left: 0;
+    width: 232px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    box-shadow: 0 18px 48px #0006;
+  }
+
+  .header-menu-panel:not([hidden]) {
+    display: grid;
+    gap: 4px;
+  }
+
+  .header-menu-panel[hidden] {
+    display: none;
+  }
+
+  .header-menu-panel button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 9px;
+    color: var(--muted);
+    text-align: left;
+  }
+
+  .header-menu-panel button:hover,
+  .header-menu-panel button:focus-visible {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    color: var(--ink);
+  }
+
+  .header-menu-panel button.is-active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+  }
+
+  .header-menu .nav-icon {
+    display: grid;
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+  }
+
+  html:not([data-platform="android"]) .app-header > .app-navigation { display: contents; }
+  html:not([data-platform="android"]) .app-header > .app-navigation > button { display: none; }
+
   html:not([data-platform="android"]) .app-header > .search-wrap {
     position: relative!important;
+    grid-column: 2;
+    grid-row: 1;
     inset: auto;
     translate: none;
     width: 100%;
     min-width: 0;
   }
-  html:not([data-platform="android"]) .app-header .header-search { position: static; width: 100%; min-width: 0; min-height: 42px; }
-  html:not([data-platform="android"]) .app-header .header-search input { width: 100%; color: var(--ink); font-size: 14px; }
+  html:not([data-platform="android"]) .app-header .header-search { position: static; width: 100%; min-width: 0; min-height: 44px; }
+  html:not([data-platform="android"]) .app-header .header-search input { width: 100%; min-width: 0; color: var(--ink); font-size: 14px; }
   html:not([data-platform="android"]) .app-header .header-search button { flex: 0 0 42px; }
   html:not([data-platform="android"]) .app-header .header-search .nav-icon { color: var(--muted); }
-  html:not([data-platform="android"]) .app-header > .header-actions { min-width: 12px; margin: 0 52px 0 0; }
+  html:not([data-platform="android"]) .app-header > .header-actions {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    min-width: 0;
+    max-width: calc(100% - 56px);
+    margin: 0 56px 0 0;
+  }
   html:not([data-platform="android"]) .app-header .navigation-settings-slot { right: var(--header-gutter); }
-  html:not([data-platform="android"]) .app-header .settings-center-trigger { width: 40px; height: 40px; color: var(--ink); }
+  html:not([data-platform="android"]) .app-header .settings-center-trigger { width: 42px; height: 42px; color: var(--ink); }
   html:not([data-platform="android"]) .app-header .suggestions { top: calc(100% + 8px); }
-  html:not([data-platform="android"]) .app-header .header-statuses { position: static; }
+  html:not([data-platform="android"]) .app-header .header-statuses { position: static; min-width: 0; }
+  html:not([data-platform="android"]) .app-header .save-indicator { max-width: 100%; }
   html:not([data-platform="android"]) .app-header .status-popover {
     position: absolute;
     top: calc(100% + 8px);
@@ -43,12 +152,12 @@
   }
 }
 
-/* Give search its own row before the full navigation becomes cramped. */
+/* Reserve room for the brand while keeping all controls on one row. */
 @media (min-width: 801px) and (max-width: 1360px) {
-  html:not([data-platform="android"]) .app > .app-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 24px; }
-  html:not([data-platform="android"]) .app-header > .search-wrap { grid-column: 1 / -1; grid-row: 2; }
-  html:not([data-platform="android"]) .app-header > .header-actions { grid-column: 3; grid-row: 1; }
-  html:not([data-platform="android"]) .app-header .navigation-settings-slot { top: 12px; translate: none; }
+  html:not([data-platform="android"]) .app > .app-header {
+    grid-template-columns: minmax(220px, 1fr) minmax(240px, 1.6fr) minmax(220px, 1fr);
+    gap: 20px;
+  }
   html:not([data-platform="android"]) .app-header .save-indicator { font-size: 0; }
 }
 

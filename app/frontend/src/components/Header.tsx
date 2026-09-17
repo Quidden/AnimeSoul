@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { Anime, ApiStatus, ConfigProfile, PlayerPrefs, SaveStatus, Theme } from "../lib/types";
 import { readLocal as read } from "../lib/storage";
 import { SettingsCenter } from "./SettingsCenter";
@@ -103,6 +103,10 @@ export function Header({
   onStorageReload,
   activeView,
 }: HeaderProps) {
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationId = useId();
+  const navigationRef = useRef<HTMLDivElement>(null);
+  const navigationTriggerRef = useRef<HTMLButtonElement>(null);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [diskStatus, setDiskStatus] = useState<SaveStatus>({ state: "loading" });
   const [apiStatus, setApiStatus] = useState<ApiStatus>({ state: "idle" });
@@ -122,6 +126,23 @@ export function Header({
       : []
   ), [query, settingsAvailable]);
   const hasSuggestions = suggestions.length > 0 || settingsSuggestions.length > 0;
+
+  useEffect(() => {
+    if (!navigationOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !navigationRef.current?.contains(event.target)) {
+        setNavigationOpen(false);
+      }
+    };
+    const closeOnLayoutChange = () => setNavigationOpen(false);
+    const desktopLayout = window.matchMedia("(min-width: 801px)");
+    document.addEventListener("pointerdown", closeOutside);
+    desktopLayout.addEventListener("change", closeOnLayoutChange);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      desktopLayout.removeEventListener("change", closeOnLayoutChange);
+    };
+  }, [navigationOpen]);
 
   useEffect(() => {
     if (!IS_ANDROID_APP || !mobileSearchVisible || suggestionsOpen || query.trim()) return;
@@ -296,12 +317,57 @@ export function Header({
   const kodikApiDiagnostics = kodikApiStatus.pingMs ? `${kodikApiStatus.pingMs} мс` : kodikApiStatus.state === "error" ? "недоступен" : "пинг —";
 
   const navigateFromBottomBar = (navigate: () => void) => {
+    setNavigationOpen(false);
     emitAppEvent("close-settings");
     navigate();
   };
 
+  const sectionNavigation: { view: HeaderProps["activeView"]; icon: NavigationIcon; label: string; mobileLabel: string; navigate: () => void }[] = [
+    { view: "catalog", icon: "catalog", label: "Каталог", mobileLabel: "Каталог", navigate: onCatalog },
+    { view: "downloads", icon: "downloads", label: "Скачанные", mobileLabel: "Скачано", navigate: onDownloads },
+    { view: "stats", icon: "stats", label: "Статистика", mobileLabel: "Стат.", navigate: onLibrary },
+    { view: "ratings", icon: "ratings", label: "Оценки", mobileLabel: "Оценки", navigate: onRatings },
+  ];
+
   return <header className={`app-header${IS_ANDROID_APP && !mobileSearchVisible ? " search-hidden" : ""}`}>
-    <Brand onClick={onHome} />
+    <div className="header-start">
+      <div className="header-menu" ref={navigationRef}
+        onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setNavigationOpen(false);
+        }}
+        onKeyDown={event => {
+          if (event.key === "Escape" && navigationOpen) {
+            event.preventDefault();
+            event.stopPropagation();
+            setNavigationOpen(false);
+            navigationTriggerRef.current?.focus();
+          }
+        }}
+      >
+        <button type="button" className="header-menu-trigger" ref={navigationTriggerRef}
+          aria-label={navigationOpen ? "Закрыть меню навигации" : "Открыть меню навигации"}
+          aria-expanded={navigationOpen} aria-controls={navigationId}
+          onClick={() => { setSuggestionsOpen(false); setNavigationOpen(open => !open); }}
+        >
+          <span className="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d={navigationOpen ? "m6 6 12 12M6 18 18 6" : "M4 6h16M4 12h16M4 18h16"} />
+            </svg>
+          </span>
+        </button>
+        <nav id={navigationId} className="header-menu-panel" aria-label="Разделы приложения" hidden={!navigationOpen}>
+          {sectionNavigation.map(item => <button key={item.view} type="button"
+            className={activeView === item.view ? "is-active" : undefined}
+            aria-current={activeView === item.view ? "page" : undefined}
+            onClick={() => {
+              navigationTriggerRef.current?.focus();
+              navigateFromBottomBar(item.navigate);
+            }}
+          ><NavIcon name={item.icon} /><span>{item.label}</span></button>)}
+        </nav>
+      </div>
+      <Brand onClick={() => navigateFromBottomBar(onHome)} />
+    </div>
     <nav className="app-navigation" aria-label="Основная навигация">
       <button
         type="button"
@@ -340,42 +406,16 @@ export function Header({
       >
         <NavIcon name="stats" /><span className="nav-label" data-mobile-label="Статистика" aria-hidden="true">Статистика</span>
       </button>
-      <button
+      {sectionNavigation.map(item => <button
+        key={item.view}
         type="button"
-        className={`desktop-section-nav${activeView === "catalog" ? " is-active" : ""}`}
-        aria-label="Каталог"
-        aria-current={activeView === "catalog" ? "page" : undefined}
-        onClick={() => navigateFromBottomBar(onCatalog)}
+        className={`desktop-section-nav${activeView === item.view ? " is-active" : ""}`}
+        aria-label={item.label}
+        aria-current={activeView === item.view ? "page" : undefined}
+        onClick={() => navigateFromBottomBar(item.navigate)}
       >
-        <NavIcon name="catalog" /><span className="nav-label" data-mobile-label="Каталог" aria-hidden="true">Каталог</span>
-      </button>
-      <button
-        type="button"
-        className={`desktop-section-nav${activeView === "downloads" ? " is-active" : ""}`}
-        aria-label="Скачанные"
-        aria-current={activeView === "downloads" ? "page" : undefined}
-        onClick={() => navigateFromBottomBar(onDownloads)}
-      >
-        <NavIcon name="downloads" /><span className="nav-label" data-mobile-label="Скачано" aria-hidden="true">Скачанные</span>
-      </button>
-      <button
-        type="button"
-        className={`desktop-section-nav${activeView === "stats" ? " is-active" : ""}`}
-        aria-label="Статистика"
-        aria-current={activeView === "stats" ? "page" : undefined}
-        onClick={() => navigateFromBottomBar(onLibrary)}
-      >
-        <NavIcon name="stats" /><span className="nav-label" data-mobile-label="Стат." aria-hidden="true">Статистика</span>
-      </button>
-      <button
-        type="button"
-        className={`desktop-section-nav${activeView === "ratings" ? " is-active" : ""}`}
-        aria-label="Оценки"
-        aria-current={activeView === "ratings" ? "page" : undefined}
-        onClick={() => navigateFromBottomBar(onRatings)}
-      >
-        <NavIcon name="ratings" /><span className="nav-label" data-mobile-label="Оценки" aria-hidden="true">Оценки</span>
-      </button>
+        <NavIcon name={item.icon} /><span className="nav-label" data-mobile-label={item.mobileLabel} aria-hidden="true">{item.label}</span>
+      </button>)}
       {!compact && theme && setTheme && playerPrefs && setPlayerPrefs && onHistoryEnabledChange &&
         <span className="navigation-settings-slot">
           <SettingsCenter
