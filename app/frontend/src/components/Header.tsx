@@ -331,41 +331,6 @@ export function Header({
 
   return <header className={`app-header${IS_ANDROID_APP && !mobileSearchVisible ? " search-hidden" : ""}`}>
     <div className="header-start">
-      <div className="header-menu" ref={navigationRef}
-        onBlur={event => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setNavigationOpen(false);
-        }}
-        onKeyDown={event => {
-          if (event.key === "Escape" && navigationOpen) {
-            event.preventDefault();
-            event.stopPropagation();
-            setNavigationOpen(false);
-            navigationTriggerRef.current?.focus();
-          }
-        }}
-      >
-        <button type="button" className="header-menu-trigger" ref={navigationTriggerRef}
-          aria-label={navigationOpen ? "Закрыть меню навигации" : "Открыть меню навигации"}
-          aria-expanded={navigationOpen} aria-controls={navigationId}
-          onClick={() => { setSuggestionsOpen(false); setNavigationOpen(open => !open); }}
-        >
-          <span className="nav-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d={navigationOpen ? "m6 6 12 12M6 18 18 6" : "M4 6h16M4 12h16M4 18h16"} />
-            </svg>
-          </span>
-        </button>
-        <nav id={navigationId} className="header-menu-panel" aria-label="Разделы приложения" hidden={!navigationOpen}>
-          {sectionNavigation.map(item => <button key={item.view} type="button"
-            className={activeView === item.view ? "is-active" : undefined}
-            aria-current={activeView === item.view ? "page" : undefined}
-            onClick={() => {
-              navigationTriggerRef.current?.focus();
-              navigateFromBottomBar(item.navigate);
-            }}
-          ><NavIcon name={item.icon} /><span>{item.label}</span></button>)}
-        </nav>
-      </div>
       <Brand onClick={() => navigateFromBottomBar(onHome)} />
     </div>
     <nav className="app-navigation" aria-label="Основная навигация">
@@ -511,6 +476,41 @@ export function Header({
           <i />
           {cloudLabel}
         </button>
+      </div>
+      <div className="header-menu" ref={navigationRef}
+        onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setNavigationOpen(false);
+        }}
+        onKeyDown={event => {
+          if (event.key === "Escape" && navigationOpen) {
+            event.preventDefault();
+            event.stopPropagation();
+            setNavigationOpen(false);
+            navigationTriggerRef.current?.focus();
+          }
+        }}
+      >
+        <button type="button" className="header-menu-trigger" ref={navigationTriggerRef}
+          aria-label={navigationOpen ? "Закрыть меню навигации" : "Открыть меню навигации"}
+          aria-expanded={navigationOpen} aria-controls={navigationId}
+          onClick={() => { setSuggestionsOpen(false); setNavigationOpen(open => !open); }}
+        >
+          <span className="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d={navigationOpen ? "m6 6 12 12M6 18 18 6" : "M4 6h16M4 12h16M4 18h16"} />
+            </svg>
+          </span>
+        </button>
+        <nav id={navigationId} className="header-menu-panel" aria-label="Разделы приложения" hidden={!navigationOpen}>
+          {sectionNavigation.map(item => <button key={item.view} type="button"
+            className={activeView === item.view ? "is-active" : undefined}
+            aria-current={activeView === item.view ? "page" : undefined}
+            onClick={() => {
+              navigationTriggerRef.current?.focus();
+              navigateFromBottomBar(item.navigate);
+            }}
+          ><NavIcon name={item.icon} /><span>{item.label}</span></button>)}
+        </nav>
       </div>
     </div>
   </header>;
