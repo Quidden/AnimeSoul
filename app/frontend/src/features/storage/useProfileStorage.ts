@@ -230,6 +230,10 @@ export function useProfileStorage({
     useEffect(() => {
         const root = document.documentElement;
         const prefs = { ...DEFAULT_PLAYER_PREFS, ...playerPrefs };
+        root.dataset.desktopLibrary = prefs.desktopLibraryBeta === true ? "beta" : "classic";
+        if (prefs.desktopLibraryBeta === true) {
+            void import("../../styles/desktop-library-beta.css");
+        }
         root.style.setProperty("--watched-episode-color", prefs.watchedEpisodeColor);
         root.style.setProperty(
             "--interface-font-scale",

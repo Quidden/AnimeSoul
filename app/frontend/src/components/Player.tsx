@@ -1864,6 +1864,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
         previewAnimeById={previewAnimeById}
         episodeHoverPreview={episodeHoverPreview}
         compactEpisodeList={initialPrefs.compactEpisodeList}
+        desktopLibraryBeta={initialPrefs.desktopLibraryBeta}
         newEpisodeKeys={newEpisodeKeys}
         onToggleSeason={toggleSeason}
         onToggleSeasonWatched={toggleSeasonWatched}

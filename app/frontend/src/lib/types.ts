@@ -226,6 +226,8 @@ export type PlayerPrefs = {
   episodeHoverPreview: boolean;
   /** Use denser episode cards below the player without removing their actions. */
   compactEpisodeList: boolean;
+  /** Experimental desktop library layout; never applied on mobile. */
+  desktopLibraryBeta: boolean;
   toolbarIconOnly: boolean;
   /** Keep the legacy toolbar around the custom AnimeSoul player. */
   customPlayerToolbarVisible: boolean;

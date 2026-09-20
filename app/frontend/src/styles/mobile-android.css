@@ -542,7 +542,7 @@ html[data-platform="android"] .watch-heading h1 {
 }
 
 html[data-platform="android"] .watch-rating-desktop { display: none; }
-html[data-platform="android"] .watch-rating-mobile {
+html[data-platform="android"] .watch-shell > .watch-rating-panel.watch-rating-mobile {
   display: grid;
   margin-top: 12px;
 }

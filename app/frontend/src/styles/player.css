@@ -2592,6 +2592,6 @@ html[data-color-scheme="light"] .watch-party-panel {
   }
 }
 
-.watch-rating-mobile {
+.watch-shell > .watch-rating-panel.watch-rating-mobile {
   display: none;
 }

@@ -1,3 +1,5 @@
+import { useState, useSyncExternalStore } from "react";
+import { IS_ANDROID_APP } from "../../lib/platform";
 import { EpisodeHoverPreview } from "../../components/EpisodeHoverPreview";
 import { episodePreviewImages } from "../../components/EpisodeSlideshow";
 import { ScorePicker } from "../../components/ScorePicker";
@@ -27,6 +29,7 @@ interface SeasonListProps {
   previewAnimeById: Record<number, Anime>;
   episodeHoverPreview: boolean;
   compactEpisodeList: boolean;
+  desktopLibraryBeta?: boolean;
   newEpisodeKeys: Set<string>;
   onToggleSeason: (season: number) => void;
   onToggleSeasonWatched: (season: number, episodes: string[], videos: Video[]) => void;
@@ -42,6 +45,14 @@ interface SeasonListProps {
  * Progress mutation stays in Player.tsx. Keeping this component presentational
  * makes it safe to change the layout without touching playback state.
  */
+const desktopQuery = "(min-width: 801px)";
+function subscribeDesktop(listener: () => void) {
+  const query = window.matchMedia(desktopQuery);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+const isDesktop = () => window.matchMedia(desktopQuery).matches;
+
 export function SeasonList({
   seasons,
   seasonVideos,
@@ -55,6 +66,7 @@ export function SeasonList({
   previewAnimeById,
   episodeHoverPreview,
   compactEpisodeList,
+  desktopLibraryBeta = false,
   newEpisodeKeys,
   onToggleSeason,
   onToggleSeasonWatched,
@@ -63,10 +75,34 @@ export function SeasonList({
   onSeasonRatingChange,
   onEpisodeRatingChange,
 }: SeasonListProps) {
-  const airDates = useEpisodeAirDates(seasons, seasonVideos, previewAnimeById, collapsedSeasons);
+  const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
+  const beta = desktopLibraryBeta && desktop && !IS_ANDROID_APP;
+  const [browsed, setBrowsed] = useState({ playback: selectedSeason, season: selectedSeason });
+  // Follow an episode chosen by the player, including when playback returns to
+  // an earlier season after the user browsed a different one in the sidebar.
+  if (browsed.playback !== selectedSeason) {
+    setBrowsed({ playback: selectedSeason, season: selectedSeason });
+  }
+  const requestedSeason = browsed.playback === selectedSeason ? browsed.season : selectedSeason;
+  const visibleSeason = seasons.find(group => group.number === requestedSeason)?.number ?? seasons[0]?.number;
+  const hiddenSeasons = beta ? seasons.filter(group => group.number !== visibleSeason).map(group => group.number) : collapsedSeasons;
+  const airDates = useEpisodeAirDates(seasons, seasonVideos, previewAnimeById, hiddenSeasons);
   return (
-    <div className={`all-seasons${compactEpisodeList ? " compact-episodes" : ""}`}>
-      {seasons.map((group) => {
+    <div className={`all-seasons${compactEpisodeList ? " compact-episodes" : ""}${beta ? " beta-season-browser" : ""}`}>
+      {beta && <nav className="beta-season-nav" aria-label="Сезоны и выпуски">
+        <h2>Сезоны и серии</h2>
+        {seasons.map(group => {
+          const numbers = [...new Set((seasonVideos[group.number] ?? []).map(video => video.number))];
+          const watched = numbers.filter(number => isEpisodeWatched(saved?.episodes[`${group.number}:${number}`])).length;
+          return <button type="button" key={group.number}
+            aria-current={visibleSeason === group.number ? "true" : undefined}
+            onClick={() => setBrowsed({ playback: selectedSeason, season: group.number })}>
+            <span>{group.label ?? `Сезон ${group.number}`}</span>
+            <small>{numbers.length ? `${watched} из ${numbers.length} просмотрено` : releaseStatus(group.entries[0]).label}</small>
+          </button>;
+        })}
+      </nav>}
+      {seasons.filter(group => !beta || group.number === visibleSeason).map((group) => {
         const videos = seasonVideos[group.number] ?? [];
         const episodeNumbers = Array.from(new Set(videos.map((video) => video.number))).sort(
           (left, right) => Number(left) - Number(right),
@@ -81,7 +117,7 @@ export function SeasonList({
           .map((item) => schedule[item.anime_id])
           .find(Boolean);
         const nextDate = scheduleItem?.episodes?.next_date;
-        const collapsed = collapsedSeasons.includes(group.number);
+        const collapsed = !beta && collapsedSeasons.includes(group.number);
         const emptyMessage =
           status.kind === "planned"
             ? `Запланировано${entry.year ? ` · ${entry.year}` : ""}`
@@ -98,7 +134,10 @@ export function SeasonList({
             key={group.number}
           >
             <div className="season-summary-row">
-              <button
+              {beta ? <div className="season-summary beta-season-heading">
+                <h2>{seasonLabel}</h2>
+                <span>{watchedCount} из {episodeNumbers.length} просмотрено</span>
+              </div> : <button
                 type="button"
                 className="season-summary"
                 onClick={() => onToggleSeason(group.number)}
@@ -107,7 +146,7 @@ export function SeasonList({
                 <h2>{seasonLabel}</h2>
                 <span>{watchedCount} из {episodeNumbers.length} просмотрено</span>
                 <b>{collapsed ? "⌄" : "⌃"}</b>
-              </button>
+              </button>}
               <div className="season-rating-summary">
                 {communityRating?.seasons[String(group.number)] && (
                   <span title={`${communityRating.seasons[String(group.number)].count} общих оценок сезона`}>
@@ -177,6 +216,8 @@ export function SeasonList({
                       >
                         <div className="episode-card-shell">
                           <button
+                            type="button"
+                            aria-label={`${active ? "Продолжить" : "Смотреть"}: ${seasonLabel}, ${unit.toLowerCase()} ${number}`}
                             className={`episode-entry ${active ? "active " : ""}${watched ? "watched " : ""}${isNew ? "new-episode " : ""}${unit !== "Серия" && unit !== "Фильм" ? "extra-episode" : ""}`.trim()}
                             onClick={() => onChooseEpisode(number, group.number)}
                           >
@@ -203,6 +244,7 @@ export function SeasonList({
                                   ? <>{airDate ? "Выход" : "Добавлена"}: <time dateTime={shownDate}>{formatAirDate(shownDate)}</time></>
                                   : "Дата выхода неизвестна"}
                               </small>
+                              {beta && <small className="beta-play-hint" aria-hidden="true">▶ {active ? "Продолжить" : "Смотреть"}</small>}
                             </span>
                           </button>
                           <button

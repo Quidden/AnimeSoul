@@ -66,7 +66,14 @@ export function HomePage({ model, actions }: HomePageProps) {
               onClick={() => setView(tab.id)}
               onKeyDown={event => navigateTabs(event, index)}
             >
-              {tab.label}<span>{tab.count}</span>
+              {tab.label}
+              {tab.id === "tracking" && model.totalNewEpisodes > 0 && <i
+                className="home-tracking-update-dot"
+                role="img"
+                aria-label="Есть новые серии"
+                title="Есть новые серии"
+              />}
+              <span>{tab.count}</span>
             </button>
           ))}
         </div>

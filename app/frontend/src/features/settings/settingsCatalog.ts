@@ -120,6 +120,7 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchEntry[] = [
   { id: "player-toolbar", tab: "player", kind: "setting", title: "Панель управления", description: "Расположение элементов управления плеером", keywords: "сверху снизу слева справа озвучка источник" },
 
   { id: "appearance-palette", tab: "appearance", kind: "setting", title: "Собственная палитра", description: "Основной и акцентный цвета интерфейса", keywords: "цвет фон акцент оформление кастомизация" },
+  { id: "appearance-desktop-beta", tab: "appearance", kind: "setting", title: "Медиатека — бета-тема для ПК", description: "Минималистичное оформление для компьютера", keywords: "бета beta минимализм тема пк медиатека" },
   { id: "appearance-themes", tab: "appearance", kind: "setting", title: "Готовые темы", description: "Предустановленные цветовые оформления", keywords: "светлая темная фиолетовая цвет схема" },
   { id: "appearance-watched", tab: "appearance", kind: "setting", title: "Цвет просмотренной серии", description: "Оформление уже просмотренных серий", keywords: "рамка фон номер отметка" },
   { id: "appearance-text", tab: "appearance", kind: "setting", title: "Размер обычного текста", description: "Масштаб подписей, кнопок и метаданных", keywords: "шрифт масштаб интерфейс крупнее мельче" },
