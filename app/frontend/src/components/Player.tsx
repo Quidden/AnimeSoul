@@ -264,6 +264,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     setSourceLoadIssues([]);
     setShowSourceLoadIssues(false);
     initialResumeSelectionPending.current = true;
+    newEpisodeOpened.current = false;
     initialResumeTarget.current = {
       episodeKey: `${resumeSeason}:${resumeEpisode}`,
       position: episodeResumePosition(
@@ -551,7 +552,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   };
   useEffect(() => {
     if (!offlineLookupReady) return;
-    void fetchVideos();
+    void fetchVideos(newEpisodeRequested);
   }, [seasons.map(s => s.entries.map(e => e.anime_id).join(",")).join("|"), offlineVideosKey, offlineLookupReady, localPlaybackReady]);
   const displaySeasons = remoteSourcesUnavailable
     ? seasons.filter(group => (seasonVideos[group.number] ?? []).some(video => video.offline))
@@ -567,6 +568,9 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const dubbingContext = `${anime.anime_id}:${selectedSeason}:${videos.map(video => video.video_id).join(",")}`;
   useEffect(() => {
     if (!videos.length) return;
+    // Episode cards and the carousel can advance without changing the loaded
+    // catalogue. Keep a playable voice, otherwise resolve one for this episode.
+    if (!initialResumeSelectionPending.current && dubbingHasEpisode(voiceVideos, dub, episode)) return;
     const requestedEpisode = episode;
     const episodeVideos = voiceVideos.filter(video => video.number === requestedEpisode);
     const episodeKodikDefault = episodeVideos.find(video => isKodikEmbed(video.iframe_url, video.data.player))?.data.dubbing;
@@ -598,7 +602,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     setDub(nextDub);
     setEpisode(nextEpisode);
     setPlayer("");
-  }, [dubbingContext]);
+  }, [dubbingContext, episode]);
   const dubs = Array.from(new Set(voiceVideos.map(video => video.data.dubbing))).sort((left, right) => {
     const leftRank = left === manualDubbing ? -2 : left === globalDubbing ? -1 : favouriteDubbings.indexOf(left);
     const rightRank = right === manualDubbing ? -2 : right === globalDubbing ? -1 : favouriteDubbings.indexOf(right);
@@ -658,6 +662,8 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const fallbackSource = preferredOffline ?? kodikSource ?? onlineSources[0];
   const defaultPlayer = preferredOffline?.data.player
     ?? preferredPlayer(players, titlePlayer, animeSoulOnlineAvailable, fallbackSource?.data.player);
+  // Derive automatic fallbacks without storing them as a session choice:
+  // AnimeSoul may become available after the asynchronous access check.
   const effectivePlayer = players.includes(player) ? player : defaultPlayer;
   const current = effectivePlayer === ANIMESOUL_PLAYER
     ? kodikSource
@@ -832,10 +838,6 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       document.removeEventListener("webkitfullscreenchange", fullscreenChanged as EventListener);
     };
   }, []);
-  useEffect(() => {
-    if (!players.length) return;
-    if (!players.includes(player)) setPlayer(defaultPlayer);
-  }, [dub, episode, players.join("|"), partyOnlineOnly, downloadQuality, defaultPlayer]);
   const localPartyPlayback: PartyPlayback = { animeId: anime.anime_id, season: selectedSeason, episode, dub, player: effectivePlayer, position: partyTime, duration: partyDuration || current?.duration || 0, playing: partyPlaying, updatedAt: Date.now() };
   const applyHostState = (host: PartyPlayback, force = false) => {
     if (host.animeId !== anime.anime_id) return;
@@ -1021,19 +1023,14 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       setSelectedSeason(targetSeason);
       return;
     }
-    const targetVideos = (seasonVideos[targetSeason] ?? []).filter(video => video.number === targetEpisode);
-    const availableDubs = Array.from(new Set(targetVideos.map(video => video.data.dubbing)));
+    const targetVideos = (seasonVideos[targetSeason] ?? []).filter(video => video.number === targetEpisode && !isSubtitleVideo(video));
     const kodikDefault = targetVideos.find(video => isKodikEmbed(video.iframe_url, video.data.player))?.data.dubbing ?? "";
-    const nextDub = preferredDubbing(availableDubs, manualDubbing, globalDubbing, favouriteDubbings, kodikDefault);
+    const nextDub = preferredDubbingForEpisode(targetVideos, targetEpisode, manualDubbing, globalDubbing, favouriteDubbings, "", kodikDefault);
     if (!nextDub) return;
-    const targetSources = targetVideos.filter(video => video.data.dubbing === nextDub && !video.offline);
-    const targetHasKodik = targetSources.some(video => isKodikEmbed(video.iframe_url, video.data.player));
-    const targetPlayers = Array.from(new Set([...(kodikAccessReady && targetHasKodik ? [ANIMESOUL_PLAYER] : []), ...targetSources.map(video => video.data.player)]));
-    const nextPlayer = preferredPlayer(targetPlayers, titlePlayer, kodikAccessReady && targetHasKodik, targetSources[0]?.data.player);
     newEpisodeOpened.current = true;
     setDub(nextDub);
     setEpisode(targetEpisode);
-    setPlayer(nextPlayer);
+    setPlayer("");
     setAutoPlay(true);
   }, [newEpisodeRequested, tracker?.newEpisodes, resolvedNewEpisodeKeys.join("|"), selectedSeason, seasonVideos, kodikAccessReady]);
   const scheduleRows: ReleaseScheduleRow[] = displaySeasons
@@ -1735,13 +1732,8 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
                 })}
                 onFallback={current?.offline ? undefined : () => {
                   const fallback = kodikSource?.data.player ?? providerPlayers[0] ?? "";
+                  // Recover this session without replacing the user's saved player.
                   setPlayer(fallback);
-                  patchPrefs({
-                    titlePlayers: {
-                      ...(initialPrefs.titlePlayers ?? {}),
-                      [titlePreferenceKey]: fallback,
-                    },
-                  });
                 }}
               />
             ) : (current || renderedIframeSource) && (
