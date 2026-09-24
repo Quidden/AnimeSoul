@@ -37,6 +37,7 @@ import {
     resolveActiveProfileDocument,
 } from "./profileDocument";
 import {useProfileAutosave} from "./useProfileAutosave";
+import {useLanSaveSync} from "../devices/useLanSaveSync";
 
 type ProfileStorageOptions = {
     getCatalog: () => Anime[];
@@ -276,6 +277,21 @@ export function useProfileStorage({
         tracked,
         watchingExpanded,
         watchingHidden,
+    });
+
+    useLanSaveSync({
+        ready: storageReady && saveStatus.state === "saved",
+        current: () => {
+            const currentProfiles = profilesRef.current;
+            const name = currentProfiles.find(p => p.id === activeProfile)?.name ?? "Основной";
+            return buildStorageDocument(storageEnvelopeRef.current, currentProfiles.map(p =>
+                p.id === activeProfile ? { ...p, snapshot: makeSnapshot(name) } : p), activeProfile);
+        },
+        apply: document => {
+            const resolved = resolveActiveProfileDocument(document);
+            // Do not suppress autosave: LAN changes must also reach Google Drive.
+            applyStorageProfile(resolved.document, resolved.profile, resolved.snapshot);
+        },
     });
 
     function createDocumentFromBrowserBackup(): StorageDocument {

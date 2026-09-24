@@ -19,6 +19,7 @@ import re
 import shutil
 import time
 import uuid
+from functools import wraps
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -239,6 +240,14 @@ def _dpapi_unprotect(value: str) -> str:
 
 
 
+def _index_mutation(method):
+    @wraps(method)
+    async def locked(self, *args, **kwargs):
+        async with self._mutation_lock:
+            return await method(self, *args, **kwargs)
+    return locked
+
+
 class OfflineLibraryService:
     """Persistent offline catalogue plus a single safe background queue."""
 
@@ -248,6 +257,8 @@ class OfflineLibraryService:
         self.private_key_file = data_dir / PRIVATE_KEY_FILE
         self._settings_lock = asyncio.Lock()
         self._index_lock = asyncio.Lock()
+        self._index_init_lock = asyncio.Lock()
+        self._mutation_lock = asyncio.Lock()
         self._jobs: dict[str, dict[str, Any]] = {}
         self._cancelled: set[str] = set()
         self._active_downloads: dict[str, asyncio.Task[None]] = {}
@@ -760,6 +771,7 @@ class OfflineLibraryService:
     async def delete_episode(self, episode_id: str) -> None:
         await self.delete_episodes([episode_id])
 
+    @_index_mutation
     async def delete_episodes(self, episode_ids: list[str]) -> int:
         directory = await self._directory()
         index = await self._read_index(directory)
@@ -774,6 +786,7 @@ class OfflineLibraryService:
         await self._save_index(directory, index)
         return len(selected)
 
+    @_index_mutation
     async def scan_existing(self) -> dict[str, int]:
         """Restore Android MediaStore videos into a fresh private index."""
 
@@ -826,6 +839,7 @@ class OfflineLibraryService:
             "ignored": ignored,
         }
 
+    @_index_mutation
     async def delete_anime(self, anime_id: int) -> int:
         directory = await self._directory()
         index = await self._read_index(directory)
@@ -1082,13 +1096,12 @@ class OfflineLibraryService:
                 record["contentUri"] = external_uri
                 record["externalPath"] = external_path
             record["sizeBytes"] = await asyncio.to_thread(self._entry_storage_size, directory, record)
-            index["episodes"] = [item for item in index["episodes"] if item.get("id") != episode_id] + [record]
 
             # Once the media file has its final name, cancellation must not
             # interrupt the atomic index commit halfway through. Await the
             # shielded task before propagating cancellation so the file and
             # catalogue can never disagree.
-            index_commit = asyncio.create_task(self._save_index(directory, index))
+            index_commit = asyncio.create_task(self._upsert_episode(directory, record))
             try:
                 await asyncio.shield(index_commit)
             except asyncio.CancelledError:
@@ -1565,9 +1578,10 @@ class OfflineLibraryService:
             self.private_key_file.unlink()
 
     async def _ensure_index(self, directory: Path) -> None:
-        index_file = directory / INDEX_FILE
-        if not index_file.is_file():
-            await self._write_json(index_file, {"version": 1, "episodes": []})
+        async with self._index_init_lock:
+            index_file = directory / INDEX_FILE
+            if not index_file.is_file():
+                await self._write_json(index_file, {"version": 1, "episodes": []})
 
     async def _read_index(self, directory: Path) -> dict[str, Any]:
         async with self._index_lock:
@@ -1579,6 +1593,15 @@ class OfflineLibraryService:
             if not isinstance(data, dict) or not isinstance(data.get("episodes"), list):
                 return {"version": 1, "episodes": []}
             return data
+
+    @_index_mutation
+    async def _upsert_episode(self, directory: Path, record: dict[str, Any]) -> None:
+        """Merge into the latest index while LAN and ordinary downloads overlap."""
+        async with self._index_lock:
+            data = json.loads(await asyncio.to_thread((directory / INDEX_FILE).read_text, encoding="utf-8"))
+            data["episodes"] = [row for row in data["episodes"] if row.get("id") != record["id"]] + [record]
+            await self._write_json(directory / INDEX_FILE, data)
+            self._invalidate_playback_path_cache()
 
     async def _save_index(self, directory: Path, index: dict[str, Any]) -> None:
         async with self._index_lock:

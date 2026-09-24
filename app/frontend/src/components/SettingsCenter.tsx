@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ConfigProfile, PlayerPrefs, Theme, ToolbarPosition } from "../lib/types";
 import { DEFAULT_PLAYER_PREFS, STORAGE_KEYS as K, THEMES } from "../lib/settings";
@@ -26,6 +26,8 @@ import { PlaybackSettings } from "../features/settings/PlaybackSettings";
 import { WatchPartySettings } from "../features/settings/WatchPartySettings";
 import { IS_ANDROID_APP } from "../lib/platform";
 import { useModalAccessibility } from "../lib/modalAccessibility";
+
+const DeviceSettings = lazy(() => import("../features/devices/DeviceSettings").then(module => ({ default: module.DeviceSettings })));
 
 type Props = {
   theme: Theme;
@@ -339,6 +341,7 @@ export function SettingsCenter(props: Props) {
                     />
                     <CredentialsSettings googleDrive={googleDrive} />
                     <OfflineSettings />
+                    {activeTab === "devices" && <Suspense fallback={<p>Загрузка устройств…</p>}><DeviceSettings /></Suspense>}
                     <CloudSettings state={googleDrive} />
                     {!IS_ANDROID_APP && (
                       <WatchPartySettings

@@ -11,6 +11,7 @@ import { useWatchParty, WATCH_PARTY_SESSION_KEY } from "../hooks/useWatchParty";
 import { isKodikEmbed, kodikSerialIdentity, kodikSerialSource, playerDubbing, playerEpisode, playerTranslationId } from "../lib/kodik";
 import { listenAppEvent } from "../lib/events";
 import { commandCastVideo } from "../lib/cast";
+import { useLanPlayer } from "../features/devices/useLanControl";
 import type { WatchProps } from "../features/player/types";
 import { SeasonList } from "../features/player/SeasonList";
 import { WatchInfo } from "../features/player/WatchInfo";
@@ -1224,6 +1225,33 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const chooseSeason = (nextSeason: number) => { flushMountedLocalPlayback(); cancelPendingPlayerEpisodeSwitch(); playerManagedEpisodeSwitch.current = false; setShowUpcoming(false); setSelectedSeason(nextSeason); setPlayer("") ;};
   const chooseEpisode = (nextEpisode: string, nextSeason = selectedSeason, scrollToPlayer = true) => { flushMountedLocalPlayback(); cancelPendingPlayerEpisodeSwitch(); playerManagedEpisodeSwitch.current = false; setShowUpcoming(false); setSelectedSeason(nextSeason); setEpisode(nextEpisode); setPlayer(""); if (scrollToPlayer && autoScrollPlayer) requestAnimationFrame(() => requestAnimationFrame(() => playerShell.current?.scrollIntoView({ behavior: "smooth", block: "start" }))) ;};
   const activateCarouselItem = (item: (typeof carouselItems)[number], direction: "previous" | "next", play = true, scrollToPlayer = true) => { setCarouselMotion(""); requestAnimationFrame(() => setCarouselMotion(direction)); setTimeout(() => setCarouselMotion(""), 520); setAutoPlay(play); chooseEpisode(item.number, item.season, scrollToPlayer) ;};
+  useLanPlayer({
+    animeId: anime.anime_id, title: anime.title, season: selectedSeason, episode, dubbing: dub,
+    position: partyTime, duration: partyDuration, playing: partyPlaying,
+    episodes: Object.entries(seasonVideos).flatMap(([season, videos]) => videos.map(v => ({
+      season: Number(season), episode: v.number, dubbing: v.data.dubbing,
+    }))).slice(0, 1000),
+  }, async remote => {
+    if (remote.action === "episode") {
+      const target = (seasonVideos[remote.season ?? 1] ?? []).find(v => v.number === remote.episode
+        && (!remote.dubbing || v.data.dubbing === remote.dubbing));
+      if (!target) throw Error("Выбранная серия или озвучка недоступна на устройстве.");
+      if (remote.season === selectedSeason && target.number === episode && (!remote.dubbing || remote.dubbing === dub)) {
+        if (localVideo.current && !commandCastVideo(localVideo.current, "play")) await localVideo.current.play();
+        else command("play");
+        return;
+      }
+      if (remote.dubbing) setDub(remote.dubbing);
+      setAutoPlay(true);
+      chooseEpisode(target.number, remote.season ?? 1);
+    } else if (remote.action === "next" || remote.action === "previous") {
+      const target = remote.action === "next" ? nextCarouselItem : previousCarouselItem;
+      if (!target) throw Error("Соседняя серия недоступна.");
+      activateCarouselItem(target, remote.action);
+    } else if (remote.action === "play" && localVideo.current) {
+      if (!commandCastVideo(localVideo.current, "play")) await localVideo.current.play();
+    } else command(remote.action, { seconds: remote.seconds });
+  });
   const confirmPlayerEpisodeSwitch = () => {
     const pending = pendingPlayerEpisodeSwitch.current;
     if (!pending) return false;

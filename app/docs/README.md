@@ -2,7 +2,7 @@
 
 # AnimeSoul documentation
 
-Maintained `app/` implementation, version **0.2.7**, schema **3**. Reviewed against source on **2026-09-16**. English is primary; Russian counterparts use `.ru.md`. Text paths are repository-relative unless stated otherwise.
+Maintained `app/` implementation, version **0.2.8**, schema **3**. Reviewed against source on **2026-09-24**. English is primary; Russian counterparts use `.ru.md`. Text paths are repository-relative unless stated otherwise.
 
 ## Reading map
 
@@ -19,6 +19,7 @@ Maintained `app/` implementation, version **0.2.7**, schema **3**. Reviewed agai
 | Files and feature ownership | [EN](PROJECT_MAP.md) | [RU](PROJECT_MAP.ru.md) |
 | Schema, field revisions, device files and migrations | [EN](DATA_MODEL.md) | [RU](DATA_MODEL.ru.md) |
 | OAuth, sync modes, conflict policy and recovery | [EN](GDRIVE_SYNC.md) | [RU](GDRIVE_SYNC.ru.md) |
+| Local devices, save sync, video transfer and remote control | [EN](LAN_DEVICES.md) | [RU](LAN_DEVICES.ru.md) |
 | CSS order, tokens, owners and responsive behavior | [EN](STYLES.md) | [RU](STYLES.ru.md) |
 | Windows/Android builds, native capabilities and verification | [EN](PLATFORMS.md) | [RU](PLATFORMS.ru.md) |
 | Profile export/import, legacy transfer and backup | [EN](../SAVE_COMPATIBILITY.md) | [RU](../SAVE_COMPATIBILITY.ru.md) |
@@ -37,6 +38,7 @@ Release notes also have English/Russian pairs and describe historical behavior. 
 
 | Version | English | Русский |
 | --- | --- | --- |
+| 0.2.8 | [EN](../RELEASE_0.2.8.md) | [RU](../RELEASE_0.2.8.ru.md) |
 | 0.2.7 | [EN](../RELEASE_0.2.7.md) | [RU](../RELEASE_0.2.7.ru.md) |
 | 0.2.6 | [EN](../RELEASE_0.2.6.md) | [RU](../RELEASE_0.2.6.ru.md) |
 | 0.2.5 | [EN](../RELEASE_0.2.5.md) | [RU](../RELEASE_0.2.5.ru.md) |

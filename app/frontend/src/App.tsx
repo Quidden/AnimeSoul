@@ -49,6 +49,7 @@ import { hasUserRatings, setUserRating, type RatingTarget } from "./lib/ratings"
 import { useCommunityRatings } from "./features/ratings/useCommunityRatings";
 import { IS_ANDROID_APP } from "./lib/platform";
 import { CastSessionBar } from "./features/player/CastSessionBar";
+import { useLanControl } from "./features/devices/useLanControl";
 
 const CollectionOverview = lazy(() => import("./components/CollectionOverview").then(module => ({
     default: module.CollectionOverview,
@@ -351,6 +352,7 @@ export default function Home() {
         setView,
         setWatchForeground,
     });
+    useLanControl(catalog, openAnime);
     const updateRating = (
         animeId: number,
         title: string,

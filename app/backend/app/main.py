@@ -22,6 +22,7 @@ from .api.community_ratings import router as community_ratings_router
 from .api.downloads import router as downloads_router
 from .api.episode_dates import gateway as episode_dates_gateway, router as episode_dates_router
 from .api.storage import router as storage_router
+from .api.lan import lan, router as lan_router
 from .api.watch_party import router as party_router
 from .api.kodik import close_kodik_services, router as kodik_router
 from .api.yummy import close_yummy_services, router as yummy_router
@@ -32,7 +33,13 @@ from .config import settings
 async def lifespan(_application: FastAPI):
     """Keep upstream pools alive for the process and close them predictably."""
 
+    try:
+        await lan.start()
+    except OSError:
+        # A busy LAN port must not prevent local playback and save access.
+        pass
     yield
+    await lan.stop()
     await asyncio.gather(
         close_yummy_services(),
         close_kodik_services(),
@@ -42,7 +49,7 @@ async def lifespan(_application: FastAPI):
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.2.7",
+    version="0.2.8",
     description="FastAPI backend for the AnimeSoul desktop and web client.",
     lifespan=lifespan,
 )
@@ -82,6 +89,7 @@ app.include_router(kodik_router)
 app.include_router(downloads_router)
 app.include_router(episode_dates_router)
 app.include_router(storage_router)
+app.include_router(lan_router)
 # The standalone Android product intentionally has no Watch Party surface.
 if os.getenv("ANIMESOUL_MOBILE", "").casefold() != "android":
     app.include_router(party_router)

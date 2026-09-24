@@ -4,7 +4,7 @@
 
 [Platforms](../docs/PLATFORMS.md) · [Permanent update signing](UPDATE_SIGNING.md) · [API](../docs/API_REFERENCE.md)
 
-Android packages AnimeSoul 0.2.7's React interface, FastAPI backend and Python runtime in one ARM64 app. Catalogue, profiles, progress, ratings, statistics, Drive, direct player and offline library use the desktop contracts. Watch Party is deliberately omitted from both UI and backend routes.
+Android packages AnimeSoul 0.2.8's React interface, FastAPI backend and Python runtime in one ARM64 app. Catalogue, profiles, progress, ratings, statistics, Drive, direct player and offline library use the desktop contracts. Watch Party is deliberately omitted from both UI and backend routes.
 
 ## Navigation and playback
 

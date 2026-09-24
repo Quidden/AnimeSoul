@@ -12,7 +12,7 @@ AnimeSoul is a local application for discovering anime, watching episodes and ma
 
 | | |
 | --- | --- |
-| Version | **0.2.7**; profile schema **3** |
+| Version | **0.2.8**; profile schema **3** |
 | Clients | Windows browser / PyWebView; Android WebView + embedded Python |
 | Interface | React 19, TypeScript 5.9, Vite 8, global CSS, hls.js |
 | Backend | FastAPI, Uvicorn, httpx; JSON persistence and SQLite caches/ratings |
@@ -27,6 +27,7 @@ AnimeSoul is a local application for discovering anime, watching episodes and ma
 - **Track releases:** follow new episodes across a franchise and selected dubs, with source-aware episode identity and release dates when available.
 - **Keep episodes offline:** queue downloads, select seasons/ranges, inspect storage and play downloaded media. Android publishes completed MP4 files to MediaStore.
 - **Back up and sync:** export/import profiles or synchronize with Google Drive using explicit merge and restore rules.
+- **Local devices:** explicit pairing, automatic save sync alongside Google Drive, downloaded MP4 transfer, and remote playback with permissions and priorities. [Setup and limitations](app/docs/LAN_DEVICES.md).
 - **Rate:** personal anime/season/episode scores plus anonymous aggregates on the connected AnimeSoul server.
 - **Watch together:** desktop/browser Watch Party rooms with host/shared control. Android intentionally omits Watch Party.
 - **Cast on Android:** experimental Google Cast for direct online HTTPS HLS/MP4 streams; the TV receives the stream URL from the phone.

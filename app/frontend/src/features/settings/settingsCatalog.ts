@@ -4,6 +4,7 @@ export type SettingsTab =
   | "appearance"
   | "credentials"
   | "offline"
+  | "devices"
   | "cloud"
   | "party"
   | "profiles"
@@ -23,6 +24,7 @@ type SettingsSearchEntry = SettingsSearchResult & {
 };
 
 export const SETTINGS_SEARCH_TERMS: Record<SettingsTab, string> = {
+  devices: "устройства сеть локальная lan wifi сейвы передача серии телефон пк пульт управление привязка",
   watching: "просмотр продолжение автозапуск предпросмотр история сохранять прогресс серия момент переход прокрутка",
   player: "плеер автоскип пропуск опенинг эндинг автосерия карусель миниатюры наведение панель таймкод расположение",
   appearance: "интерфейс оформление тема готовые собственная цвет палитра шрифт размер обложка постер карточка фото",
@@ -41,6 +43,7 @@ export const SETTINGS_TABS: Array<{
   label: string;
   description: string;
 }> = [
+  { id: "devices", icon: "⇄", label: "Устройства", description: "Локальный обмен, сейвы и управление плеером" },
   {
     id: "watching",
     icon: "▶",

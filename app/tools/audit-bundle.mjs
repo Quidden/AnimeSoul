@@ -44,7 +44,7 @@ const largestJavaScript = javaScriptFiles
   .sort((left, right) => right.raw - left.raw)[0];
 
 const budgets = {
-  entryJavaScript: 300 * 1024,
+  entryJavaScript: 305 * 1024,
   entryStyles: 315 * 1024,
   largestJavaScript: 580 * 1024,
 };

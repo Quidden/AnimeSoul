@@ -2,7 +2,7 @@
 
 # AnimeSoul — application and development guide
 
-Version **0.2.7**. The maintained application lives here: React 19 + TypeScript + Vite, Python/FastAPI, optional PyWebView, and an Android wrapper with embedded Python. See the [project overview](../README.md), [screenshots](docs/SCREENSHOTS.md), and [documentation index](docs/README.md).
+Version **0.2.8**. The maintained application lives here: React 19 + TypeScript + Vite, Python/FastAPI, optional PyWebView, and an Android wrapper with embedded Python. See the [project overview](../README.md), [screenshots](docs/SCREENSHOTS.md), and [documentation index](docs/README.md).
 
 ## Install and start
 
