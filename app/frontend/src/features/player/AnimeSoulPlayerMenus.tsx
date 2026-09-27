@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 export type PlayerMenuOption = {
     value: string;
     label: string;
@@ -42,6 +43,7 @@ export type PlayerMenu = {
 };
 
 type PlayerSettingsPanelProps = {
+    upscaleSettings?: ReactNode;
     activeBitrate: string;
     activeDubbingOption?: PlayerMenuOption;
     activeQuality: number;
@@ -57,6 +59,7 @@ type PlayerSettingsPanelProps = {
 };
 
 export function PlayerSettingsPanel({
+    upscaleSettings,
     activeBitrate,
     activeDubbingOption,
     activeQuality,
@@ -81,6 +84,7 @@ export function PlayerSettingsPanel({
                 <button type="button" aria-label="Закрыть настройки" onClick={onClose}>×</button>
             </header>
             <div className="animesoul-player-settings-content">
+                {upscaleSettings}
                 <label>
                     <span>Озвучка</span>
                     <select value={menu.dubbing} onChange={event => menu.onDubbingChange(event.target.value)}>

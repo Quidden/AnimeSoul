@@ -21,6 +21,7 @@ import {
 
 type Options = {
   onStorageReload?: () => void;
+  profileId: string;
 };
 
 /**
@@ -29,7 +30,7 @@ type Options = {
  * Keeping this lifecycle outside the settings modal makes the UI component a
  * coordinator instead of mixing OAuth, persistence and presentation logic.
  */
-export function useGoogleDriveSettings({ onStorageReload }: Options) {
+export function useGoogleDriveSettings({ onStorageReload, profileId }: Options) {
   const [gdriveStatus, setGDriveStatus] = useState<GDriveStatus | null>(null);
   const [folderMode, setFolderMode] = useState<GDriveFolderMode>(() =>
     read("animesoul:gdrive-folder-mode", "visible"),
@@ -56,6 +57,9 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
   const [credentialsTone, setCredentialsTone] = useState<"success" | "error">("success");
   const [credentialsChecks, setCredentialsChecks] = useState<CredentialCheck[]>([]);
   const [initialChoiceModal, setInitialChoiceModal] = useState(false);
+  const [initialChoiceError, setInitialChoiceError] = useState("");
+  const choiceDeferred = useRef(false);
+  const choiceSessionKey = (email: string) => `animesoul:gdrive-deferred:${profileId}:${email}`;
 
   const loadGDriveStatus = useCallback(async () => {
     const requestRevision = ++statusRequestRevision.current;
@@ -76,15 +80,15 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
         setShowCredsInput(true);
       }
 
-      if (status.connected) {
-        if (status.choice_pending) {
-          write("animesoul:gdrive-initial-choice-done", false);
-          setInitialChoiceModal(true);
-        } else if (!status.has_cloud_file) {
-          write("animesoul:gdrive-initial-choice-done", true);
-        } else if (!read("animesoul:gdrive-initial-choice-done", false)) {
-          setInitialChoiceModal(true);
-        }
+      const sessionKey = `animesoul:gdrive-deferred:${profileId}:${status.user_email || "unknown"}`;
+      if (!status.choice_pending) {
+        choiceDeferred.current = false;
+        try { sessionStorage.removeItem(sessionKey); } catch { /* storage may be disabled */ }
+      }
+      let deferredInSession = false;
+      try { deferredInSession = sessionStorage.getItem(sessionKey) === "1"; } catch { /* storage may be disabled */ }
+      if (status.connected && status.has_cloud_file && status.choice_pending && !choiceDeferred.current && !deferredInSession) {
+        setInitialChoiceModal(true);
       }
 
       // Status is polled while Settings is open. Never replace a draft the
@@ -98,7 +102,7 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
       if (requestRevision !== statusRequestRevision.current) return;
       setSyncMessage(error instanceof Error ? error.message : "Не удалось проверить Google Drive");
     }
-  }, []);
+  }, [profileId]);
 
   const connect = async () => {
     setSyncMessage("");
@@ -116,12 +120,27 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
     try {
       await disconnectGDrive();
       setGDriveStatus(null);
+      choiceDeferred.current = false;
       write("animesoul:gdrive-initial-choice-done", false);
       write("animesoul:gdrive-has-cloud-file", false);
       setSyncMessage("Google Диск отключен");
     } catch (error: unknown) {
       setSyncMessage(error instanceof Error ? error.message : "Ошибка отключения");
     }
+  };
+
+  const dismissInitialChoice = () => {
+    if (syncing) return;
+    choiceDeferred.current = true;
+    try { sessionStorage.setItem(choiceSessionKey(gdriveStatus?.user_email || "unknown"), "1"); } catch { /* storage may be disabled */ }
+    setInitialChoiceModal(false);
+  };
+
+  const requestInitialChoice = () => {
+    choiceDeferred.current = false;
+    try { sessionStorage.removeItem(choiceSessionKey(gdriveStatus?.user_email || "unknown")); } catch { /* storage may be disabled */ }
+    setInitialChoiceError("");
+    setInitialChoiceModal(true);
   };
 
   const updateClientIdInput = (value: string) => {
@@ -209,7 +228,7 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
     resolveInitialChoice = false,
   ) => {
     if (gdriveStatus?.choice_pending && !resolveInitialChoice) {
-      setInitialChoiceModal(true);
+      requestInitialChoice();
       setSyncMessage("Выберите, как объединить найденное облачное сохранение.");
       return;
     }
@@ -232,6 +251,7 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
 
     setSyncing(true);
     setSyncMessage("Синхронизация...");
+    setInitialChoiceError("");
     try {
       const result = await syncGDrive(
         mode,
@@ -240,6 +260,12 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
         resolveInitialChoice,
       );
       write("animesoul:gdrive-initial-choice-done", true);
+      if (resolveInitialChoice) {
+        write(`animesoul:gdrive-choice:${profileId}:${gdriveStatus?.user_email ?? "unknown"}`, {
+          mode,
+          completedAt: Date.now(),
+        });
+      }
       setGDriveStatus(current => current ? {
         ...current,
         choice_pending: false,
@@ -257,7 +283,9 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
       onStorageReload?.();
       setInitialChoiceModal(false);
     } catch (error: unknown) {
-      setSyncMessage(error instanceof Error ? error.message : "Ошибка синхронизации");
+      const message = error instanceof Error ? error.message : "Ошибка синхронизации";
+      setSyncMessage(message);
+      if (resolveInitialChoice) setInitialChoiceError(`Не удалось применить выбор: ${message}. Проверьте локальные данные и повторите попытку.`);
     } finally {
       setSyncing(false);
     }
@@ -327,6 +355,9 @@ export function useGoogleDriveSettings({ onStorageReload }: Options) {
     credentialsChecks,
     initialChoiceModal,
     setInitialChoiceModal,
+    initialChoiceError,
+    dismissInitialChoice,
+    requestInitialChoice,
     loadGDriveStatus,
     connect,
     disconnect,

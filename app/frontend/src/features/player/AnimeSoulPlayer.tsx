@@ -31,6 +31,8 @@ import {
   type PlayerMenu,
   type VideoFit,
 } from "./AnimeSoulPlayerMenus";
+import { useUpscale } from "./useUpscale";
+import { replacementPosition, UPSCALE_MODES, upscaleLabel, type UpscaleTarget } from "./upscale";
 import { PlayerTimelinePreview } from "./PlayerTimelinePreview";
 
 type SkipSegment = { time: number; length: number };
@@ -46,7 +48,8 @@ type AnimeSoulPlayerProps = {
   opening?: SkipSegment | null;
   ending?: SkipSegment | null;
   onLoadedMetadata?: () => void;
-  onTimeUpdate?: (time: number, duration: number) => void;
+  onVersionSwitch?: () => void;
+  onTimeUpdate?: (time: number, duration: number, skips?: { opening?: SkipSegment; ending?: SkipSegment }) => void;
   onBeforeTeardown?: (time: number, duration: number) => void;
   onPlay?: () => void;
   onPause?: () => void;
@@ -101,7 +104,7 @@ function streamRate(value: number) {
 }
 
 export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps>(function AnimeSoulPlayer({
-  request,
+  request: baseRequest,
   title,
   seasonLabel,
   episodeLabel,
@@ -110,6 +113,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   opening,
   ending,
   onLoadedMetadata,
+  onVersionSwitch,
   onTimeUpdate,
   onBeforeTeardown,
   onPlay,
@@ -118,6 +122,23 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   onStreamInfo,
   onFallback,
 }, forwardedRef) {
+  const [subtitleVersion, setSubtitleVersion] = useState<{ base: string; request: KodikStreamRequest; value: string } | null>(null);
+  const baseKey = kodikStreamRequestKey(baseRequest);
+  const activeSubtitleVersion = subtitleVersion?.base === baseKey ? subtitleVersion : null;
+  const request = activeSubtitleVersion?.request ?? baseRequest;
+  const [actualDubbing, setActualDubbing] = useState(request.dubbing);
+  const pendingDubbing = useRef(request.dubbing);
+  const versionSwitch = useRef(false);
+  const switchOriginalTime = useRef(0);
+  const switchOldDuration = useRef(NaN);
+  const versionBackup = useRef<{ stream: KodikStreamInfo; quality: number; time: number; playing: boolean } | null>(null);
+  const suppressVersionEnd = useRef(false);
+  const [versionNotice, setVersionNotice] = useState("");
+  useEffect(() => {
+    if (!versionNotice) return;
+    const timer = setTimeout(() => setVersionNotice(""), 8000);
+    return () => clearTimeout(timer);
+  }, [versionNotice]);
   const shell = useRef<HTMLDivElement>(null);
   const ambientCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const ambientRequestKey = useRef("");
@@ -160,6 +181,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   const teardownReported = useRef(false);
   const activeMediaRequestKey = useRef("");
   const endedMediaRequestKey = useRef("");
+  const [sourceRevision, setSourceRevision] = useState(0);
   const [stream, setStream] = useState<KodikStreamInfo | null>(null);
   const [hlsSubtitles, setHlsSubtitles] = useState<HlsSubtitleOption[]>([]);
   const [quality, setQuality] = useState(0);
@@ -262,6 +284,20 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       carrier.muted = slot === activeSlot ? nextMuted : true;
     });
   };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const change = (event: Event) => {
+      const value = (event as CustomEvent<number>).detail;
+      event.preventDefault();
+      setVolume(value); setMuted(value === 0);
+      applyAudioOutput(value === 0, value);
+    };
+    video.dataset.lanVolume = String(muted ? 0 : volume);
+    video.addEventListener("lan-volume", change);
+    return () => video.removeEventListener("lan-volume", change);
+  });
 
   const resetAudioCarriers = () => {
     cancelAudioFade();
@@ -566,16 +602,11 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     setTimelinePreview(value => ({ ...value, visible: false }));
     const requestToken = ++streamRequestToken.current;
     const nextEpisodeIdentity = kodikStreamEpisodeKey(request);
-    // A seamless switch keeps the old video decoder running and starts a
-    // second, hidden video solely for the new audio track. This is smooth on
-    // desktop, but Android WebView cannot reliably decode two HLS videos at
-    // once: it causes the active stream to stutter for the rest of playback.
-    // On Android, reload the single visible stream instead; continuity below
-    // restores the current position and playing state without overloading the
-    // device decoder.
-    const audioOnlySwitch = !IS_ANDROID_APP
-      && Boolean(stream && videoRef.current?.currentSrc)
-      && isSameEpisodeDubbingSwitch(previousRequest.current, request);
+    const dubbingChanged = isSameEpisodeDubbingSwitch(previousRequest.current, request);
+    const sameEpisode = episodeIdentity.current === nextEpisodeIdentity;
+    // No verified edit identity or independent audio tracks are supplied by this provider.
+    // Equal duration alone is not proof of compatibility.
+    const audioOnlySwitch = false;
     previousRequest.current = request;
     if (audioOnlySwitch) {
       activeMediaRequestKey.current = requestKey;
@@ -602,7 +633,16 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     resetAudioCarriers();
     if (episodeIdentity.current === nextEpisodeIdentity) {
       rememberContinuity();
+      versionSwitch.current = dubbingChanged;
+      if (dubbingChanged) {
+        switchOldDuration.current = videoRef.current?.duration ?? NaN;
+        onVersionSwitch?.();
+        switchOriginalTime.current = continuity.current.time;
+        setVersionNotice("Совместимость версий не подтверждена. Переключили видео с небольшим откатом (5 секунд).");
+      }
     } else {
+      versionSwitch.current = false;
+      suppressVersionEnd.current = false;
       const video = videoRef.current;
       continuity.current = { time: 0, playing: Boolean(video && !video.paused && !video.ended) };
       episodeIdentity.current = nextEpisodeIdentity;
@@ -613,16 +653,15 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     // A full source switch must not leave the old media/HLS eligible to emit
     // metadata, ended or playback events while the new resolver request is in
     // flight. Desktop audio-only dubbing switches intentionally skip this.
-    setStream(null);
-    resolvedStreamRequestKey.current = "";
-    hlsRef.current?.destroy();
-    hlsRef.current = null;
-    const visibleVideo = videoRef.current;
-    if (visibleVideo) {
-      visibleVideo.pause();
-      visibleVideo.removeAttribute("src");
-      visibleVideo.load();
+    const previousStream = sameEpisode ? stream : null;
+    if (!sameEpisode) {
+      setStream(null);
+      videoRef.current?.pause();
+      hlsRef.current?.destroy(); hlsRef.current = null;
+      videoRef.current?.removeAttribute("src"); videoRef.current?.load();
     }
+    const previousResolvedKey = resolvedStreamRequestKey.current;
+    // Keep the old media mounted until resolution succeeds, allowing recovery on failure.
     setLoading(true);
     setError("");
     void fetchKodikStream(request, controller.signal).then(info => {
@@ -631,7 +670,12 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       const nextQuality = info.sources.some(source => source.quality === storedQuality)
         ? storedQuality
         : info.sources[0].quality;
+      if (dubbingChanged) { rememberContinuity(); switchOriginalTime.current = continuity.current.time; }
+      pendingDubbing.current = request.dubbing;
+      versionBackup.current = dubbingChanged && previousStream
+        ? { stream: previousStream, quality, time: continuity.current.time, playing: continuity.current.playing } : null;
       setStream(info);
+      setSourceRevision(value => value + 1);
       resolvedStreamRequestKey.current = requestKey;
       setQuality(nextQuality);
       setActiveLevel({ quality: nextQuality, bitrate: 0 });
@@ -643,10 +687,27 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     }).catch(reason => {
       if (controller.signal.aborted || requestToken !== streamRequestToken.current) return;
       setLoading(false);
-      setError(reason instanceof Error ? reason.message : "Не удалось открыть прямой поток Kodik.");
+      if (previousStream && sameEpisode) {
+        setStream(previousStream);
+        resolvedStreamRequestKey.current = previousResolvedKey;
+        activeMediaRequestKey.current = requestKey;
+        setVersionNotice("Новая версия не загрузилась. Продолжаем предыдущую озвучку.");
+      } else setError(reason instanceof Error ? reason.message : "Не удалось открыть прямой поток Kodik.");
     });
     return () => controller.abort();
   }, [requestKey, streamReloadToken]);
+
+  const rollbackVersion = () => {
+    const backup = versionBackup.current;
+    if (!backup) return false;
+    versionBackup.current = null;
+    pendingDubbing.current = actualDubbing;
+    continuity.current = { time: backup.time, playing: backup.playing };
+    versionSwitch.current = false; suppressVersionEnd.current = false;
+    setQuality(backup.quality); setStream(backup.stream); setSubtitle("off");
+    setVersionNotice("Новая версия не загрузилась. Восстанавливаем предыдущую озвучку и позицию.");
+    return true;
+  };
 
   const selectedSource = useMemo(
     () => stream ? sourceForQuality(stream.sources, quality) : undefined,
@@ -669,6 +730,25 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     },
     onTimeUpdate, onPlay, onPause, onEnded,
   });
+  const upscale = useUpscale(videoRef, `${requestKey}:${selectedSource?.src ?? ""}`, cast.active || nativePictureInPicture, loading, requestKey);
+  useEffect(() => {
+    if (!upscale.target || !stream) return;
+    const best = [...stream.sources].sort((a, b) => b.quality - a.quality)[0];
+    if (best && quality !== best.quality) { rememberContinuity(); setQuality(best.quality); }
+  }, [upscale.target, stream, quality]);
+  const chooseSubtitle = (value: string) => {
+    if (value.startsWith("burned:")) {
+      const option = menu.subtitles.find(item => `burned:${item.value}` === value);
+      if (!option) return;
+      if (!window.confirm("Это другая версия видео со своей озвучкой. Текущая озвучка не сохранится. Переключить видео с откатом 5 секунд?")) return;
+      setSubtitle("off");
+      setSubtitleVersion({ base: baseKey, request: option.request, value });
+    } else {
+      if (activeSubtitleVersion && value === "off") setSubtitleVersion(null);
+      setSubtitle(value);
+    }
+  };
+
   const selectedBurnedSubtitle = subtitle.startsWith("burned:")
     ? menu.subtitles.find(option => `burned:${option.value}` === subtitle)
     : undefined;
@@ -786,6 +866,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
             }, mediaRecoveries * 250);
           } else {
             hls.stopLoad();
+            if (rollbackVersion()) return;
             setLoading(false);
             setError(localPlayback
               ? "Локальное видео повреждено или было удалено. Повторите загрузку серии."
@@ -812,7 +893,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [selectedSource?.src, selectedSource?.quality, localPlayback, cast.active]);
+  }, [selectedSource?.src, selectedSource?.quality, localPlayback, cast.active, sourceRevision]);
 
   useEffect(() => {
     const video = burnedSubtitleVideoRef.current;
@@ -1159,7 +1240,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     else if (key === "m") { const next = !muted; setMuted(next); applyAudioOutput(next, volume); }
     else if (key === "f") toggleFullscreen();
     else if (key === "c" && ((stream?.subtitles.length ?? 0) || hlsSubtitles.length || menu.subtitles.length)) {
-      setSubtitle(value => value === "off"
+      chooseSubtitle((activeSubtitleVersion?.value ?? subtitle) === "off"
         ? stream?.subtitles.length ? "api:0" : hlsSubtitles.length ? "hls:0" : `burned:${menu.subtitles[0].value}`
         : "off");
     } else return;
@@ -1188,8 +1269,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     updateTimelinePreview(event.currentTarget, event.clientX);
   };
 
-  const mergedOpening = stream?.skips?.opening ?? opening ?? undefined;
-  const mergedEnding = stream?.skips?.ending ?? ending ?? undefined;
+  const mergedOpening = stream?.skips?.opening ?? (activeSubtitleVersion ? undefined : opening ?? undefined);
+  const mergedEnding = stream?.skips?.ending ?? (activeSubtitleVersion ? undefined : ending ?? undefined);
   const activeSkip = mergedOpening && currentTime >= mergedOpening.time && currentTime < mergedOpening.time + mergedOpening.length
     ? { label: "Пропустить опенинг", target: mergedOpening.time + mergedOpening.length }
     : mergedEnding && currentTime >= mergedEnding.time && currentTime < mergedEnding.time + mergedEnding.length
@@ -1220,6 +1301,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
       quality={quality}
       seasonLabel={seasonLabel}
       videoFit={videoFit}
+      upscaleSettings={<>{upscale.settings}<p>Фактическая озвучка: {actualDubbing}</p></>}
     />
   );
 
@@ -1265,6 +1347,8 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           aria-hidden="true"
         />
       )}
+      {upscale.overlay}
+      {versionNotice && <div className="animesoul-version-notice" role="status">{versionNotice}</div>}
       <video
         className="animesoul-player-video"
         ref={attachVideoRef}
@@ -1281,19 +1365,38 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video) return;
+          const replacingVersion = versionSwitch.current;
+          if (versionSwitch.current) {
+            const restored = replacementPosition(switchOriginalTime.current, video.duration);
+            const durationDiffers = Number.isFinite(switchOldDuration.current) && Number.isFinite(video.duration)
+              && Math.abs(switchOldDuration.current - video.duration) > .5;
+            setVersionNotice(durationDiffers
+              ? "Версии отличаются. Переключили видео с небольшим откатом (5 секунд)."
+              : "Совместимость монтажа не подтверждена. Переключили видео с откатом 5 секунд.");
+            continuity.current.time = restored.time;
+            suppressVersionEnd.current = restored.outside;
+            if (restored.outside) {
+              continuity.current.playing = false;
+              video.pause();
+              setVersionNotice("Прежняя позиция за пределами новой версии. Видео оставлено на паузе около конца.");
+            }
+            versionSwitch.current = false;
+          }
           if (continuity.current.time > 0) {
-            video.currentTime = Math.min(continuity.current.time, Math.max(0, video.duration - .25));
+            video.currentTime = Math.min(continuity.current.time, Number.isFinite(video.duration) ? Math.max(0, video.duration - .25) : continuity.current.time);
             continuity.current.time = 0;
           }
           applyPlaybackRate(rate);
           setDuration(Number.isFinite(video.duration) ? video.duration : 0);
-          onLoadedMetadata?.();
+          if (!suppressVersionEnd.current && !replacingVersion) onLoadedMetadata?.();
         }}
         onCanPlay={() => {
           if (castProgress.current.active) return;
           if (activeMediaRequestKey.current !== requestKey) return;
           if (localWaitingTimer.current) clearTimeout(localWaitingTimer.current);
           localWaitingTimer.current = null;
+          versionBackup.current = null;
+          setActualDubbing(pendingDubbing.current);
           setLoading(false);
           setError("");
           applyAudioOutput(muted, volume);
@@ -1329,7 +1432,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           setDuration(resolvedDuration);
           syncBurnedSubtitle();
           syncActiveAudio();
-          onTimeUpdate?.(video.currentTime, resolvedDuration);
+          if (!suppressVersionEnd.current) onTimeUpdate?.(video.currentTime, resolvedDuration, { opening: mergedOpening, ending: mergedEnding });
         }}
         onSeeking={() => { syncBurnedSubtitle(true); syncActiveAudio(true); }}
         onDurationChange={() => {
@@ -1354,7 +1457,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         onPause={() => { burnedSubtitleVideoRef.current?.pause(); audioCarrierRefs.current.forEach(carrier => carrier?.pause()); setPlaying(false); setControlsVisible(true); if (!castProgress.current.active) onPause?.(); }}
         onEnded={() => {
           if (castProgress.current.active) return;
-          if (activeMediaRequestKey.current !== requestKey || endedMediaRequestKey.current === requestKey) return;
+          if (suppressVersionEnd.current || activeMediaRequestKey.current !== requestKey || endedMediaRequestKey.current === requestKey) return;
           endedMediaRequestKey.current = requestKey;
           const resolvedDuration = Number.isFinite(videoRef.current?.duration) ? Number(videoRef.current?.duration) : duration;
           audioCarrierRefs.current.forEach(carrier => carrier?.pause());
@@ -1364,6 +1467,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         onError={() => {
           if (castProgress.current.active) return;
           if (hlsRef.current) return;
+          if (rollbackVersion()) return;
           setLoading(false);
           setError(localPlayback
             ? "Локальный файл повреждён, удалён или недоступен приложению."
@@ -1491,6 +1595,9 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           <PlayerTimelinePreview
             localPlayback={localPlayback}
             source={timelinePreviewSource}
+            versionKey={requestKey}
+            thumbnails={stream?.thumbnails}
+            suspended={loading || upscale.target === 2160}
             time={timelinePreview.time}
             timeLabel={clock(timelinePreview.time)}
             visible={timelinePreview.visible && duration > 0 && !cast.active}
@@ -1543,7 +1650,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           {(stream?.subtitles.length || hlsSubtitles.length || menu.subtitles.length) ? (
             <label className={subtitle !== "off" ? "subtitle-active" : ""} title={burnedSubtitleError || "Субтитры"}>
               <span>CC</span>
-              <select value={subtitle} aria-label="Язык субтитров" onChange={event => setSubtitle(event.target.value)}>
+              <select value={activeSubtitleVersion?.value ?? subtitle} aria-label="Язык субтитров" onChange={event => chooseSubtitle(event.target.value)}>
                 <option value="off">Субтитры выкл.</option>
                 {stream?.subtitles.map((track, index) => <option key={`${track.language}:${track.src}`} value={`api:${index}`}>{track.label}</option>)}
                 {hlsSubtitles.map(track => <option key={`hls:${track.index}:${track.language}`} value={`hls:${track.index}`}>{track.label}</option>)}
@@ -1562,13 +1669,21 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           </label>
           {stream && (
             <label title={`Выбрано ${quality}p${activeBitrate ? ` · фактически ${activeQuality}p, ${activeBitrate}` : ""}`}>
-              <select value={quality} aria-label="Качество видео" onChange={event => {
+              <select className={upscale.target ? "animesoul-quality-select upscale-active" : "animesoul-quality-select"} value={upscale.target ? `upscale:${upscale.target}` : quality} aria-label="Качество видео" onChange={event => {
+                if (event.target.value.startsWith("upscale:")) {
+                  const target = Number(event.target.value.split(":")[1]) as UpscaleTarget;
+                  upscale.select(target);
+                  return;
+                }
+                upscale.select(0);
                 rememberContinuity();
                 const next = Number(event.target.value);
                 localStorage.setItem("animesoul:stream-quality", String(next));
                 setQuality(next);
               }}>
-                {Array.from(new Set(stream.sources.map(source => source.quality))).map(value => (
+                <option value={0}>Авто / Исходное</option>
+                {UPSCALE_MODES.map(mode => <option className="animesoul-upscale-option" key={mode} value={`upscale:${mode}`}>{upscaleLabel(mode)} · апскейл</option>)}
+                {Array.from(new Set(stream.sources.map(source => source.quality))).sort((a, b) => b - a).map(value => (
                   <option key={value} value={value}>
                     {value}p{value === quality && activeBitrate ? ` · ${activeBitrate}` : ""}
                   </option>

@@ -11,11 +11,23 @@ import { useWatchParty, WATCH_PARTY_SESSION_KEY } from "../hooks/useWatchParty";
 import { isKodikEmbed, kodikSerialIdentity, kodikSerialSource, playerDubbing, playerEpisode, playerTranslationId } from "../lib/kodik";
 import { listenAppEvent } from "../lib/events";
 import { commandCastVideo } from "../lib/cast";
+import { AmbientBackdrop } from "./AmbientBackdrop";
+import { AppFooter } from "./AppFooter";
+import { animeMapRoute, animeRoute, navigateTo } from "../features/navigation/routes";
+import { trackUiAction } from "../lib/uiAnalytics";
 import { useLanPlayer } from "../features/devices/useLanControl";
 import type { WatchProps } from "../features/player/types";
 import { SeasonList } from "../features/player/SeasonList";
 import { WatchInfo } from "../features/player/WatchInfo";
-import { ReleaseSchedule, type ReleaseScheduleRow } from "../features/player/ReleaseSchedule";
+import { type ReleaseScheduleRow } from "../features/player/ReleaseSchedule";
+import "../styles/anime-detail.css";
+import { animeCatalogFilters } from "../lib/catalogFilters";
+import { CatalogLink } from "../features/player/CatalogLink";
+import { ReleaseHighlight } from "../features/player/ReleaseHighlight";
+import { AnimeFacts } from "../features/player/AnimeFacts";
+import { descriptionText, useAnimeMetadata } from "../features/player/useAnimeMetadata";
+import { AnimeTrailer } from "../features/player/AnimeTrailer";
+import { AnimeMapPage } from "../features/player/AnimeMapPage";
 import { WatchPartyPanel } from "../features/player/WatchPartyPanel";
 import { PlayerToolbar } from "../features/player/PlayerToolbar";
 import { AnimeSoulPlayer } from "../features/player/AnimeSoulPlayer";
@@ -23,6 +35,7 @@ import { useDownloadManager } from "../features/player/useDownloadManager";
 import { useOfflinePlayback } from "../features/player/useOfflinePlayback";
 import { RatingBoard } from "./RatingBoard";
 import { ScorePicker } from "./ScorePicker";
+import { shikimoriAnimeUrl } from "../lib/anime";
 import type { KodikStreamRequest, KodikStreamSummary } from "../lib/kodikStream";
 import {
   dubbingDurationDeficit,
@@ -77,7 +90,7 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-export function Watch({ header, anime, resumeRequested, newEpisodeRequested, favorite, onFavorite, onBack, onGenre, saved, ratings, communityRating, onRatingChange, onProgress, onPlayerPrefsChange, onFolders, tracker, onTrack, onUntrack, folderPicker, folders, toggleFolder, createFolder, closePicker }: WatchProps) {
+export function Watch({ header, anime, resumeRequested, newEpisodeRequested, favorite, onFavorite, onGenre, saved, ratings, communityRating, onRatingChange, onProgress, onPlayerPrefsChange, onFolders, tracker, onTrack, onUntrack, folderPicker, folders, toggleFolder, createFolder, closePicker }: WatchProps) {
   const storedPlayerPrefs = read<Partial<PlayerPrefs>>(K.playerPrefs, {});
   const legacyPreferredDubbing = storedPlayerPrefs.dubbingPreferenceVersion === 2
     ? ""
@@ -93,8 +106,12 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     ...(IS_ANDROID_APP ? { watchPartyEnabled: false } : {}),
   };
   const storedResumePoint = resumeRequested ? latestResumePoint(saved) : null;
-  const resumeSeason = storedResumePoint?.season ?? saved?.season ?? 1;
-  const resumeEpisode = storedResumePoint?.episode ?? saved?.episode ?? "1";
+  const routeSelection = typeof window === "undefined" || window.location.pathname !== `/anime/${anime.anime_id}`
+    ? new URLSearchParams()
+    : new URLSearchParams(window.location.search);
+  const routeSeason = Number(routeSelection.get("season"));
+  const resumeSeason = Number.isInteger(routeSeason) && routeSeason > 0 ? routeSeason : storedResumePoint?.season ?? saved?.season ?? 1;
+  const resumeEpisode = routeSelection.get("episode") || storedResumePoint?.episode || saved?.episode || "1";
   const topLevelResumeKey = `${saved?.season ?? 1}:${saved?.episode ?? "1"}`;
   const resumeUsesTopLevelOrigin = !storedResumePoint || storedResumePoint.key === topLevelResumeKey;
   const resumeOriginAnimeId = storedResumePoint?.state.originAnimeId
@@ -102,7 +119,43 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const resumeOriginEpisode = storedResumePoint?.state.originEpisode
     ?? (resumeUsesTopLevelOrigin ? saved?.originEpisode : undefined);
   const resumeDubbing = storedResumePoint?.state.dub ?? saved?.dub ?? "";
+  const [mapMode, setMapMode] = useState(() => window.location.pathname === animeMapRoute(anime.anime_id));
+  const [routeRevision, setRouteRevision] = useState(0);
+  useEffect(() => setMapMode(window.location.pathname === animeMapRoute(anime.anime_id)), [anime.anime_id]);
+  useEffect(() => {
+    const syncMapMode = () => setMapMode(window.location.pathname === animeMapRoute(anime.anime_id));
+    window.addEventListener("popstate", syncMapMode);
+    window.addEventListener("animesoul:navigation", syncMapMode);
+    return () => {
+      window.removeEventListener("popstate", syncMapMode);
+      window.removeEventListener("animesoul:navigation", syncMapMode);
+    };
+  }, [anime.anime_id]);
   const [dub, setDub] = useState(saved?.dub ?? ""), [episode, setEpisode] = useState(resumeEpisode), [player, setPlayer] = useState(""), [autoNext, setAutoNextState] = useState(initialPrefs.autoNext), [autoSkip, setAutoSkipState] = useState(initialPrefs.autoSkipOpening), [autoSkipEnding, setAutoSkipEndingState] = useState(initialPrefs.autoSkipEnding), [autoPlayResume, setAutoPlayResumeState] = useState(initialPrefs.autoPlayResume), [autoScrollPlayer, setAutoScrollPlayerState] = useState(initialPrefs.autoScrollPlayer), [episodeCarousel, setEpisodeCarousel] = useState(initialPrefs.playerEpisodeCarousel), [status, setStatus] = useState("Загружаем серии…"), [position, setPosition] = useState<ToolbarPosition>(read(K.toolbar, "bottom")), [autoPlay, setAutoPlay] = useState(false), [seasons, setSeasons] = useState<SeasonGroup[]>([{ number: 1, entries: [anime] }]), [selectedSeason, setSelectedSeason] = useState(resumeSeason), [seasonVideos, setSeasonVideos] = useState<Record<number, Video[]>>({}), [schedule, setSchedule] = useState<Record<number, ScheduleEntry>>({}), [showUpcoming, setShowUpcoming] = useState(false), [carouselMotion, setCarouselMotion] = useState<"" | "previous" | "next">("");
+  useEffect(() => {
+    const restoreSelection = () => {
+      if (window.location.pathname !== `/anime/${anime.anime_id}`) return;
+      const params = new URLSearchParams(window.location.search);
+      const nextSeason = Number(params.get("season"));
+      if (Number.isInteger(nextSeason) && nextSeason > 0) setSelectedSeason(nextSeason);
+      if (params.get("episode")) setEpisode(params.get("episode")!);
+      setRouteRevision(value => value + 1);
+    };
+    window.addEventListener("popstate", restoreSelection);
+    window.addEventListener("animesoul:navigation", restoreSelection);
+    return () => {
+      window.removeEventListener("popstate", restoreSelection);
+      window.removeEventListener("animesoul:navigation", restoreSelection);
+    };
+  }, [anime.anime_id]);
+  useEffect(() => {
+    if (window.location.pathname !== `/anime/${anime.anime_id}`) return;
+    const params = new URLSearchParams(window.location.search);
+    const play = params.get("play") === "1";
+    const origin = Number(params.get("origin"));
+    if (origin) return;
+    window.history.replaceState({}, "", animeRoute(anime.anime_id, selectedSeason, episode, play, origin || undefined));
+  }, [anime.anime_id, selectedSeason, episode]);
   const [episodeHoverPreview, setEpisodeHoverPreview] = useState(initialPrefs.episodeHoverPreview);
   const [seasonLoadNotice, setSeasonLoadNotice] = useState("");
   const [sourceLoadIssues, setSourceLoadIssues] = useState<VideoSourceIssue[]>([]);
@@ -117,6 +170,12 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const [partyRoomCode, setPartyRoomCode] = useState(""), [partyTime, setPartyTime] = useState(0), [partyDuration, setPartyDuration] = useState(0), [partyPlaying, setPartyPlaying] = useState(false);
   const [suggestedHostDub, setSuggestedHostDub] = useState<string | null>(null), [partyDubNotice, setPartyDubNotice] = useState("");
   const [previewAnimeById, setPreviewAnimeById] = useState<Record<number, Anime>>({});
+  const detailAnime = { ...anime, ...previewAnimeById[anime.anime_id] };
+  const metadata = useAnimeMetadata(detailAnime);
+  const catalogFilters = animeCatalogFilters(detailAnime, metadata);
+  const infoAnime = metadata ? { ...detailAnime, rating: { ...detailAnime.rating, ...(Number(metadata.score) > 0 ? { shikimori_rating: Number(metadata.score) } : {}) } } : detailAnime;
+  const description = descriptionText(metadata?.description || detailAnime.description || "");
+  const genres = metadata?.genres?.length ? metadata.genres.map(genre => ({ alias: String(genre.id), title: genre.russian || genre.name })) : detailAnime.genres;
   const {
     downloadJobs,
     initialLookupStatus,
@@ -133,6 +192,11 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const collapsedSeasonsKey = `animesoul:collapsed-seasons:${anime.anime_id}`;
   const [collapsedSeasons, setCollapsedSeasons] = useState<number[]>(read(collapsedSeasonsKey, []));
   const iframe = useRef<HTMLIFrameElement>(null), localVideo = useRef<HTMLVideoElement>(null), playerFrame = useRef<HTMLDivElement>(null), playerShell = useRef<HTMLDivElement>(null), newEpisodeOpened = useRef(false), videoLoadId = useRef(0), lastPartyTime = useRef(0), lastPartyMotionAt = useRef(0), partyPauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null), lastHostPlaying = useRef<boolean | null>(null), pendingPartyPlayback = useRef<PartyPlayback | null>(null), dismissedHostDub = useRef<string | null>(null), latestHostPlayback = useRef<PartyPlayback | null>(null);
+  useEffect(() => {
+    if (window.location.pathname !== `/anime/${anime.anime_id}` || new URLSearchParams(window.location.search).get("play") !== "1") return;
+    const frame = window.requestAnimationFrame(() => window.requestAnimationFrame(() => playerShell.current?.scrollIntoView({behavior: "smooth", block: "start"})));
+    return () => window.cancelAnimationFrame(frame);
+  }, [anime.anime_id]);
   const playerManagedEpisodeSwitch = useRef(false);
   const renderedIframeIdentity = useRef("");
   const selectionReportedByPlayer = useRef(false);
@@ -393,11 +457,16 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       .catch(() => {});
     return () => { cancelled = true; };
   }, [previewAnimeIds.join(","), offlineLookupReady, offlineAnime?.animeId, localPlaybackReady]);
+  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
   useEffect(() => {
     if (!offlineLookupReady || (offlineAnime && !localPlaybackReady)) return;
     fetch("/api/yummy?mode=schedule")
       .then(r => r.json())
-      .then(p => setSchedule(Object.fromEntries(((p.schedule ?? []) as ScheduleEntry[]).map(item => [item.anime_id, item]))))
+      .then(p => {
+        const entries = (p.schedule ?? []) as ScheduleEntry[];
+        setScheduleEntries(entries);
+        setSchedule(Object.fromEntries(entries.map(item => [item.anime_id, item])));
+      })
       .catch(() => { });
   }, [anime.anime_id, offlineLookupReady, offlineAnime?.animeId, localPlaybackReady]);
   const fetchVideos = async (refresh = false) => {
@@ -559,6 +628,24 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     ? seasons.filter(group => (seasonVideos[group.number] ?? []).some(video => video.offline))
     : seasons;
   const videos = seasonVideos[selectedSeason] ?? [];
+  useEffect(() => {
+    if (window.location.pathname !== `/anime/${anime.anime_id}`) return;
+    const params = new URLSearchParams(window.location.search);
+    const origin = Number(params.get("origin"));
+    const targetEpisode = params.get("episode");
+    if (!origin || !targetEpisode) return;
+    const matchingSeason = Object.entries(seasonVideos).find(([, list]) =>
+      list.some(video => video.originAnimeId === origin && String(video.originNumber ?? video.number) === targetEpisode));
+    const matchingVideo = matchingSeason?.[1].find(video =>
+      video.originAnimeId === origin && String(video.originNumber ?? video.number) === targetEpisode);
+    if (matchingSeason && matchingVideo) {
+      const season = Number(matchingSeason[0]);
+      setSelectedSeason(season);
+      setEpisode(matchingVideo.number);
+      window.history.replaceState({}, "", animeRoute(anime.anime_id, season, matchingVideo.number, params.get("play") === "1"));
+      if (params.get("play") === "1") requestAnimationFrame(() => playerShell.current?.scrollIntoView({behavior: "smooth", block: "start"}));
+    }
+  }, [anime.anime_id, seasonVideos, routeRevision]);
   const voiceVideos = videos.filter(video => !isSubtitleVideo(video));
   const selectedGroup = displaySeasons.find(group => group.number === selectedSeason);
   const titlePreferenceKey = String(anime.anime_id);
@@ -614,7 +701,8 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const currentEpisodeDubbings = new Set(
     voiceVideos.filter(video => video.number === episode).map(video => video.data.dubbing),
   );
-  const dubbingOptions = dubs.map(value => {
+  const availableEpisodeDubbings = dubs.filter(value => currentEpisodeDubbings.has(value));
+  const dubbingOptions = availableEpisodeDubbings.map(value => {
     const durationDeficit = dubbingDurationDeficit(voiceVideos, value, episode);
     const warning = durationDeficit
       ? `По данным источника эта версия короче самой полной на ${formatTime(durationDeficit)}. Возможна другая редакция или вырезанные фрагменты.`
@@ -622,7 +710,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     return {
       value,
       label: `${manualDubbing === value ? "● " : ""}${globalDubbing === value ? "♥ " : ""}${favouriteDubbings.includes(value) ? "★ " : ""}${warning ? "⚠ " : ""}${value}${currentEpisodeDubbings.has(value) ? "" : " · нет этой серии"}${durationDeficit ? ` · короче на ${formatTime(durationDeficit)}` : ""}`,
-      disabled: !currentEpisodeDubbings.has(value),
+      disabled: false,
       warning,
     };
   });
@@ -1035,8 +1123,8 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
     setAutoPlay(true);
   }, [newEpisodeRequested, tracker?.newEpisodes, resolvedNewEpisodeKeys.join("|"), selectedSeason, seasonVideos, kodikAccessReady]);
   const scheduleRows: ReleaseScheduleRow[] = displaySeasons
-    .flatMap(group => group.entries.map(entry => ({ group, entry, item: schedule[entry.anime_id] })))
-    .filter((row): row is ReleaseScheduleRow => Boolean(row.item?.episodes?.next_date))
+    .flatMap(group => group.entries.flatMap(entry => scheduleEntries.filter(item => item.anime_id === entry.anime_id).map(item => ({ group, entry, item }))))
+    .filter(row => Boolean(row.item.episodes?.next_date || row.item.episodes?.prev_date))
     .sort((a, b) => (a.item.episodes?.next_date ?? 0) - (b.item.episodes?.next_date ?? 0));
   const carouselItems = displaySeasons.flatMap(group => { const list = seasonVideos[group.number] ?? [], numbers = Array.from(new Set(list.map(video => video.number))).sort((a, b) => +a - +b); return numbers.map(number => { const candidates = list.filter(video => video.number === number), video = candidates.find(item => item.data.dubbing === dub) ?? candidates[0], entry = group.entries.find(item => item.anime_id === video?.originAnimeId) ?? group.entries[0]; return { season: group.number, number, group, video, entry } ;}) ;}), carouselIndex = carouselItems.findIndex(item => item.season === selectedSeason && item.number === episode), previousCarouselItem = showUpcoming ? (carouselIndex >= 0 ? carouselItems[carouselIndex] : undefined) : (carouselIndex > 0 ? carouselItems[carouselIndex - 1] : undefined), nextCarouselItem = !showUpcoming && carouselIndex >= 0 ? carouselItems[carouselIndex + 1] : undefined, upcomingRow = !nextCarouselItem ? scheduleRows.find(row => (row.item?.episodes?.next_date ?? 0) * 1000 > Date.now() - 86400000) : undefined, upcomingEpisode = upcomingRow ? Math.max(1, (upcomingRow.item?.episodes?.aired ?? (Number(episode) || 0)) + 1) : 0, upcomingTotal = upcomingRow?.item?.episodes?.count ?? 0, upcomingSeason = upcomingRow?.group.number ?? selectedSeason;
   const activePlaybackContext = () => {
@@ -1222,17 +1310,29 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, []);
-  const chooseSeason = (nextSeason: number) => { flushMountedLocalPlayback(); cancelPendingPlayerEpisodeSwitch(); playerManagedEpisodeSwitch.current = false; setShowUpcoming(false); setSelectedSeason(nextSeason); setPlayer("") ;};
-  const chooseEpisode = (nextEpisode: string, nextSeason = selectedSeason, scrollToPlayer = true) => { flushMountedLocalPlayback(); cancelPendingPlayerEpisodeSwitch(); playerManagedEpisodeSwitch.current = false; setShowUpcoming(false); setSelectedSeason(nextSeason); setEpisode(nextEpisode); setPlayer(""); if (scrollToPlayer && autoScrollPlayer) requestAnimationFrame(() => requestAnimationFrame(() => playerShell.current?.scrollIntoView({ behavior: "smooth", block: "start" }))) ;};
+  const chooseSeason = (nextSeason: number) => { trackUiAction("season_select", {animeId: anime.anime_id, season: nextSeason}); flushMountedLocalPlayback(); cancelPendingPlayerEpisodeSwitch(); playerManagedEpisodeSwitch.current = false; setShowUpcoming(false); setSelectedSeason(nextSeason); setPlayer(""); navigateTo(animeRoute(anime.anime_id, nextSeason, episode)); };
+  const chooseEpisode = (nextEpisode: string, nextSeason = selectedSeason, scrollToPlayer = true) => { trackUiAction("episode_select", {animeId: anime.anime_id, season: nextSeason, episode: nextEpisode}); flushMountedLocalPlayback(); cancelPendingPlayerEpisodeSwitch(); playerManagedEpisodeSwitch.current = false; setShowUpcoming(false); setSelectedSeason(nextSeason); setEpisode(nextEpisode); setPlayer(""); navigateTo(animeRoute(anime.anime_id, nextSeason, nextEpisode, scrollToPlayer)); if (scrollToPlayer && autoScrollPlayer) requestAnimationFrame(() => requestAnimationFrame(() => playerShell.current?.scrollIntoView({ behavior: "smooth", block: "start" }))) ;};
   const activateCarouselItem = (item: (typeof carouselItems)[number], direction: "previous" | "next", play = true, scrollToPlayer = true) => { setCarouselMotion(""); requestAnimationFrame(() => setCarouselMotion(direction)); setTimeout(() => setCarouselMotion(""), 520); setAutoPlay(play); chooseEpisode(item.number, item.season, scrollToPlayer) ;};
-  useLanPlayer({
+  const [lanVolume, setLanVolume] = useState(1);
+  useLanPlayer(() => ({
     animeId: anime.anime_id, title: anime.title, season: selectedSeason, episode, dubbing: dub,
     position: partyTime, duration: partyDuration, playing: partyPlaying,
+    volume: localVideo.current ? Number(localVideo.current.dataset.lanVolume ?? (localVideo.current.muted ? 0 : localVideo.current.volume)) : lanVolume,
+    preview: episodePreviewImages(carouselItems[carouselIndex]?.entry ?? anime, current?.originNumber ?? episode)[0] || anime.poster?.big,
     episodes: Object.entries(seasonVideos).flatMap(([season, videos]) => videos.map(v => ({
       season: Number(season), episode: v.number, dubbing: v.data.dubbing,
     }))).slice(0, 1000),
-  }, async remote => {
-    if (remote.action === "episode") {
+  }), async remote => {
+    if (remote.action === "volume") {
+      const value = Math.max(0, Math.min(1, remote.volume ?? 1));
+      setLanVolume(value);
+      if (localVideo.current) {
+        if (localVideo.current.dispatchEvent(new CustomEvent("lan-volume", { detail: value, cancelable: true }))) {
+          localVideo.current.volume = value;
+          localVideo.current.muted = value === 0;
+        }
+      } else command("volume", { volume: value * 100 });
+    } else if (remote.action === "episode") {
       const target = (seasonVideos[remote.season ?? 1] ?? []).find(v => v.number === remote.episode
         && (!remote.dubbing || v.data.dubbing === remote.dubbing));
       if (!target) throw Error("Выбранная серия или озвучка недоступна на устройстве.");
@@ -1457,7 +1557,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
             confirmPlayerEpisodeSwitch();
             return;
           }
-          if (initialPrefs.watchPartyEnabled) {
+
             const moved = time > lastPartyTime.current + .04;
             lastPartyTime.current = time;
             setPartyTime(time);
@@ -1470,7 +1570,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
                 if (Date.now() - lastPartyMotionAt.current >= 2_100) setPartyPlaying(false);
               }, 2_200);
             }
-          }
+
           const restoring = restoreSavedPosition(time);
           if (!restoring) save(time, duration);
           if (autoSkip && playback.openingEnd && time >= playback.video!.skips!.opening!.time && time < playback.openingEnd) command("seek", { seconds: playback.openingEnd });
@@ -1497,15 +1597,15 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       }
       if (eventKey === "play" || eventKey.endsWith("_play") || eventKey.includes("video_play")) {
         restoreSavedPosition();
-        if (initialPrefs.watchPartyEnabled) {
+
           lastPartyMotionAt.current = Date.now();
           setPartyPlaying(true);
-        }
-      } else if (initialPrefs.watchPartyEnabled && eventKey.includes("pause")) {
+
+      } else if (eventKey.includes("pause")) {
         markPartyPaused();
       }
       if (key === "kodik_player_video_ended" || key === "ended") {
-        if (initialPrefs.watchPartyEnabled) markPartyPaused();
+        markPartyPaused();
         const playback = activePlaybackContext();
         save(Number(playback.video?.duration ?? 0), Number(playback.video?.duration ?? 0), true);
         // Keep the same serial iframe document and switch through its API.
@@ -1535,25 +1635,28 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       pendingPartyPlayback.current = null;
     }, 700);
   };
-  const localTimeUpdated = (reportedTime?: number, reportedDuration?: number) => {
+  const localTimeUpdated = (reportedTime?: number, reportedDuration?: number, activeSkips?: { opening?: { time: number; length: number }; ending?: { time: number; length: number } }) => {
     const video = localVideo.current;
     if (!video || !localPlaybackProgressTarget || (!current?.offline && !useAnimeSoulPlayer)) return;
     const time = Number.isFinite(reportedTime) ? Number(reportedTime) : video.currentTime;
     const duration = Number.isFinite(reportedDuration)
       ? Number(reportedDuration)
       : Number.isFinite(video.duration) ? video.duration : (current?.duration ?? 0);
-    if (initialPrefs.watchPartyEnabled) {
+
       setPartyTime(time);
       setPartyDuration(duration);
       setPartyPlaying(!video.paused);
-    }
+
     const restoring = restoreSavedPosition(time);
     if (!restoring) saveForTarget(localPlaybackProgressTarget, time, duration);
-    if (autoSkip && playbackSkips.opening && time >= playbackSkips.opening.time && time < openingEnd) command("seek", { seconds: openingEnd });
-    if (autoSkipEnding && endingStart > 0 && time >= endingStart && time < endingEnd) {
-      saveForTarget(localPlaybackProgressTarget, endingStart, duration, true);
+    const versionSkips = activeSkips ?? playbackSkips;
+    const versionOpening = versionSkips.opening;
+    const versionEnding = versionSkips.ending;
+    if (autoSkip && versionOpening && time >= versionOpening.time && time < versionOpening.time + versionOpening.length) command("seek", { seconds: versionOpening.time + versionOpening.length });
+    if (autoSkipEnding && versionEnding && time >= versionEnding.time && time < versionEnding.time + versionEnding.length) {
+      saveForTarget(localPlaybackProgressTarget, versionEnding.time, duration, true);
       if (autoNext) advanceAfterPlayback();
-      else command("seek", { seconds: endingEnd });
+      else command("seek", { seconds: versionEnding.time + versionEnding.length });
     }
   };
   const localEnded = (reportedDuration?: number) => {
@@ -1567,6 +1670,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
   const setToolbar = (p: ToolbarPosition) => { setPosition(p); write(K.toolbar, p) ;};
   const chooseDubbing = (value: string) => {
     if (!dubbingHasEpisode(voiceVideos, value, episode)) return;
+    trackUiAction("dubbing_select", {animeId: anime.anime_id, season: selectedSeason, episode, dubbing: value});
     const currentProviderDefault = voiceVideos
       .filter(video => video.number === episode)
       .find(video => isKodikEmbed(video.iframe_url, video.data.player))?.data.dubbing ?? "";
@@ -1646,18 +1750,54 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       isKodikSource={/kodik/i.test(current?.data.player ?? player)}
     />
   );
+  if (mapMode) return <main className="app ambient-page"><AmbientBackdrop anime={anime} enabled={initialPrefs.animeAmbient !== false} />{header}<AnimeMapPage anime={anime} seasons={seasons} /><AppFooter activeView="catalog" /></main>;
   return <main className="app">{header}
-    <section className="watch-shell"><button className="back" onClick={onBack}>← Каталог</button>
-      <div className="watch-heading"><div><span className="eyebrow">{showUpcoming && upcomingRow ? `${upcomingRow.group.label?.toUpperCase() ?? `СЕЗОН ${upcomingSeason}`} · СЕРИЯ ${upcomingEpisode}` : `${selectedGroup?.label?.toUpperCase() ?? `СЕЗОН ${selectedSeason}`} · ${current?.contentKind ?? (selectedGroup?.kind === "movie" ? "ФИЛЬМ" : "СЕРИЯ")} ${episode}`}</span><h1>{base}</h1></div></div>
-      <section className="watch-rating-panel watch-rating-desktop" aria-label="Оценки аниме">
-        <div><span className="eyebrow">ОЦЕНКИ</span><RatingBoard anime={anime} ratings={ratings} communityRating={communityRating} /></div>
-        <ScorePicker
-          value={ratings?.anime}
-          label="Ваша оценка аниме"
-          onChange={value => onRatingChange({ scope: "anime" }, value)}
-        />
-      </section>
-      <div className="season-tabs">{displaySeasons.map(s => <button className={`${s.number === selectedSeason ? "active " : ""}${s.kind === "special" ? "extra" : ""}`.trim()} key={s.number} onClick={() => chooseSeason(s.number)}>{s.label ?? `Сезон ${s.number}`}</button>)}</div>
+    <section className="watch-shell anime-detail-page">
+      <AmbientBackdrop anime={anime} enabled={initialPrefs.animeAmbient !== false} />
+      <div className="watch-anime-hero">
+        <div className="watch-anime-rail">
+          {anime.poster?.big ? <img src={anime.poster.fullsize ?? anime.poster.big} alt={`Постер: ${anime.title}`} /> : <div className="watch-anime-poster-empty" aria-label="Постер недоступен">◆</div>}
+          <button type="button" className="primary watch-start" onClick={() => { trackUiAction("watch_click", {animeId: anime.anime_id, season: selectedSeason, episode}); playerShell.current?.scrollIntoView({behavior: "smooth", block: "start"}); }}>▶ Смотреть</button>
+          <div className="watch-anime-rail-actions"><button type="button" onClick={onFavorite}>{favorite ? "♥ В избранном" : "♡ В избранное"}</button><button type="button" onClick={onFolders}>＋ В папку</button></div>
+          <button type="button" className="watch-anime-map-action" onClick={() => navigateTo(animeMapRoute(anime.anime_id))}>◆ Карта франшизы <span aria-hidden="true">↗</span></button>
+
+      <WatchInfo
+        anime={anime} seasons={displaySeasons} seasonVideos={seasonVideos} dubs={dubs} activeDub={dub}
+        familyTitle={familyRoot} tracker={tracker} totalEpisodes={totalAcrossSeasons}
+        totalDuration={totalDurationAcrossSeasons} downloadAvailable={kodikAccessReady}
+        downloadActive={downloadIsActive} downloadStatus={visibleDownloadNotice}
+        onDownload={() => setDownloadPickerOpen(true)}
+        onTrack={onTrack} onUntrack={onUntrack} onResetProgress={onProgress}
+      />
+          <ReleaseHighlight animeId={anime.anime_id} metadata={metadata} rows={scheduleRows} />
+
+
+        </div>
+        <div className="watch-anime-hero-copy">
+
+          <div className="anime-title-media">
+            <aside className="anime-trailer-panel" aria-label="Трейлер и оценки">
+              <AnimeTrailer key={anime.anime_id} animeId={anime.anime_id} videos={metadata?.videos} seasons={seasons} details={previewAnimeById} />
+          <section className="watch-rating-panel anime-information-ratings" aria-label="Оценки аниме">
+            <RatingBoard anime={infoAnime} communityRating={communityRating} apiOnly compact />
+            <ScorePicker value={ratings?.anime} label="Ваша оценка" onChange={value => onRatingChange({ scope: "anime" }, value)} />
+          </section>
+            </aside>
+            <div className="anime-title-copy">
+          <nav className="watch-anime-breadcrumb" aria-label="Хлебные крошки"><CatalogLink>Каталог</CatalogLink><span aria-hidden="true">›</span><CatalogLink filters={{ format: catalogFilters.format }}>{anime.type?.name ?? "Аниме"}</CatalogLink><span aria-hidden="true">›</span><CatalogLink filters={{ q: anime.title }}>{anime.title}</CatalogLink></nav>
+          <h1>{anime.title}</h1>
+          {(metadata?.name || detailAnime.original) && <p className="watch-anime-original">{metadata?.name || detailAnime.original}</p>}
+          {anime.other_titles && <p className="watch-anime-alias">{Array.isArray(anime.other_titles) ? anime.other_titles.slice(0, 2).join(" · ") : anime.other_titles}</p>}
+          <a className="anime-title-source" href={shikimoriAnimeUrl(anime)} target="_blank" rel="noopener noreferrer">Shikimori ↗</a>
+            </div>
+          {description && <div className="anime-story-media anime-description-wide">
+            <section className="anime-synopsis" aria-label="Описание"><p className="watch-anime-description">{description}</p></section>
+          </div>}
+          </div>
+          {genres?.length ? <div className="watch-anime-genres">{genres.map(genre => <button type="button" key={genre.alias} onClick={() => onGenre(genre.title)}>{genre.title}</button>)}</div> : null}
+          <AnimeFacts anime={detailAnime} metadata={metadata} rows={scheduleRows} entries={seasons.flatMap(group => group.entries.map(entry => previewAnimeById[entry.anime_id] ?? entry))} showCountdown={false} />
+        </div>
+      </div>
       {seasonLoadNotice && (
         <div className="season-load-notice" role="status" aria-live="polite">
           <div className="season-load-notice-copy">
@@ -1687,6 +1827,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
           </div>
         </div>
       )}
+      {!availableEpisodeDubbings.length && videos.length > 0 && <p className="watch-dubbing-warning" role="status">Для серии {episode} пока нет доступной озвучки. Выберите другую серию или обновите список.</p>}
       <div ref={playerShell} className={`episode-carousel ${episodeCarousel ? "enabled" : "disabled"} ${carouselMotion ? `shift-${carouselMotion}` : ""}`}>{episodeCarousel && previousCarouselItem ? <EpisodeSlideshow className="carousel-side carousel-previous" images={episodePreviewImages(previousCarouselItem.entry, previousCarouselItem.video?.originNumber ?? previousCarouselItem.number)} fallback={previousCarouselItem.entry?.poster?.fullsize ?? previousCarouselItem.entry?.poster?.big} label={previousCarouselItem.group.label ?? `Сезон ${previousCarouselItem.season}`} sublabel={`${previousCarouselItem.video?.contentKind ?? "Серия"} ${previousCarouselItem.number}`} onClick={() => activateCarouselItem(previousCarouselItem, "previous")} /> : episodeCarousel ? <span className="carousel-space" /> : null}
       {initialPrefs.watchPartyPanelPosition === "top" && partyPanel}
       <div className={`video-layout ${showUpcoming ? "upcoming-layout" : useAnimeSoulPlayer && !initialPrefs.customPlayerToolbarVisible ? "toolbar-none" : `toolbar-${position}`}`}>
@@ -1740,6 +1881,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
                 opening={playbackSkips.opening}
                 ending={playbackSkips.ending}
                 onLoadedMetadata={loaded}
+                onVersionSwitch={() => { pendingResumeSeek.current = null; }}
                 onTimeUpdate={localTimeUpdated}
                 onBeforeTeardown={(time, duration) => {
                   if (localPlaybackProgressTarget && time > 0) {
@@ -1780,7 +1922,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
             {status && !current && (
               <div className="player-status">
                 <span>{status}</span>
-                {!current && !status.includes("Загружаем") && !status.includes("Проверяем") && <button onClick={() => void fetchVideos(true)}>Повторить загрузку</button>}
+                {!current && !status.includes("Загружаем") && !status.includes("Проверяем") && <button onClick={() => { trackUiAction("retry_error", {screen: "player", animeId: anime.anime_id}); void fetchVideos(true); }}>Повторить загрузку</button>}
               </div>
             )}
           </>
@@ -1788,7 +1930,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       </div>
       {!showUpcoming && (!useAnimeSoulPlayer || initialPrefs.customPlayerToolbarVisible) && (
         <PlayerToolbar
-          dubbings={dubs}
+          dubbings={availableEpisodeDubbings}
           dubbing={dub}
           favoriteDubbings={favouriteDubbings}
           preferredDubbing={globalDubbing}
@@ -1839,38 +1981,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
       )}</div>
       {initialPrefs.watchPartyPanelPosition === "overlay" && partyPanel}
       {episodeCarousel && (nextCarouselItem ? <EpisodeSlideshow className="carousel-side carousel-next" images={episodePreviewImages(nextCarouselItem.entry, nextCarouselItem.video?.originNumber ?? nextCarouselItem.number)} fallback={nextCarouselItem.entry?.poster?.fullsize ?? nextCarouselItem.entry?.poster?.big} label={nextCarouselItem.group.label ?? `Сезон ${nextCarouselItem.season}`} sublabel={`${nextCarouselItem.video?.contentKind ?? "Серия"} ${nextCarouselItem.number}`} onClick={() => activateCarouselItem(nextCarouselItem, "next")} /> : upcomingRow && !showUpcoming ? <EpisodeSlideshow className="carousel-side carousel-next upcoming-preview" images={episodePreviewImages(upcomingRow.entry)} fallback={upcomingRow.entry.poster?.fullsize ?? upcomingRow.entry.poster?.big} label={`${upcomingRow.group.label ?? `Сезон ${upcomingSeason}`} · Серия ${upcomingEpisode}${upcomingTotal > 0 ? ` из ${upcomingTotal}` : ""}`} sublabel={`Выйдет ${formatCalendarDate(upcomingRow.item!.episodes!.next_date!)}`} onClick={() => { setCarouselMotion("next"); setShowUpcoming(true); setTimeout(() => setCarouselMotion(""), 520) ;}} /> : <span className="carousel-space" />)}</div>
-      <section className="watch-rating-panel watch-rating-mobile" aria-label="Оценки аниме">
-        <div><span className="eyebrow">ОЦЕНКИ</span><RatingBoard anime={anime} ratings={ratings} communityRating={communityRating} /></div>
-        <ScorePicker
-          value={ratings?.anime}
-          label="Ваша оценка аниме"
-          onChange={value => onRatingChange({ scope: "anime" }, value)}
-        />
-      </section>
       {initialPrefs.watchPartyPanelPosition === "bottom" && partyPanel}
-      <WatchInfo
-        anime={anime}
-        seasons={displaySeasons}
-        seasonVideos={seasonVideos}
-        dubs={dubs}
-        activeDub={dub}
-        familyTitle={familyRoot}
-        favorite={favorite}
-        tracker={tracker}
-        totalEpisodes={totalAcrossSeasons}
-        totalDuration={totalDurationAcrossSeasons}
-        downloadAvailable={kodikAccessReady}
-        downloadActive={downloadIsActive}
-        downloadStatus={visibleDownloadNotice}
-        onGenre={onGenre}
-        onFavorite={onFavorite}
-        onFolders={onFolders}
-        onDownload={() => setDownloadPickerOpen(true)}
-        onTrack={onTrack}
-        onUntrack={onUntrack}
-        onResetProgress={onProgress}
-      />
-      <ReleaseSchedule rows={scheduleRows} />
       <SeasonList
         seasons={displaySeasons}
         seasonVideos={seasonVideos}
@@ -1894,6 +2005,7 @@ export function Watch({ header, anime, resumeRequested, newEpisodeRequested, fav
         onEpisodeRatingChange={(season, ratedEpisode, value) => onRatingChange({ scope: "episode", season, episode: ratedEpisode }, value)}
       />
     </section>
+    <AppFooter />
     <DownloadPicker
       open={downloadPickerOpen}
       title={anime.title}

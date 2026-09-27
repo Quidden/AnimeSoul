@@ -5,11 +5,11 @@ import { lanRequest, type LanCommand, type LanPlayer } from "./api";
 type Bridge = { state: () => LanPlayer; command: (command: LanCommand) => void | Promise<void> };
 let playerBridge: Bridge | null = null;
 
-export function useLanPlayer(state: LanPlayer, command: Bridge["command"]) {
+export function useLanPlayer(state: LanPlayer | (() => LanPlayer), command: Bridge["command"]) {
   const latest = useRef({ state, command });
   latest.current = { state, command };
   useEffect(() => {
-    const bridge = { state: () => latest.current.state, command: (value: LanCommand) => latest.current.command(value) };
+    const bridge = { state: () => typeof latest.current.state === "function" ? latest.current.state() : latest.current.state, command: (value: LanCommand) => latest.current.command(value) };
     playerBridge = bridge;
     return () => { if (playerBridge === bridge) playerBridge = null; };
   }, []);

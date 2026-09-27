@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Response
@@ -15,6 +16,7 @@ from ..config import settings
 from ..services.catalog import CatalogueUnavailableError, HybridCatalogueService
 from ..services.kodik import KodikAnimeGateway
 from ..services.yummy import YummyAnimeGateway
+from ..services.shikimori import anime_details as shikimori_details
 
 
 router = APIRouter(prefix="/api/yummy", tags=["YummyAnime", "Kodik"])
@@ -116,10 +118,15 @@ async def yummy_proxy(
     offset: int = Query(0, ge=0),
     q: str = "",
     refresh: bool = False,
+    status: Literal["all", "airing"] = "all",
 ) -> dict:
     """Keep the UI contract while filling missing data from either provider."""
 
     try:
+        if mode == "shikimori":
+            if id is None or id <= 0:
+                raise HTTPException(status_code=400, detail="Shikimori ID is required")
+            return {"metadata": await shikimori_details(id)}
         if mode == "ping":
             started_at = time.perf_counter()
             await gateway.request(
@@ -159,6 +166,17 @@ async def yummy_proxy(
             ) or []
             _set_source_headers(response, {"yummy": "ok", "kodik": "unused"})
             return {"schedule": schedule}
+
+        if status == "airing":
+            # Filter upstream before pagination, not within the general top list.
+            params = {"limit": limit, "offset": offset, "status": "ongoing"}
+            if q.strip():
+                params["q"] = q.strip()
+            anime = await gateway.request("/anime", params, refresh=refresh) or []
+            await catalogue_service.registry.remember(anime)
+            sources = {"yummy": "ok", "kodik": "unused"}
+            _set_source_headers(response, sources)
+            return {"anime": anime, "hasMore": len(anime) == limit, "_sources": sources}
 
         anime, sources = await catalogue_service.catalogue(
             q.strip(),

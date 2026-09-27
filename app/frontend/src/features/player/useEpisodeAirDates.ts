@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Anime, SeasonGroup, Video } from "../../lib/types";
-import { animeMyAnimeListId, fetchEpisodeAirDates, type EpisodeAirDates } from "../../lib/episodeDates";
+import { animeMyAnimeListId, cachedEpisodeAirDates, fetchEpisodeAirDates, type EpisodeAirDates } from "../../lib/episodeDates";
 
 export function useEpisodeAirDates(
   seasons: SeasonGroup[],
@@ -23,6 +23,7 @@ export function useEpisodeAirDates(
   useEffect(() => {
     if (!requestKey) return;
     let cancelled = false;
+    setDates(current => ({ ...current, ...Object.fromEntries(requestKey.split(",").map(Number).map(id => [id, cachedEpisodeAirDates(id)])) }));
     const refresh = () => {
       for (const id of requestKey.split(",").map(Number)) {
         void fetchEpisodeAirDates(id).then(result => {

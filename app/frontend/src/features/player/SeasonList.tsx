@@ -5,7 +5,7 @@ import { episodePreviewImages } from "../../components/EpisodeSlideshow";
 import { ScorePicker } from "../../components/ScorePicker";
 import { animeMyAnimeListId, episodeAddedDate, episodeAirDate, formatAirDate } from "../../lib/episodeDates";
 import { useEpisodeAirDates } from "./useEpisodeAirDates";
-import { formatRating, seasonCombinedAverage, seasonEpisodeAverage } from "../../lib/ratings";
+import { formatRating } from "../../lib/ratings";
 import {
   episodeDuration,
   formatCalendarDate,
@@ -72,7 +72,6 @@ export function SeasonList({
   onToggleSeasonWatched,
   onChooseEpisode,
   onToggleWatched,
-  onSeasonRatingChange,
   onEpisodeRatingChange,
 }: SeasonListProps) {
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
@@ -147,21 +146,6 @@ export function SeasonList({
                 <span>{watchedCount} из {episodeNumbers.length} просмотрено</span>
                 <b>{collapsed ? "⌄" : "⌃"}</b>
               </button>}
-              <div className="season-rating-summary">
-                {communityRating?.seasons[String(group.number)] && (
-                  <span title={`${communityRating.seasons[String(group.number)].count} общих оценок сезона`}>
-                    AnimeSoul <b>{formatRating(communityRating.seasons[String(group.number)].average)}</b>
-                  </span>
-                )}
-                <span title="Средняя оценка серий">Серии <b>{formatRating(seasonEpisodeAverage(ratings, group.number))}</b></span>
-                <span title="Итог сезона: ручная оценка и средняя серий">Итог <b>{formatRating(seasonCombinedAverage(ratings, group.number))}</b></span>
-                <ScorePicker
-                  compact
-                  value={ratings?.seasons[String(group.number)]}
-                  label={`Оценка: ${seasonLabel}`}
-                  onChange={value => onSeasonRatingChange(group.number, value)}
-                />
-              </div>
               <button
                 type="button"
                 className={`season-watch-toggle ${allWatched ? "active" : ""}`}

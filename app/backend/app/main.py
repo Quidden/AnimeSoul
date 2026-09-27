@@ -27,6 +27,7 @@ from .api.watch_party import router as party_router
 from .api.kodik import close_kodik_services, router as kodik_router
 from .api.yummy import close_yummy_services, router as yummy_router
 from .config import settings
+from .version import APP_VERSION
 
 
 @asynccontextmanager
@@ -49,7 +50,7 @@ async def lifespan(_application: FastAPI):
 
 app = FastAPI(
     title="AnimeSoul API",
-    version="0.2.8",
+    version=APP_VERSION,
     description="FastAPI backend for the AnimeSoul desktop and web client.",
     lifespan=lifespan,
 )

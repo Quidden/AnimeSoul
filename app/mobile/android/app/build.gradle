@@ -61,8 +61,8 @@ android {
         minSdk 24
         targetSdk 35
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        versionCode 2080000
-        versionName '0.2.8'
+        versionCode 2090000
+        versionName '0.2.9'
 
         ndk {
             // The installable test build targets current physical Android phones.

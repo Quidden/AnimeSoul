@@ -4,13 +4,12 @@ export function preferredDubbing(
   manualDubbing: string,
   globalDubbing: string,
   favouriteDubbings: string[],
-  providerDefault = "",
+  _providerDefault = "",
 ): string {
   if (manualDubbing && available.includes(manualDubbing)) return manualDubbing;
   if (globalDubbing && available.includes(globalDubbing)) return globalDubbing;
   const favourite = favouriteDubbings.find(name => available.includes(name));
   if (favourite) return favourite;
-  if (providerDefault && available.includes(providerDefault)) return providerDefault;
   return available[0] ?? "";
 }
 
@@ -31,7 +30,7 @@ export function preferredDubbingForEpisode(
   globalDubbing: string,
   favouriteDubbings: string[],
   rememberedDubbing = "",
-  providerDefault = "",
+  _providerDefault = "",
 ) {
   const available = Array.from(new Set(
     videos.filter(video => video.number === episode).map(video => video.data.dubbing),
@@ -41,7 +40,6 @@ export function preferredDubbingForEpisode(
     globalDubbing,
     ...favouriteDubbings,
     rememberedDubbing,
-    providerDefault,
   ]) {
     if (candidate && available.includes(candidate)) return candidate;
   }

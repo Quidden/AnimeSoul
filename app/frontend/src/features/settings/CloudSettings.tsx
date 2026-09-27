@@ -38,6 +38,7 @@ export function CloudSettings({ state }: Props) {
     disconnect,
     saveCredentials,
     syncNow,
+    requestInitialChoice,
     cloudSyncing,
     cloudError,
     cloudState,
@@ -188,6 +189,7 @@ export function CloudSettings({ state }: Props) {
                 />
               </label>
               <button className="cloud-settings-disconnect" onClick={disconnect}>Отключить Google Drive</button>
+              {gdriveStatus.has_cloud_file && <button type="button" onClick={requestInitialChoice} disabled={cloudSyncing}>Повторно выбрать режим объединения</button>}
             </div>
           </details>
         </>

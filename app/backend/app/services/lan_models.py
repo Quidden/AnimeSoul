@@ -15,7 +15,8 @@ class PairIdentity(BaseModel):
 
 
 class ControlCommand(BaseModel):
-    action: Literal["play", "pause", "seek", "open", "episode", "next", "previous"]
+    action: Literal["play", "pause", "seek", "open", "episode", "next", "previous", "volume"]
+    volume: float = Field(default=1, ge=0, le=1, allow_inf_nan=False)
     animeId: int | None = Field(default=None, ge=1)
     season: int = Field(default=1, ge=1, le=99)
     episode: str = Field(default="1", min_length=1, max_length=40)

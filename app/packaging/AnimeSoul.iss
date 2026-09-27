@@ -1,5 +1,7 @@
 #define AppName "AnimeSoul"
-#define AppVersion "0.2.8"
+#ifndef AppVersion
+  #error AppVersion must be passed by build_windows.ps1
+#endif
 #define AppPublisher "Quidden"
 #define AppExeName "AnimeSoul Launcher.exe"
 

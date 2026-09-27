@@ -12,6 +12,7 @@ import {
     stripPart,
 } from "../../lib/anime";
 import { animeApiRatings, ratingForSource, sourceLabel } from "../../lib/ratings";
+import {animeFormat} from "../../lib/catalogFilters";
 import type { Anime, CardMeta, CommunityRatings, UserRatings } from "../../lib/types";
 import { fetchAnimeVideos } from "./api";
 import type { ApplicationView } from "./useCatalogController";
@@ -20,6 +21,7 @@ interface CatalogPresentationOptions {
     active: Anime | null;
     catalog: Anime[];
     formatFilter: string;
+    statusFilter: string;
     dubbingFilter: string;
     genre: string;
     groupFilter: string;
@@ -48,6 +50,7 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         active,
         catalog,
         formatFilter,
+        statusFilter,
         dubbingFilter,
         genre,
         groupFilter,
@@ -103,6 +106,7 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
         [
             cardMeta,
             formatFilter,
+            statusFilter,
             dubbingFilter,
             franchises,
             genre,
@@ -131,13 +135,14 @@ export function useCatalogPresentation(options: CatalogPresentationOptions) {
     const ratingSources = useMemo(() => {
         const apiKeys = new Set(franchises.flatMap(anime => animeApiRatings(anime).map(source => source.key)));
         const fixed = [
+            { key: "average", label: "YummyAnime" },
             { key: "user", label: "Моя оценка" },
             { key: "calculated", label: "Средняя по сезонам" },
             { key: "animesoul", label: "AnimeSoul" },
         ];
         return [
             ...fixed,
-            ...[...apiKeys].map(key => ({ key, label: sourceLabel(key) })),
+            ...[...apiKeys].filter(key => key !== "average").map(key => ({ key, label: sourceLabel(key) })),
         ];
     }, [franchises]);
 
@@ -206,7 +211,6 @@ function matchesCatalogFilters(
 ) {
     const meta = cardMeta[anime.anime_id];
     const familyCount = meta?.familyCount ?? anime.franchiseCount ?? 1;
-    const movie = isMovieAnime(anime);
     const matchesGenre = options.genre === "Все"
         || anime.genres?.some(item => item.title === options.genre);
     const matchesStartYear = !options.yearFrom
@@ -214,12 +218,13 @@ function matchesCatalogFilters(
     const matchesEndYear = !options.yearTo
         || (anime.year ?? 9999) <= Number(options.yearTo);
     const matchesGroup = options.groupFilter === "all"
-        || !meta
         || (options.groupFilter === "franchise"
             ? familyCount > 1
             : familyCount === 1);
     const matchesFormat = options.formatFilter === "all"
-        || (options.formatFilter === "movie" ? movie : !movie);
+        || animeFormat(anime) === options.formatFilter;
+    const matchesStatus = options.statusFilter === "all"
+        || releaseStatus(anime).kind === options.statusFilter;
     const matchesDubbing = options.dubbingFilter === "all"
         || Boolean(meta?.dubbings.includes(options.dubbingFilter));
     const selectedRating = ratingForSource(
@@ -237,6 +242,7 @@ function matchesCatalogFilters(
         && matchesEndYear
         && matchesGroup
         && matchesFormat
+        && matchesStatus
         && matchesDubbing
         && matchesRating,
     );

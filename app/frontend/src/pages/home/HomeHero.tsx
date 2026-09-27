@@ -1,8 +1,9 @@
+import { TrailerGlow } from "./TrailerGlow";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 
 import { EpisodeSlideshow, episodePreviewImages } from "../../components/EpisodeSlideshow";
-import { formatTime } from "../../lib/anime";
+import { episodeResumePosition, formatTime } from "../../lib/anime";
 import { IS_ANDROID_APP } from "../../lib/platform";
 import { homeTrailerEmbedUrl, isYouTubeTrailer } from "../../lib/trailer";
 import type { HeroTrailer } from "../../lib/types";
@@ -81,7 +82,7 @@ export function HomeHero({ model, actions }: HomePageProps) {
 
   const seasonLabel = state?.seasonLabel
     ?? `Сезон ${point?.season ?? state?.season ?? 1}`;
-  const position = point?.state.position ?? 0;
+  const position = episodeResumePosition(point?.state);
 
   return (
     <section
@@ -116,7 +117,7 @@ export function HomeHero({ model, actions }: HomePageProps) {
         ) : (
           <>
             <h1>Твоя коллекция.<br /><i>Твои правила.</i></h1>
-            <p>Незавершённого просмотра пока нет — выбери новое аниме в каталоге.</p>
+            <p>Выбери первое аниме в каталоге. Здесь появится продолжение просмотра, а фон подстроится под его постер.</p>
           </>
         )}
         <div className="home-cinema-actions">
@@ -143,7 +144,7 @@ function HeroMedia({ model, actions }: HomePageProps) {
     ?? anime?.poster?.big;
 
   if (previewEnabled && playerPrefs.homePreviewMode === "screenshots" && trailer) {
-    return <TrailerMedia trailer={trailer} fallback={fallback} />;
+    return <TrailerMedia trailer={trailer} fallback={fallback} ambient={playerPrefs.animeAmbient !== false} />;
   }
 
   // A slideshow can eventually mount an episode iframe. On a phone that feels
@@ -186,11 +187,14 @@ function HeroMedia({ model, actions }: HomePageProps) {
 function TrailerMedia({
   trailer,
   fallback,
+  ambient,
 }: {
   trailer: HeroTrailer;
   fallback?: string;
+  ambient: boolean;
 }) {
   const startAt = useMemo(() => randomTrailerStart(), [trailer.url]);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const revealTimerRef = useRef<number | null>(null);
   const revealAtRef = useRef(0);
@@ -303,8 +307,10 @@ function TrailerMedia({
   if (trailer.kind === "video") {
     return (
       <div className={`home-cinema-media home-cinema-trailer ${isPlaying ? "is-playing" : "is-loading"}`} aria-hidden="true">
+        <TrailerGlow videoRef={videoRef} poster={poster} source={trailer.url} enabled={ambient} />
         {poster && <img className="home-cinema-trailer-poster" src={poster} alt="" fetchPriority="high" />}
         <video
+          ref={videoRef}
           key={trailer.url}
           src={trailer.url}
           poster={poster}
@@ -328,6 +334,7 @@ function TrailerMedia({
 
   return (
     <div className={`home-cinema-media home-cinema-trailer ${isPlaying ? "is-playing" : "is-loading"}`} aria-hidden="true">
+      <TrailerGlow videoRef={videoRef} poster={poster} source={trailer.url} enabled={ambient} />
       {poster && <img className="home-cinema-trailer-poster" src={poster} alt="" fetchPriority="high" />}
       <iframe
         ref={iframeRef}

@@ -122,6 +122,8 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchEntry[] = [
   { id: "player-compact-episodes", tab: "player", kind: "setting", title: "Компактный список серий", description: "Более плотные карточки серий под страницей аниме", keywords: "новый вид сетка список снизу компактно плотный" },
   { id: "player-toolbar", tab: "player", kind: "setting", title: "Панель управления", description: "Расположение элементов управления плеером", keywords: "сверху снизу слева справа озвучка источник" },
 
+  { id: "appearance-header-glass", tab: "appearance", kind: "setting", title: "Жидкое стекло шапки", description: "Полупрозрачная шапка с размытием и бликами", keywords: "liquid glass стекло шапка прозрачность размытие" },
+  { id: "appearance-ambient", tab: "appearance", kind: "setting", title: "Эмбиент интерфейса", description: "Общий фон в цветах последнего просмотренного аниме и мягкое свечение", keywords: "ambient эмбиент подсветка свечение постер фон" },
   { id: "appearance-palette", tab: "appearance", kind: "setting", title: "Собственная палитра", description: "Основной и акцентный цвета интерфейса", keywords: "цвет фон акцент оформление кастомизация" },
   { id: "appearance-desktop-beta", tab: "appearance", kind: "setting", title: "Медиатека — бета-тема для ПК", description: "Минималистичное оформление для компьютера", keywords: "бета beta минимализм тема пк медиатека" },
   { id: "appearance-themes", tab: "appearance", kind: "setting", title: "Готовые темы", description: "Предустановленные цветовые оформления", keywords: "светлая темная фиолетовая цвет схема" },

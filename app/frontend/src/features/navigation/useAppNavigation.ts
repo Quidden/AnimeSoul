@@ -8,6 +8,7 @@ import {
 import type {ApplicationView} from "../catalog/useCatalogController";
 import {NATIVE_BACK_EVENT} from "../../lib/modalAccessibility";
 import type {Anime} from "../../lib/types";
+import { animeRoute, navigateTo, routeForView } from "./routes";
 
 type UseAppNavigationOptions = {
     active: Anime | null;
@@ -47,6 +48,7 @@ export function useAppNavigation({
         setResumeRequested(false);
         setNewEpisodeRequested(false);
         setView(nextView);
+        navigateTo(routeForView(nextView));
         scrollToTop(behavior);
     }, [active, keepActiveOnNavigation, setActive, setNewEpisodeRequested, setResumeRequested, setView, setWatchForeground]);
 
@@ -60,6 +62,7 @@ export function useAppNavigation({
         setNewEpisodeRequested(false);
         setActive(anime);
         setWatchForeground(true);
+        navigateTo(animeRoute(anime.anime_id, undefined, undefined, resume));
         scrollToTop();
     }, [setActive, setCatalog, setNewEpisodeRequested, setResumeRequested, setWatchForeground]);
 
@@ -86,6 +89,7 @@ export function useAppNavigation({
     const showCurrent = useCallback(() => {
         if (!active) return;
         setWatchForeground(true);
+        navigateTo(animeRoute(active.anime_id));
         scrollToTop("smooth");
     }, [active, setWatchForeground]);
 
@@ -95,6 +99,7 @@ export function useAppNavigation({
         setResumeRequested(false);
         setNewEpisodeRequested(false);
         setWatchForeground(true);
+        navigateTo(animeRoute(anime.anime_id));
     }, [setActive, setNewEpisodeRequested, setQuery, setResumeRequested, setWatchForeground]);
 
     useEffect(() => {

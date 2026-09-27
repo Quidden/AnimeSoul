@@ -1,6 +1,6 @@
 {
   "name": "animesoul-frontend",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
     "check": "npm run lint && npm run typecheck:strict && npm run audit:css && npm test && npm run build && npm run audit:bundle"
   },
   "dependencies": {
+    "anime4k-webgpu": "^1.0.0",
     "hls.js": "^1.7.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",

@@ -22,6 +22,8 @@ from typing import Literal
 import httpx
 import uvicorn
 
+from backend.app.version import APP_VERSION
+
 from runtime_instance import (
     find_available_port,
     remove_runtime_state,
@@ -276,10 +278,16 @@ def install_desktop_zoom(window: object) -> None:
     window.events.loaded += install
 
 
+def client_url(port: int) -> str:
+    """Bypass an old WebView HTML cache without clearing cookies or storage."""
+
+    return f"http://127.0.0.1:{port}/?v={APP_VERSION}&launch={uuid.uuid4().hex}"
+
+
 def open_existing_client(port: int, mode: LaunchMode) -> None:
     """Open an existing local server instead of failing on a second launch."""
 
-    url = f"http://127.0.0.1:{port}"
+    url = client_url(port)
     print(f"AnimeSoul уже запущен на {url}. Открываем приложение.")
     if mode == "browser":
         webbrowser.open(url)
@@ -304,7 +312,7 @@ def open_existing_client(port: int, mode: LaunchMode) -> None:
 def run_browser(port: int) -> None:
     """Open the system browser when FastAPI is ready, then serve in foreground."""
 
-    url = f"http://127.0.0.1:{port}"
+    url = client_url(port)
 
     def open_client() -> None:
         if wait_until_ready(port):
@@ -354,7 +362,7 @@ def run_desktop(port: int) -> None:
 
     window = webview.create_window(
         "AnimeSoul",
-        f"http://127.0.0.1:{port}",
+        client_url(port),
         width=1440,
         height=900,
         min_size=(960, 640),

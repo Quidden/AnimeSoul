@@ -1,9 +1,17 @@
 import type { Anime, Video } from "./types";
 import { requestJson } from "./http";
+import { readDataCache, writeDataCache } from "./localDataCache";
 
 export type EpisodeAirDates = Record<string, string>;
 
 const cache = new Map<number, { expiresAt: number; request: Promise<EpisodeAirDates> }>();
+const datesCacheKey = "animesoul:episode-air-dates:v1";
+
+export function cachedEpisodeAirDates(malId: number): EpisodeAirDates {
+  const value = readDataCache(datesCacheKey, String(malId));
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([episode, date]) => /^\d+$/.test(episode) && Number(episode) > 0 && validAirDate(date))) as EpisodeAirDates;
+}
 
 export function animeMyAnimeListId(anime: Anime): number | undefined {
   const id = Number(anime.remote_ids?.myanimelist_id);
@@ -38,7 +46,7 @@ export function fetchEpisodeAirDates(malId: number): Promise<EpisodeAirDates> {
   if (previous && previous.expiresAt > Date.now()) return previous.request;
   const entry = { expiresAt: Date.now() + 3600_000, request: Promise.resolve({} as EpisodeAirDates) };
   entry.request = (async () => {
-    const dates: EpisodeAirDates = {};
+    const dates: EpisodeAirDates = { ...cachedEpisodeAirDates(malId) };
     try {
       for (let page = 1; page <= 100; page++) {
         const result = await requestJson<{ dates: EpisodeAirDates; hasNextPage: boolean }>(
@@ -53,6 +61,7 @@ export function fetchEpisodeAirDates(malId: number): Promise<EpisodeAirDates> {
       // Keep earlier pages visible when a later page is temporarily unavailable.
       entry.expiresAt = Date.now() + 60_000;
     }
+    writeDataCache(datesCacheKey, String(malId), dates);
     return dates;
   })();
   cache.set(malId, entry);

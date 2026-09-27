@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $AppRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $RepoRoot = (Resolve-Path (Join-Path $AppRoot "..")).Path
-$Version = "0.2.8"
+$Version = (Get-Content -LiteralPath (Join-Path $AppRoot "frontend\package.json") -Raw | ConvertFrom-Json).version
 $WorkRoot = Join-Path $RepoRoot "release-work"
 $PyInstallerWork = Join-Path $WorkRoot "pyinstaller"
 $PackageRoot = Join-Path $WorkRoot "AnimeSoul-$Version"
@@ -16,9 +16,19 @@ if (-not (Test-Path -LiteralPath $Python)) {
 }
 
 Write-Host "Building React client..."
-& npm.cmd --prefix (Join-Path $AppRoot "frontend") run build
-if ($LASTEXITCODE -ne 0) {
-    throw "React build failed."
+$RuntimeVersion = & $Python -c "import sys; sys.path.insert(0, sys.argv[1]); from backend.app.version import APP_VERSION; print(APP_VERSION)" $AppRoot
+if ($LASTEXITCODE -ne 0 -or $RuntimeVersion -ne $Version) {
+    throw "Frontend and runtime versions must match before packaging."
+}
+$PreviousPlatform = $env:VITE_ANIMESOUL_PLATFORM
+try {
+    $env:VITE_ANIMESOUL_PLATFORM = "desktop"
+    & npm.cmd --prefix (Join-Path $AppRoot "frontend") run build
+    if ($LASTEXITCODE -ne 0) {
+        throw "React build failed."
+    }
+} finally {
+    $env:VITE_ANIMESOUL_PLATFORM = $PreviousPlatform
 }
 
 Write-Host "Building launcher..."
@@ -44,6 +54,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if (Test-Path -LiteralPath $PackageRoot) {
+    $ResolvedPackage = (Resolve-Path -LiteralPath $PackageRoot).Path
+    $ResolvedWork = (Resolve-Path -LiteralPath $WorkRoot).Path
+    if (-not $ResolvedPackage.StartsWith($ResolvedWork + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Package directory must be inside release-work."
+    }
     Remove-Item -LiteralPath $PackageRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Path $PackageRoot | Out-Null
@@ -73,7 +88,7 @@ if (-not $InnoCompiler -or -not (Test-Path -LiteralPath $InnoCompiler)) {
 }
 
 Write-Host "Building installer..."
-& $InnoCompiler (Join-Path $PSScriptRoot "AnimeSoul.iss")
+& $InnoCompiler "/DAppVersion=$Version" (Join-Path $PSScriptRoot "AnimeSoul.iss")
 if ($LASTEXITCODE -ne 0) {
     throw "Installer build failed."
 }

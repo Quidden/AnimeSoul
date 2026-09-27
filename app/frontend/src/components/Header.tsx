@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { Anime, ApiStatus, ConfigProfile, PlayerPrefs, SaveStatus, Theme } from "../lib/types";
 import { readLocal as read } from "../lib/storage";
 import { SettingsCenter } from "./SettingsCenter";
@@ -23,6 +24,10 @@ type HeaderProps = {
   onLibrary: () => void;
   onRatings: () => void;
   onDownloads: () => void;
+  onTracking: () => void;
+  onCollections: () => void;
+  onHistory: () => void;
+  hasNewEpisodes?: boolean;
   onCurrent: () => void;
   hasCurrent: boolean;
   theme?: Theme;
@@ -40,7 +45,7 @@ type HeaderProps = {
   onExport?: () => void;
   onImport?: (file: File) => void;
   onStorageReload?: () => void;
-  activeView: "home" | "catalog" | "stats" | "ratings" | "downloads" | "watch";
+  activeView: "home" | "catalog" | "stats" | "ratings" | "downloads" | "watch" | "tracking" | "library" | "history" | "remote" | "notFound";
 };
 
 type NavigationIcon = "home" | "catalog" | "downloads" | "stats" | "ratings" | "watch" | "search" | "settings";
@@ -84,6 +89,10 @@ export function Header({
   onLibrary,
   onRatings,
   onDownloads,
+  onTracking,
+  onCollections,
+  onHistory,
+  hasNewEpisodes = false,
   onCurrent,
   hasCurrent,
   theme,
@@ -323,13 +332,17 @@ export function Header({
   };
 
   const sectionNavigation: { view: HeaderProps["activeView"]; icon: NavigationIcon; label: string; mobileLabel: string; navigate: () => void }[] = [
+    { view: "home", icon: "home", label: "Главная", mobileLabel: "Главная", navigate: onHome },
     { view: "catalog", icon: "catalog", label: "Каталог", mobileLabel: "Каталог", navigate: onCatalog },
     { view: "downloads", icon: "downloads", label: "Скачанные", mobileLabel: "Скачано", navigate: onDownloads },
     { view: "stats", icon: "stats", label: "Статистика", mobileLabel: "Стат.", navigate: onLibrary },
+    { view: "tracking", icon: "watch", label: "Отслеживание", mobileLabel: "Трекинг", navigate: onTracking },
+    { view: "library", icon: "home", label: "Папки и избранное", mobileLabel: "Папки", navigate: onCollections },
+    { view: "history", icon: "watch", label: "История", mobileLabel: "История", navigate: onHistory },
     { view: "ratings", icon: "ratings", label: "Оценки", mobileLabel: "Оценки", navigate: onRatings },
   ];
 
-  return <header className={`app-header${IS_ANDROID_APP && !mobileSearchVisible ? " search-hidden" : ""}`}>
+  return <><header className={`app-header${IS_ANDROID_APP && !mobileSearchVisible ? " search-hidden" : ""}`}>
     <div className="header-start">
       <Brand onClick={() => navigateFromBottomBar(onHome)} />
     </div>
@@ -360,7 +373,7 @@ export function Header({
         disabled={!hasCurrent}
         onClick={() => navigateFromBottomBar(onCurrent)}
       >
-        <NavIcon name="watch" /><span className="nav-label" data-mobile-label="Сейчас" aria-hidden="true">Сейчас</span>
+        <NavIcon name="watch" /><span className="nav-label" data-mobile-label="Смотрю" aria-hidden="true">Смотрю</span>
       </button>
       <button
         type="button"
@@ -381,23 +394,6 @@ export function Header({
       >
         <NavIcon name={item.icon} /><span className="nav-label" data-mobile-label={item.mobileLabel} aria-hidden="true">{item.label}</span>
       </button>)}
-      {!compact && theme && setTheme && playerPrefs && setPlayerPrefs && onHistoryEnabledChange &&
-        <span className="navigation-settings-slot">
-          <SettingsCenter
-            theme={theme}
-            setTheme={setTheme}
-            playerPrefs={playerPrefs}
-            setPlayerPrefs={setPlayerPrefs}
-            historyEnabled={historyEnabled}
-            onHistoryEnabledChange={onHistoryEnabledChange}
-            profiles={profiles}
-            activeProfile={activeProfile}
-            onSwitchProfile={onSwitchProfile}
-            onExport={onExport}
-            onImport={onImport}
-            onStorageReload={onStorageReload}
-          />
-        </span>}
     </nav>
     {!compact && <div className="search-wrap" onBlur={event => {
       if (!event.currentTarget.contains(event.relatedTarget)) setSuggestionsOpen(false);
@@ -450,7 +446,6 @@ export function Header({
     </div>}
     <div className="header-actions">
       <div className="header-statuses">
-        {statusNotice && <div className={`status-popover ${statusNotice.tone}`} role="status" aria-live="polite"><i />{statusNotice.text}</div>}
         {partyPing.state !== "idle" && <div className={`save-indicator party-${partyPing.state}`} title={partyPing.state === "connected" ? `Задержка обмена с комнатой ${partyPing.roomId ?? ""}` : "Нет связи с сервером совместного просмотра"}><i />{partyPing.state === "connected" ? `Комната · ${partyPing.ms ?? "—"} мс` : "Комната недоступна"}</div>}
         <div className={`save-indicator ${apiStatus.state}`} title={`${apiText}. Пинг измеряется лёгким запросом раз в 30 секунд. Скорость — пассивная оценка браузера без отдельного speed-test.`}><i />Yummy · {apiDiagnostics}</div>
         <div className={`save-indicator ${kodikApiStatus.state}`} title={`${kodikApiText}. Пинг измеряется отдельным лёгким запросом раз в 30 секунд.`}><i />Kodik · {kodikApiDiagnostics}</div>
@@ -509,11 +504,20 @@ export function Header({
               navigationTriggerRef.current?.focus();
               navigateFromBottomBar(item.navigate);
             }}
-          ><NavIcon name={item.icon} /><span>{item.label}</span></button>)}
+          ><NavIcon name={item.icon} /><span>{item.label}</span>{item.view === "tracking" && hasNewEpisodes && <i className="menu-new-episode-dot" aria-label="Есть новые серии" />}</button>)}
+          {!compact && theme && setTheme && playerPrefs && setPlayerPrefs && onHistoryEnabledChange &&
+            <span className="navigation-settings-slot"><SettingsCenter
+              theme={theme} setTheme={setTheme} playerPrefs={playerPrefs} setPlayerPrefs={setPlayerPrefs}
+              historyEnabled={historyEnabled} onHistoryEnabledChange={onHistoryEnabledChange}
+              profiles={profiles} activeProfile={activeProfile} onSwitchProfile={onSwitchProfile}
+              onExport={onExport} onImport={onImport} onStorageReload={onStorageReload}
+            /></span>}
         </nav>
       </div>
     </div>
-  </header>;
+  </header>
+    {statusNotice && createPortal(<div className={`app-status-toast ${statusNotice.tone}`} role="status" aria-live="polite"><i />{statusNotice.text}</div>, document.body)}
+  </>;
 }
 
 export function Brand({ onClick }: { onClick?: () => void }) {

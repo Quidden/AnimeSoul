@@ -29,8 +29,9 @@ for (const property of ["paused", "currentTime", "playbackRate", "src", "readySt
     set(this: HTMLMediaElement, value: never) { media(this)[property] = value; },
   });
 }
+let fixtureDuration = 120;
 Object.defineProperties(HTMLMediaElement.prototype, {
-  duration: { configurable: true, get: () => 120 },
+  duration: { configurable: true, get: () => fixtureDuration },
   currentSrc: { configurable: true, get(this: HTMLMediaElement) { return media(this).src; } },
   play: { configurable: true, value(this: HTMLMediaElement) {
     if (media(this).paused) {
@@ -133,7 +134,7 @@ async function test(name: string, run: () => Promise<void>) {
   const row = document.createElement("li");
   document.getElementById("results")!.append(row);
   try {
-    caseId++;
+    caseId++; fixtureDuration = 120;
     await renderPlayer();
     await ready();
     await run();
@@ -265,18 +266,95 @@ await test("A dubbing change ends temporary long-press speed", async () => {
   await waitForGesture();
   expect(video().playbackRate === 2, "Long press did not activate");
   await renderPlayer({ ...request, dubbing: "Second dubbing" });
-  expect(video().playbackRate === 1.5, "Dubbing switch left the player stuck at 2x");
+  await ready();
+  expect(video().playbackRate === 1.5, "Dubbing switch failed to restore the selected speed");
 });
 
-await test("A seamless dubbing change cannot arm a later unwanted autoplay", async () => {
+await test("A completed dubbing change cannot arm a later unwanted autoplay", async () => {
   await play();
   video().currentTime = 35;
   await renderPlayer({ ...request, dubbing: "Second dubbing" });
+  await ready();
   await pause();
   await act(async () => { video().dispatchEvent(new Event("canplay")); });
   expect(video().paused, "Buffering after a dubbing change cancelled the user's pause");
 });
 
+for (const position of [3, 35, 119, 180]) {
+  for (const playing of [false, true]) {
+    await test(`Full version switch at ${position}s, playing=${playing}, equal/unknown edit`, async () => {
+      if (playing) await play();
+      video().currentTime = position;
+      await renderPlayer({ ...request, dubbing: "Different edit", directStream: {
+        sources: [{ quality: 720, src: "fixture:different-edit.mp4", type: "video/mp4" }], subtitles: [],
+      } });
+      await ready();
+      expect(video().currentTime === Math.max(0, Math.min(position - 5, 119)), "Incorrect rewind/clamp");
+      expect(video().paused === (!playing || position >= 120), "Lost pause state or autoplayed beyond the new end");
+      expect(!document.querySelector(".animesoul-player-audio-carrier[src]"), "Unsafe separate audio was loaded");
+    });
+  }
+}
+await test("Failed replacement media restores previous source and position", async () => {
+  video().currentTime = 42;
+  const oldSource = video().src;
+  await renderPlayer({ ...request, dubbing: "Expired source", directStream: {
+    sources: [{ quality: 720, src: "fixture:expired.mp4", type: "video/mp4" }], subtitles: [],
+  } });
+  await act(async () => { video().dispatchEvent(new Event("error")); });
+  await ready();
+  expect(video().src === oldSource && video().currentTime === 42, "Failed source did not roll back");
+});
+for (const duration of [90, NaN]) {
+  await test(`Replacement duration ${duration} never scales the saved timestamp`, async () => {
+    video().currentTime = 85;
+    fixtureDuration = duration;
+    await renderPlayer({ ...request, dubbing: "Other duration", directStream: {
+      sources: [{ quality: 720, src: "fixture:other-duration.mp4", type: "video/mp4" }], subtitles: [],
+    } });
+    await ready();
+    expect(video().currentTime === 80 && video().paused, "Duration changed the scene offset or pause state");
+  });
+}
+await test("Rapid resolution ignores stale replies and retains a seek made while preparing", async () => {
+  const nativeFetch = window.fetch;
+  const replies: Array<(value: Response) => void> = [];
+  window.fetch = (() => new Promise<Response>(resolve => replies.push(resolve))) as typeof fetch;
+  const response = (src: string) => new Response(JSON.stringify({ sources: [{ quality: 720, src, type: "video/mp4" }], subtitles: [] }));
+  try {
+    video().currentTime = 35;
+    await renderPlayer({ ...request, dubbing: "Slow", directStream: undefined });
+    video().currentTime = 65;
+    await renderPlayer({ ...request, dubbing: "Latest", directStream: undefined });
+    await act(async () => replies[1](response("fixture:latest.mp4")));
+    await ready();
+    expect(video().src === "fixture:latest.mp4" && video().currentTime === 60, "Latest selection or seek was lost");
+    await act(async () => replies[0](response("fixture:stale.mp4")));
+    expect(video().src === "fixture:latest.mp4", "Stale reply replaced the latest source");
+  } finally { window.fetch = nativeFetch; }
+});
+await test("Burned subtitles require confirmation and replace both picture and sound; off restores the base version", async () => {
+  const confirm = window.confirm;
+  const oldSource = video().src;
+  menu.subtitles = [{ value: "sub", label: "Subtitles", request: { ...request, dubbing: "Subtitled version", directStream: {
+    sources: [{ quality: 720, src: "fixture:subtitles.mp4", type: "video/mp4" }], subtitles: [],
+  } } }];
+  try {
+    await renderPlayer();
+    video().currentTime = 40;
+    window.confirm = () => false;
+    await change("Язык субтитров", "burned:sub");
+    expect(video().src === oldSource, "Cancelled subtitle choice changed the source");
+    window.confirm = () => true;
+    await change("Язык субтитров", "burned:sub");
+    await ready();
+    expect(video().src === "fixture:subtitles.mp4" && video().currentTime === 35, "Subtitle video did not replace the complete version");
+    expect(!document.querySelector(".animesoul-player-burned-subtitles[src]"), "Unsafe second subtitle decoder was loaded");
+    await change("Язык субтитров", "off");
+    await ready();
+    expect(video().src === oldSource && video().currentTime === 30, "Returning from subtitles failed to restore the base version");
+  } finally { window.confirm = confirm; menu.subtitles = []; }
+});
 await act(async () => root.unmount());
 window.setTimeout = nativeSetTimeout;
 window.clearTimeout = nativeClearTimeout;

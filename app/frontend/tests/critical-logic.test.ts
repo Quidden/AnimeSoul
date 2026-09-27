@@ -1,5 +1,46 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {recommendAnime, pickRecommendation} from "../src/features/catalog/recommendations.ts";
+import type {Anime, Progress} from "../src/lib/types.ts";
+
+test("recommendations normalize genre count and respect an explicit preferred genre", () => {
+  const make = (id: number, genres: string[]): Anime => ({anime_id: id, title: `Title ${id}`, genres: genres.map(title => ({title, alias: title}))});
+  const titles = [make(1, ["Комедия"]), make(2, ["Комедия", "Драма", "Экшен"]), make(3, ["Драма"])];
+  const counts: [string, number][] = [["Комедия", 20], ["Драма", 5], ["Экшен", 2]];
+  const ranked = recommendAnime(titles, counts, {});
+  assert.equal(ranked[0].anime.anime_id, 1);
+  assert.ok(ranked[0].score > ranked[1].score);
+  assert.deepEqual(recommendAnime(titles, counts, {}, "Комедия").map(item => item.anime.anime_id), [1, 2]);
+  assert.deepEqual(recommendAnime(titles, counts, {}, "Фэнтези"), []);
+});
+
+test("ongoing catalog requests carry their own server filter and pagination cursor", async () => {
+  const originalFetch = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = async input => {
+    urls.push(String(input));
+    return new Response(JSON.stringify({anime: []}), {status: 200});
+  };
+  try {
+    const {fetchCatalogPage} = await import("../src/features/catalog/api.ts");
+    await fetchCatalogPage({limit: 48, offset: 48, status: "airing"});
+    const params = new URL(urls[0], "http://localhost").searchParams;
+    assert.equal(params.get("status"), "airing");
+    assert.equal(params.get("offset"), "48");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("genre recommendations exclude watched franchises and planned titles, and need viewing evidence", () => {
+  const make = (id: number, genre: string): Anime => ({anime_id: id, title: `Anime ${id}`, genres: [{title: genre, alias: genre}], anime_status: {alias: "released"}});
+  const catalog = [make(1, "Драма"), make(2, "Комедия"), make(3, "Драма"), {...make(4, "Драма"), anime_status: {alias: "anons", title: "Запланировано"}}, {...make(5, "Драма"), franchiseEntries: [make(3, "Драма")]}, make(6, "Драма")];
+  const progress: Progress = {3: {episode: "1", dub: "", episodes: {"1": {position: 10, duration: 100, percent: 10, updatedAt: 1}}}, 6: {episode: "1", dub: "", episodes: {}}};
+  const result = recommendAnime(catalog, [["Драма", 10], ["Комедия", 2]], progress);
+  assert.deepEqual(result.map(item => item.anime.anime_id), [1, 6, 2]);
+  assert.equal(pickRecommendation(result, () => 0)?.anime_id, 1);
+  assert.equal(pickRecommendation(result, () => .999)?.anime_id, 2);
+  assert.deepEqual(recommendAnime(catalog, [["Драма", 0]], progress), []);
+  assert.equal(pickRecommendation([]), undefined);
+});
 import { castMediaSource, castOwnsPlayback, EMPTY_CAST_STATE, registerCastControl, commandCastVideo } from "../src/lib/cast.ts";
 
 test("Cast accepts only supported remote HTTPS video, never local media", () => {
@@ -38,7 +79,64 @@ import {
   reconcileTrackedEpisodes,
 } from "../src/lib/tracking.ts";
 import { fetchTrackingSnapshot } from "../src/features/tracking/api.ts";
-import { animeMyAnimeListId, episodeAddedDate, episodeAirDate, fetchEpisodeAirDates, formatAirDate } from "../src/lib/episodeDates.ts";
+import { animeMyAnimeListId, cachedEpisodeAirDates, episodeAddedDate, episodeAirDate, fetchEpisodeAirDates, formatAirDate } from "../src/lib/episodeDates.ts";
+import { cacheCalendarEvents, cachedCalendarEvents, mergeCalendarEvents } from "../src/pages/tracking/calendarCache.ts";
+import { writeDataCache } from "../src/lib/localDataCache.ts";
+
+test("persistent dates appear before API completion and survive partial refresh failures", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const originalFetch = globalThis.fetch;
+  const stored = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+    getItem: (key: string) => stored.get(key) ?? null,
+    setItem: (key: string, value: string) => stored.set(key, value),
+  } });
+  try {
+    writeDataCache("animesoul:episode-air-dates:v1", "98766", { "1": "2026-01-01", "101": "2026-01-08", "2": "invalid" });
+    let finish: ((value: Response) => void) | undefined;
+    globalThis.fetch = async input => String(input).endsWith("page=1")
+      ? new Promise<Response>(resolve => { finish = resolve; }) : new Response("{}", { status: 503 });
+    const refresh = fetchEpisodeAirDates(98766);
+    assert.deepEqual(cachedEpisodeAirDates(98766), { "1": "2026-01-01", "101": "2026-01-08" });
+    assert.ok(finish);
+    finish(new Response(JSON.stringify({ dates: { "1": "2026-01-02", "3": "2026-01-15" }, hasNextPage: true })));
+    const updated = await refresh;
+    assert.deepEqual(updated, { "1": "2026-01-02", "3": "2026-01-15", "101": "2026-01-08" });
+    assert.deepEqual(cachedEpisodeAirDates(98766), updated);
+    stored.set("animesoul:episode-air-dates:v1", "broken JSON");
+    assert.deepEqual(cachedEpisodeAirDates(98766), {});
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
+});
+
+test("calendar cache keeps history, isolates dubbings and replaces stale predictions", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const stored = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+    getItem: (key: string) => stored.get(key) ?? null,
+    setItem: (key: string, value: string) => stored.set(key, value),
+  } });
+  try {
+    const tracker = { animeId: 1, title: "Test", knownEpisodes: 1, dubs: ["A"] };
+    const past = { animeId: 1, originId: 1, episode: "1", title: "Test", date: 1000, pending: false };
+    const future = { ...past, episode: "2", date: Date.now() + 86400000, future: true };
+    cacheCalendarEvents(tracker, [past, future]);
+    assert.deepEqual(cachedCalendarEvents(tracker), [past, future]);
+    assert.deepEqual(cachedCalendarEvents({ ...tracker, dubs: ["B"] }), []);
+    assert.deepEqual(mergeCalendarEvents([past, future], [], false), [past, future]);
+    assert.deepEqual(mergeCalendarEvents([past, future], [], true), [past]);
+    const corrected = { ...past, date: 2000 };
+    assert.deepEqual(mergeCalendarEvents([past], [corrected], true), [corrected]);
+    const unknown = { ...past, date: 0 };
+    assert.deepEqual(mergeCalendarEvents([past], [unknown], false), [past]);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
+});
 
 test("episode air dates use original part numbering and never provider update timestamps", () => {
   const video = { video_id: 1, number: "13", originNumber: "1", date: 1788537229,
@@ -312,13 +410,15 @@ test("custom player and downloads require the complete Kodik secret access pair"
   assert.equal(hasKodikSecretAccess({ kodikPublicKeyConfigured: false, kodikPrivateKeyConfigured: true }), false);
 });
 
-test("player preferences follow manual override, global preferred voice, favourites, then provider", () => {
+test("player preferences follow manual override, global preferred voice, favourites, then first available", () => {
   const available = ["Kodik default", "AniLibria", "Dream Cast"];
   assert.equal(preferredDubbing(available, "Dream Cast", "AniLibria", [], "Kodik default"), "Dream Cast");
   assert.equal(preferredDubbing(available, "", "Dream Cast", ["AniLibria"], "Kodik default"), "Dream Cast");
   assert.equal(preferredDubbing(available, "", "Missing", ["AniLibria", "Dream Cast"], "Kodik default"), "AniLibria");
   assert.equal(preferredDubbing(available, "", "", ["Missing"], "Kodik default"), "Kodik default");
   assert.equal(preferredDubbing(available, "", "", [], ""), "Kodik default");
+  assert.equal(preferredDubbing(["First", "Provider"], "Missing", "Missing", ["Missing"], "Provider"), "First");
+  assert.equal(preferredDubbing(["First", "Favourite"], "Missing", "Missing", ["Missing", "Favourite"]), "Favourite");
 });
 
 test("dubbing switches never substitute another episode", () => {
@@ -357,7 +457,7 @@ test("episode selection applies global voices before an old resume voice", () =>
   );
   assert.equal(
     preferredDubbingForEpisode(videos, "3", "", "Favourite", ["Favourite"], "Missing", "Fallback"),
-    "Fallback",
+    "Resume voice",
   );
   assert.equal(
     preferredDubbingForEpisode(videos, "3", "Fallback", "Favourite", [], "Resume voice", ""),
@@ -456,7 +556,7 @@ test("custom player pins HLS to the requested quality instead of auto ABR", () =
   assert.equal(hlsLevelForQuality(levels, 240), 0);
 });
 
-test("custom player keeps the picture when only the dubbing changes", () => {
+test("custom player identifies dubbing changes without treating them as edit compatibility", () => {
   const previous = {
     videoId: 1,
     season: 3,
@@ -1121,6 +1221,29 @@ test("continue watching uses the newest real playback position", () => {
   assert.equal(episodeResumePosition(point?.state), 92);
 });
 
+test("continue watching follows viewing time after returning to an earlier season", () => {
+  for (const position of [2, 380, 1_440]) {
+    const point = latestResumePoint({
+      season: 1,
+      episode: "3",
+      dub: "AniLibria",
+      episodes: {
+        "1:3": {
+          position, duration: 1_440, percent: Math.round(position / 1_440 * 100),
+          completed: position === 1_440, updatedAt: 30,
+        },
+        "1:9": { position: 500, duration: 1_440, percent: 35, updatedAt: 10 },
+        "2:1": { position: 92, duration: 1_440, percent: 6, updatedAt: 20 },
+        "2:2": { position: 0, duration: 1_440, percent: 0, updatedAt: 40 },
+      },
+    });
+    assert.equal(point?.key, "1:3", `latest position: ${position}`);
+    assert.equal(point?.season, 1);
+    assert.equal(point?.episode, "3");
+    assert.equal(episodeResumePosition(point?.state), position === 1_440 ? 0 : position);
+  }
+});
+
 test("continue watching resumes an unfinished rewatch", () => {
   const state = {
     position: 92,
@@ -1154,4 +1277,199 @@ test("continue watching resolves a persisted local title before the remote catal
     "Полная карточка",
   );
   assert.equal(resolveResumeAnime([], 1248, undefined), undefined);
+});
+
+
+import { outputSize, replacementPosition } from "../src/features/player/upscale.ts";
+test("upscale fits the target rectangle, preserves aspect and never downsamples", () => {
+  assert.deepEqual(outputSize(1280, 720, 1080), [1920, 1080]);
+  assert.deepEqual(outputSize(1440, 1080, 2160), [2880, 2160]);
+  assert.deepEqual(outputSize(1080, 1920, 1080), [1080, 1920]);
+  assert.deepEqual(outputSize(3840, 2160, 1080), [3840, 2160]);
+  assert.deepEqual(outputSize(0, 720, 1080), [0, 0]);
+});
+test("version replacement rewinds five seconds without inferring scene offsets", () => {
+  assert.deepEqual(replacementPosition(60, 120), { time: 55, outside: false });
+  assert.deepEqual(replacementPosition(3, 120), { time: 0, outside: false });
+  assert.deepEqual(replacementPosition(121, 120), { time: 116, outside: true });
+  assert.deepEqual(replacementPosition(180, 120), { time: 119, outside: true });
+  assert.deepEqual(replacementPosition(60, NaN), { time: 55, outside: false });
+});
+
+import { animeMapRoute, animeRoute, routeFromLocation, routeForView } from "../src/features/navigation/routes.ts";
+import { episodeNotifications } from "../src/lib/notifications.ts";
+
+test("beta routes preserve distinct pages and episode deep links", () => {
+  assert.equal(routeFromLocation("/tracking"), "tracking");
+  assert.equal(routeFromLocation("/library/personal"), "library");
+  assert.equal(routeFromLocation("/anime/1248"), "anime");
+  assert.equal(routeFromLocation("/anime/1248/map"), "animeMap");
+  assert.equal(animeMapRoute(1248), "/anime/1248/map");
+  assert.equal(routeFromLocation("/missing"), "notFound");
+  assert.equal(routeForView("history"), "/history");
+  assert.equal(animeRoute(1248, 2, "13", true, 987), "/anime/1248?season=2&episode=13&play=1&origin=987");
+});
+
+test("new episode notification records keep read state and a target link", () => {
+  const trackers = [{ animeId: 1248, title: "Аниме", knownEpisodes: 3, newEpisodes: 1,
+    pendingEpisodeKeys: ["987:13"], lastNewEpisodeAt: 42 }];
+  const unread = episodeNotifications(trackers, []);
+  assert.equal(unread.length, 1);
+  assert.equal(unread[0].read, false);
+  assert.equal(unread[0].href, "/anime/1248?episode=13&play=1&origin=987");
+  assert.equal(episodeNotifications(trackers, [unread[0].id])[0].read, true);
+});
+
+
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AnimeFacts } from "../src/features/player/AnimeFacts.tsx";
+import { AnimeTrailer } from "../src/features/player/AnimeTrailer.tsx";
+import { ReleaseSchedule } from "../src/features/player/ReleaseSchedule.tsx";
+
+test("release schedule is collapsed and only includes upcoming unaired episodes", () => {
+  const entry = { anime_id: 1, title: "Test" };
+  const group = { number: 1, entries: [entry] };
+  const now = Math.floor(Date.now() / 1000);
+  const html = renderToStaticMarkup(createElement(ReleaseSchedule, {
+    showCountdown: false,
+    rows: [
+      { group, entry, item: { anime_id: 1, episodes: { aired: 2, count: 12, prev_date: now - 100, next_date: now + 3600 } } },
+      { group, entry, item: { anime_id: 1, episodes: { aired: 1, count: 12, next_date: now + 1800 } } },
+      { group, entry, item: { anime_id: 1, episodes: { aired: 2, next_date: now + 3600 } } },
+      { group, entry: { ...entry, anime_id: 2 }, item: { anime_id: 2, episodes: { aired: 0, next_date: now - 1 } } },
+      { group, entry: { ...entry, anime_id: 3 }, item: { anime_id: 3, episodes: { next_date: Infinity } } },
+    ],
+  }));
+  assert.equal((html.match(/<article/g) ?? []).length, 1);
+  assert.match(html, /<details class="release-schedule"><summary>/);
+  assert.match(html, /Серия 3/);
+  assert.doesNotMatch(html, /Серия 1|Серия 2|open=""|role="timer"/);
+  assert.equal(renderToStaticMarkup(createElement(ReleaseSchedule, {
+    rows: [], nextRelease: { anime: entry, timestamp: now - 1, episode: 4 },
+  })), "");
+});
+
+test("anime facts show status without a schedule and a timer with a known release", () => {
+  const anime = { anime_id: 1, title: "Test" };
+  const released = renderToStaticMarkup(createElement(AnimeFacts, { anime, rows: [], metadata: { status: "released" } }));
+  assert.match(released, /Вышло/);
+  assert.doesNotMatch(released, /role="timer"|ГРАФИК ВЫХОДА/);
+  const announced = renderToStaticMarkup(createElement(AnimeFacts, { anime, rows: [], metadata: { status: "anons", next_episode_at: new Date(Date.now() + 3600000).toISOString() } }));
+  assert.match(announced, /Запланировано/);
+  assert.match(announced, /role="timer"/);
+});
+
+test("anime trailer renders only a YouTube embed and removes an empty panel", () => {
+  assert.equal(renderToStaticMarkup(createElement(AnimeTrailer, { animeId: 1, videos: [] })), "");
+  assert.equal(renderToStaticMarkup(createElement(AnimeTrailer, { animeId: 1, videos: [{ url: "https://example.com/video.mp4" }] })), "");
+  const trailer = renderToStaticMarkup(createElement(AnimeTrailer, { animeId: 1, videos: [{ url: "https://www.youtube.com/watch?v=abcdefghijk" }] }));
+  assert.match(trailer, /<iframe/);
+  assert.match(trailer, /https:\/\/www.youtube-nocookie.com\/embed\/abcdefghijk/);
+});
+
+
+test("anime information links use catalog filter values and a single premiere year", () => {
+  const anime = { anime_id: 1, title: "Test", year: 2024, type: { name: "TV Сериал" }, anime_status: { title: "Выходит" } };
+  const html = renderToStaticMarkup(createElement(AnimeFacts, { anime, rows: [] }));
+  assert.match(html, /href="\/catalog\?format=series"/);
+  assert.match(html, /href="\/catalog\?status=airing"/);
+  assert.match(html, /href="\/catalog\?yearFrom=2024&amp;yearTo=2024"/);
+  assert.match(html, /anime-facts-inline/);
+  const detailed = renderToStaticMarkup(createElement(AnimeFacts, { anime, rows: [], metadata: { kind: "movie", status: "anons", aired_on: "2027-03-01", duration: 90 } }));
+  assert.match(detailed, /href="\/catalog\?format=movie"/);
+  assert.match(detailed, /href="\/catalog\?status=planned"/);
+  assert.match(detailed, /yearFrom=2027&amp;yearTo=2027/);
+  assert.doesNotMatch(detailed, /anime-facts-inline/);
+});
+
+
+import { animeCatalogFilters, animeFormat } from "../src/lib/catalogFilters.ts";
+
+test("format links distinguish specials and OVA from TV series", () => {
+  const anime = { anime_id: 1, title: "Test", type: { name: "OVA" } };
+  assert.equal(animeFormat(anime), "ova");
+  assert.equal(animeCatalogFilters(anime).format, "ova");
+  assert.equal(animeFormat(anime, "tv_special"), "special");
+  assert.equal(animeFormat(anime, "tv"), "series");
+});
+
+
+import { fetchTitleTrailers, metadataTrailers, preferredTrailerGroup } from "../src/features/player/franchiseTrailers.ts";
+
+test("franchise trailers prefer the current season, any closest previous, then next", () => {
+  assert.equal(preferredTrailerGroup([0, 2, 4], 2), 2);
+  assert.equal(preferredTrailerGroup([0, 2, 4], 3), 2);
+  assert.equal(preferredTrailerGroup([0, 4], 3), 0);
+  assert.equal(preferredTrailerGroup([2, 4], 0), 2);
+  assert.equal(preferredTrailerGroup([], 0), undefined);
+});
+
+test("franchise trailers exclude openings and duplicates and never retain autoplay", () => {
+  const videos = metadataTrailers([
+    { kind: "pv", url: "https://www.youtube.com/watch?v=abcdefghijk&autoplay=1" },
+    { kind: "cm", url: "https://youtu.be/abcdefghijk" },
+    { kind: "op", url: "https://youtu.be/zyxwvutsrqp" },
+  ]);
+  assert.equal(videos.length, 1);
+  assert.equal(videos[0].url, "https://www.youtube-nocookie.com/embed/abcdefghijk");
+});
+
+test("franchise trailer loading merges providers and caches requests", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = async input => {
+    const url = String(input);
+    calls.push(url);
+    return new Response(JSON.stringify(url.includes("mode=shikimori")
+      ? { metadata: { videos: [{ kind: "pv", url: "https://youtu.be/abcdefghijk" }, { kind: "pv", url: "https://youtu.be/zyxwvutsrqp" }] } }
+      : { trailers: [{ url: "https://youtu.be/abcdefghijk" }] }), { status: 200 });
+  };
+  try {
+    const anime = { anime_id: 991234, title: "Season 2", remote_ids: { shikimori_id: 991235 } };
+    const trailers = await fetchTitleTrailers(anime);
+    assert.equal(trailers.length, 2);
+    assert.deepEqual(await fetchTitleTrailers(anime), trailers);
+    assert.equal(calls.length, 2);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+
+import { AmbientBackdrop } from "../src/components/AmbientBackdrop.tsx";
+
+test("shared ambient respects its title identity and the global off switch", () => {
+  const anime = { anime_id: 123, title: "Last watched", poster: { big: "/poster-123.jpg" } };
+  assert.match(renderToStaticMarkup(createElement(AmbientBackdrop, { anime })), /src="\/poster-123.jpg"/);
+  assert.doesNotMatch(renderToStaticMarkup(createElement(AmbientBackdrop, { anime, animeId: 456 })), /<img/);
+  assert.equal(renderToStaticMarkup(createElement(AmbientBackdrop, { anime, enabled: false })), "");
+  assert.doesNotMatch(renderToStaticMarkup(createElement(AmbientBackdrop, {})), /<img/);
+});
+
+
+import { monthDays, dateKey } from "../src/pages/tracking/calendarDates.ts";
+
+test("calendar always has six full weeks, Monday first, including leap years", () => {
+  const leap = monthDays(new Date(2024, 1, 1));
+  assert.equal(leap.length, 42);
+  assert.equal(leap.filter(day => day.getMonth() === 1).length, 29);
+  assert.equal(dateKey(leap[0]), "2024-01-29");
+  assert.equal(dateKey(leap[41]), "2024-03-10");
+  assert.equal(dateKey(leap[3]!), "2024-02-01");
+  const feb = monthDays(new Date(2026, 1, 1));
+  assert.equal(feb.length, 42);
+  assert.equal(feb.filter(day => day.getMonth() === 1).length, 28);
+  assert.equal(dateKey(feb[6]!), "2026-02-01");
+  const january = monthDays(new Date(2027, 0, 1));
+  assert.equal(dateKey(january[4]!), "2027-01-01");
+  assert.equal(january.filter(day => day.getMonth() === 0).length, 31);
+  assert.equal(dateKey(january[0]), "2026-12-28");
+  assert.equal(dateKey(january[41]), "2027-02-07");
+  for (const days of [leap, feb, january, monthDays(new Date(2026, 2, 1))]) {
+    assert.equal(days[0].getDay(), 1);
+    for (let i = 1; i < days.length; i++) {
+      const next = new Date(days[i - 1]);
+      next.setDate(next.getDate() + 1);
+      assert.equal(dateKey(days[i]), dateKey(next));
+    }
+  }
 });

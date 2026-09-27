@@ -366,8 +366,8 @@ async def _sync_drive_impl(payload: SyncRequest) -> dict[str, Any]:
         merged = merge_storage_documents(
             local_doc, cloud_doc or {}, prefer_watched=payload.prefer_watched, anime_only=True
         )
-        await local_storage.write(merged)
         file_id = await gdrive_service.write_cloud_storage(merged, mode=payload.folder_mode)
+        await local_storage.write(merged)
         gdrive_service.update_cloud_status(has_cloud_file=bool(file_id), choice_pending=False)
         return {"status": "merged", "file_id": file_id, "document": merged}
 
@@ -391,8 +391,8 @@ async def _sync_drive_impl(payload: SyncRequest) -> dict[str, Any]:
         merged = merge_storage_documents(
             local_doc, cloud_doc, prefer_watched=payload.prefer_watched
         )
-        await local_storage.write(merged)
         file_id = await gdrive_service.write_cloud_storage(merged, mode=payload.folder_mode)
+        await local_storage.write(merged)
         gdrive_service.update_cloud_status(has_cloud_file=bool(file_id), choice_pending=False)
         return {"status": "merged", "file_id": file_id, "document": merged}
 
@@ -423,4 +423,6 @@ async def sync_drive(payload: SyncRequest) -> dict[str, Any]:
         gdrive_service.mark_sync_failed(error)
         raise
     gdrive_service.mark_sync_succeeded()
+    if payload.resolve_initial_choice:
+        logger.info("Google Drive initial synchronization choice completed: mode=%s", payload.mode)
     return result

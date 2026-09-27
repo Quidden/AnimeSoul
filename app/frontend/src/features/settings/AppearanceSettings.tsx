@@ -38,6 +38,32 @@ export function AppearanceSettings({
           ><i /></button>
         </Setting>}
         <Setting
+          title="Жидкое стекло шапки"
+          description="Полупрозрачная шапка с размытием фона и мягкими бликами. При выключении шапка становится непрозрачной в цвете выбранной темы."
+          searchTerms="liquid glass стекло шапка прозрачность размытие"
+        >
+          <button
+            type="button"
+            className={`toggle${playerPrefs.headerGlass !== false ? " on" : ""}`}
+            aria-label="Жидкое стекло шапки"
+            aria-pressed={playerPrefs.headerGlass !== false}
+            onClick={() => updatePlayerPrefs({ headerGlass: playerPrefs.headerGlass === false })}
+          ><i /></button>
+        </Setting>
+        <Setting
+          title="Эмбиент интерфейса"
+          description="Плавно движущийся фон в цветах последнего аниме и подсветка трейлера. Без истории используются цвета темы. Для YouTube подсветка берётся из обложки, для прямого видео — из кадров. Системное уменьшение движения учитывается."
+          searchTerms="ambient эмбиент подсветка свечение постер фон"
+        >
+          <button
+            type="button"
+            className={`toggle${playerPrefs.animeAmbient !== false ? " on" : ""}`}
+            aria-label="Эмбиент интерфейса"
+            aria-pressed={playerPrefs.animeAmbient !== false}
+            onClick={() => updatePlayerPrefs({ animeAmbient: playerPrefs.animeAmbient === false })}
+          ><i /></button>
+        </Setting>
+        <Setting
           title="Собственная палитра"
           description="Основной цвет меняет фон интерфейса, акцентный — кнопки, индикаторы и выделения."
         >

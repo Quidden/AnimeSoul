@@ -9,6 +9,7 @@ type SyncMode = "merge" | "anime_only" | "cloud" | "local";
 type Props = {
   open: boolean;
   syncing: boolean;
+  error: string;
   onClose: () => void;
   onSync: (mode: SyncMode) => void;
 };
@@ -41,7 +42,7 @@ const dialogStyle = {
   boxSizing: "border-box",
 } as const;
 
-export function GoogleDriveInitialSyncModal({ open, syncing, onClose, onSync }: Props) {
+export function GoogleDriveInitialSyncModal({ open, syncing, error, onClose, onSync }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalAccessibility(open, onClose, dialogRef);
 
@@ -52,11 +53,12 @@ export function GoogleDriveInitialSyncModal({ open, syncing, onClose, onSync }: 
       <div ref={dialogRef} style={dialogStyle} onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="gdrive-sync-choice-title" tabIndex={-1}>
         <div className="settings-sync-choice-heading">
           <h3 id="gdrive-sync-choice-title">☁ Подключение Google Drive</h3>
-          <button onClick={onClose} aria-label="Закрыть">×</button>
+          <button onClick={onClose} aria-label="Закрыть" disabled={syncing}>×</button>
         </div>
         <p className="settings-sync-choice-lead">
           На Google Drive найдены ранее сохранённые данные. Выберите, как объединить их с текущим профилем.
         </p>
+        {error && <p className="settings-sync-choice-error" role="alert">{error}</p>}
         <div className="settings-sync-choice-list">
           <button onClick={() => onSync("merge")} disabled={syncing} className="sync-choice-btn sync-choice-btn-primary">
             <b>Умное объединение — рекомендуется</b>

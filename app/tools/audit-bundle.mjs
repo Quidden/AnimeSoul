@@ -39,7 +39,9 @@ const assetDirectory = path.join(distDirectory, "assets");
 const javaScriptFiles = fs.readdirSync(assetDirectory)
   .filter(fileName => fileName.endsWith(".js"))
   .map(fileName => path.join(assetDirectory, fileName));
+const anime4kChunk = javaScriptFiles.find(filePath => /Render Bind Group Layout|WebGPU not supported|texture_2d/.test(fs.readFileSync(filePath, "utf8")));
 const largestJavaScript = javaScriptFiles
+  .filter(filePath => filePath !== anime4kChunk)
   .map(filePath => ({ filePath, ...sizeOf(filePath) }))
   .sort((left, right) => right.raw - left.raw)[0];
 
@@ -47,6 +49,7 @@ const budgets = {
   entryJavaScript: 305 * 1024,
   entryStyles: 315 * 1024,
   largestJavaScript: 580 * 1024,
+  anime4k: 4 * 1024 * 1024,
 };
 const measurements = [
   { label: "entry JavaScript", filePath: entryJavaScript, ...sizeOf(entryJavaScript), limit: budgets.entryJavaScript },
@@ -62,6 +65,16 @@ for (const measurement of measurements) {
     `${passed ? "ok" : "over budget"}: ${measurement.label} ${kib(measurement.raw)} `
       + `(gzip ${kib(measurement.gzip)}, limit ${kib(measurement.limit)}) `
       + `— ${path.basename(measurement.filePath)}`,
+  );
+}
+
+if (anime4kChunk) {
+  const measurement = { label: "Anime4K lazy chunk", filePath: anime4kChunk, ...sizeOf(anime4kChunk), limit: budgets.anime4k };
+  const passed = measurement.raw <= measurement.limit;
+  if (!passed) failed = true;
+  console.log(
+    `${passed ? "ok" : "over budget"}: ${measurement.label} ${kib(measurement.raw)} `
+      + `(gzip ${kib(measurement.gzip)}, limit ${kib(measurement.limit)}) — ${path.basename(measurement.filePath)}`,
   );
 }
 

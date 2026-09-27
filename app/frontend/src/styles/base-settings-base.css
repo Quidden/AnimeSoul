@@ -7,11 +7,9 @@
   background: #17131c;
   color: var(--accent);
   font-size: 17px;
-  transition: transform .2s ease,border-color .2s ease,background .2s ease;
 }
 
 .settings-center-trigger:hover {
-  transform: rotate(12deg);
   border-color: var(--accent);
   background: var(--accent-soft);
 }

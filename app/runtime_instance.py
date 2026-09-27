@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from backend.app.version import APP_VERSION
+
 
 RUNTIME_STATE_FILENAME = "animesoul.runtime.json"
 RUNTIME_API_CAPABILITIES = frozenset({"kodik-direct-stream-v1"})
@@ -23,6 +25,9 @@ def runtime_api_is_compatible(payload: object) -> bool:
     """Return whether a running server supports this client's required API."""
 
     if not isinstance(payload, dict):
+        return False
+    # API compatibility alone can silently reopen the previous release's UI.
+    if payload.get("version") != APP_VERSION:
         return False
     capabilities = payload.get("capabilities")
     if not isinstance(capabilities, list):

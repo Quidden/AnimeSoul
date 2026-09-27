@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from backend.app.version import APP_VERSION
+
 from runtime_instance import (
     find_available_port,
     read_runtime_state,
@@ -92,9 +94,16 @@ class RuntimeInstanceTests(unittest.TestCase):
         self.assertFalse(runtime_api_is_compatible({"ok": True}))
         self.assertTrue(
             runtime_api_is_compatible(
-                {"capabilities": ["kodik-direct-stream-v1", "future-feature"]}
+                {"version": APP_VERSION, "capabilities": ["kodik-direct-stream-v1", "future-feature"]}
             )
         )
+
+    def test_previous_release_is_not_reused(self) -> None:
+        for version in (None, "0.2.3", "0.2.7", "99.0.0"):
+            with self.subTest(version=version):
+                self.assertFalse(runtime_api_is_compatible({
+                    "version": version, "capabilities": ["kodik-direct-stream-v1"],
+                }))
 
 
 if __name__ == "__main__":

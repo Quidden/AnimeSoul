@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { Anime, AnimeProgress, SeasonGroup, Tracker, Video } from "../../lib/types";
-import { durationRange, isExtraAnime, shikimoriAnimeUrl } from "../../lib/anime";
 
 interface WatchInfoProps {
   anime: Anime;
@@ -11,16 +10,12 @@ interface WatchInfoProps {
   dubs: string[];
   activeDub: string;
   familyTitle: string;
-  favorite: boolean;
   tracker?: Tracker;
   totalEpisodes: number;
   totalDuration: number;
   downloadAvailable: boolean;
   downloadActive: boolean;
   downloadStatus?: string;
-  onGenre: (genre: string) => void;
-  onFavorite: () => void;
-  onFolders: () => void;
   onDownload: () => void;
   onTrack: (
     knownEpisodeCount: number,
@@ -33,24 +28,19 @@ interface WatchInfoProps {
   onResetProgress: (value: AnimeProgress) => void;
 }
 
-/** Description, franchise facts, library actions, and tracking controls. */
+/** Actions below the title poster, including downloads and tracking. */
 export function WatchInfo({
-  anime,
   seasons,
   seasonVideos,
   dubs,
   activeDub,
   familyTitle,
-  favorite,
   tracker,
   totalEpisodes,
   totalDuration,
   downloadAvailable,
   downloadActive,
   downloadStatus,
-  onGenre,
-  onFavorite,
-  onFolders,
   onDownload,
   onTrack,
   onUntrack,
@@ -59,7 +49,6 @@ export function WatchInfo({
   const [trackingOpen, setTrackingOpen] = useState(false);
   const [trackedDubs, setTrackedDubs] = useState<string[]>(tracker?.dubs ?? []);
   const allVideos = Object.values(seasonVideos).flat();
-  const shikimoriUrl = shikimoriAnimeUrl(anime);
 
   const saveTracking = () => {
     const knownEpisodeKeys = [
@@ -88,38 +77,8 @@ export function WatchInfo({
     });
   };
 
-  return <div className="watch-info">
-    <div>
-      <div className="tags">
-        {anime.genres?.slice(0, 8).map(genre =>
-          <button type="button" key={genre.alias} onClick={() => onGenre(genre.title)}>
-            {genre.title}
-          </button>,
-        )}
-      </div>
-      <p>{anime.description}</p>
-      <a
-        className="watch-info-shikimori-link"
-        href={shikimoriUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={`Открыть «${anime.title}» на Shikimori`}
-      >
-        <span aria-hidden="true">↗</span> Страница аниме на Shikimori
-      </a>
-      <div className="facts">
-        <span>{seasons.length > 1 ? "◆ Франшиза · всё собрано" : "◇ Отдельный тайтл"}</span>
-        <span>{seasons.filter(season => season.kind === "season").length} сезонов</span>
-        <span>{seasons.flatMap(season => season.entries).filter(isExtraAnime).length} OVA/ONA/спешлов</span>
-        <span>{seasons.filter(season => season.kind === "movie").length} фильмов</span>
-        <span>{totalEpisodes} видео всего</span>
-        <span>{durationRange(allVideos)}</span>
-      </div>
-    </div>
-
+  return <div className="watch-poster-actions">
     <aside>
-      <button onClick={onFavorite}>{favorite ? "♥ В избранном" : "♡ В избранное"}</button>
-      <button onClick={onFolders}>＋ Добавить в папку</button>
       {downloadAvailable && (
         <button
           className={downloadActive ? "download-active" : undefined}

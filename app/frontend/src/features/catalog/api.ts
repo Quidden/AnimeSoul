@@ -13,6 +13,7 @@ type SchedulePayload = {schedule?: ScheduleEntry[]; error?: string};
 type TrailerPayload = {trailers?: unknown; error?: string};
 
 type CatalogPageOptions = {
+    status?: "airing";
     limit: number;
     offset: number;
     query?: string;
@@ -50,12 +51,12 @@ const videoCache = new Map<number, { expiresAt: number; request: Promise<AnimeVi
 const detailsCache = new Map<number, { expiresAt: number; request: Promise<Anime | undefined> }>();
 
 /** Load one catalog page. Filtering and franchise grouping stay in selectors/UI code. */
-export async function fetchCatalogPage({limit, offset, query}: CatalogPageOptions): Promise<Anime[]> {
+export async function fetchCatalogPage({limit, offset, query, status}: CatalogPageOptions): Promise<Anime[]> {
     const normalizedQuery = query?.trim();
-    if (normalizedQuery && offset === 0) {
+    if (normalizedQuery && offset === 0 && !status) {
         return cachedCatalogSearch(normalizedQuery, limit);
     }
-    return requestCatalogPage({limit, offset, query: normalizedQuery});
+    return requestCatalogPage({limit, offset, query: normalizedQuery, status});
 }
 
 /** Start a search before submit so Enter can reuse the same in-flight request. */
@@ -97,13 +98,14 @@ function trimCatalogSearchCache(now: number) {
     }
 }
 
-async function requestCatalogPage({limit, offset, query}: CatalogPageOptions) {
+async function requestCatalogPage({limit, offset, query, status}: CatalogPageOptions) {
     const params = new URLSearchParams({
         mode: "catalog",
         limit: String(limit),
         offset: String(offset),
     });
     if (query) params.set("q", query);
+    if (status) params.set("status", status);
     const payload = await requestJson<AnimePayload>(`/api/yummy?${params.toString()}`);
     return payload.anime ?? [];
 }
@@ -249,7 +251,7 @@ export async function fetchReleaseSchedule(): Promise<ScheduleEntry[]> {
     return payload.schedule ?? [];
 }
 
-function normalizeTrailers(payload: unknown): HeroTrailer[] {
+export function normalizeTrailers(payload: unknown): HeroTrailer[] {
     const candidates: HeroTrailer[] = [];
     const visited = new Set<unknown>();
 

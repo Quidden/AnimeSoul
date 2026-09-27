@@ -1,3 +1,4 @@
+import { AmbientBackdrop } from "./components/AmbientBackdrop";
 import {
     lazy,
     Suspense,
@@ -14,6 +15,9 @@ import { FolderPicker } from "./components/FolderPicker";
 import { AppFooter } from "./components/AppFooter";
 import { Header } from "./components/Header";
 import { useCatalogController } from "./features/catalog/useCatalogController";
+import { fetchAnimeDetails } from "./features/catalog/api";
+import { animeRoute, navigateTo, routeFromLocation } from "./features/navigation/routes";
+import { trackUiAction } from "./lib/uiAnalytics";
 import { useCatalogPresentation } from "./features/catalog/useCatalogPresentation";
 import {
     calculateAnimeProgress,
@@ -34,12 +38,15 @@ import { usePartyHostPlayback } from "./features/watch-party/usePartyHostPlaybac
 import type { Anime, Folder } from "./lib/types";
 import { STORAGE_KEYS as K } from "./lib/settings";
 import { writeLocal as write } from "./lib/storage";
+import { readLocal as read } from "./lib/storage";
+import { episodeNotifications, NOTIFICATION_READ_KEY } from "./lib/notifications";
 import {
     animeSearchScore,
     reorder,
 } from "./lib/anime";
 import { compareTrackedByRelease } from "./lib/tracking";
 import { CatalogPage } from "./pages/CatalogPage";
+import { LibraryPage } from "./pages/LibraryPage";
 import {
     HomePage,
     type HomePageActions,
@@ -49,6 +56,8 @@ import { hasUserRatings, setUserRating, type RatingTarget } from "./lib/ratings"
 import { useCommunityRatings } from "./features/ratings/useCommunityRatings";
 import { IS_ANDROID_APP } from "./lib/platform";
 import { CastSessionBar } from "./features/player/CastSessionBar";
+import { useLanPeers } from "./features/devices/useLanPeers";
+const LanRemotePanel = lazy(() => import("./features/devices/LanRemotePanel").then(m => ({ default: m.LanRemotePanel })));
 import { useLanControl } from "./features/devices/useLanControl";
 
 const CollectionOverview = lazy(() => import("./components/CollectionOverview").then(module => ({
@@ -65,6 +74,10 @@ const StatisticsPage = lazy(() => import("./pages/StatisticsPage").then(module =
 })));
 
 export default function Home() {
+    const [routeLoading, setRouteLoading] = useState(false);
+    const [routeError, setRouteError] = useState("");
+    const lanPeers = useLanPeers();
+    const [watchMode, setWatchMode] = useState<"phone" | "remote">("phone");
     const catalogRef = useRef<Anime[]>([]);
     const {
         favorites,
@@ -111,9 +124,11 @@ export default function Home() {
     const {
         active,
         catalog,
+        ongoing,
         error,
         dubbingFilter,
         formatFilter,
+        statusFilter,
         genre,
         groupFilter,
         loading,
@@ -138,6 +153,7 @@ export default function Home() {
         setCatalog,
         setDubbingFilter,
         setFormatFilter,
+        setStatusFilter,
         setGenre,
         setGroupFilter,
         setNewEpisodeRequested,
@@ -162,6 +178,86 @@ export default function Home() {
         setProgress,
     });
     catalogRef.current = catalog;
+    useEffect(() => {
+        let request = 0;
+        const syncRoute = () => {
+            const sequence = ++request;
+            const route = routeFromLocation();
+            setRouteError("");
+            if (route === "anime" || route === "animeMap") {
+                const animeId = Number(window.location.pathname.split("/")[2]);
+                trackUiAction("anime_open", {animeId});
+                const cached = catalogRef.current.find(item => item.anime_id === animeId);
+                if (cached) {
+                    setActive(cached);
+                    setWatchForeground(true);
+                    setView("catalog");
+                    setRouteLoading(false);
+                    return;
+                }
+                setRouteLoading(true);
+                setActive(null);
+                void fetchAnimeDetails([animeId]).then(items => {
+                    if (sequence !== request) return;
+                    if (!items[0]) {
+                        setActive(null);
+                        setView("notFound");
+                        return;
+                    }
+                    setCatalog(current => current.some(item => item.anime_id === animeId) ? current : [...current, items[0]]);
+                    setActive(items[0]);
+                    setWatchForeground(true);
+                    setView("catalog");
+                }).catch(() => {
+                    if (sequence === request) setRouteError("Не удалось загрузить страницу аниме.");
+                }).finally(() => {
+                    if (sequence === request) setRouteLoading(false);
+                });
+                return;
+            }
+            setRouteLoading(false);
+            setActive(null);
+            setView(route);
+            if (route === "catalog") {
+                const params = new URLSearchParams(window.location.search);
+                setQuery(params.get("q") ?? "");
+                setGenre(params.get("genre") ?? "Все");
+                setSort(params.get("sort") ?? "rating-desc");
+                setYearFrom(params.get("yearFrom") ?? "");
+                setYearTo(params.get("yearTo") ?? "");
+                setGroupFilter(params.get("group") ?? "all");
+                setFormatFilter(params.get("format") ?? "all");
+                setStatusFilter(params.get("status") ?? "all");
+                setDubbingFilter(params.get("dubbing") ?? "all");
+                setRatingSource(params.get("ratingSource") ?? "average");
+                setRatingFrom(params.get("ratingFrom") ?? "");
+            }
+        };
+        window.addEventListener("popstate", syncRoute);
+        window.addEventListener("animesoul:navigation", syncRoute);
+        syncRoute();
+        return () => {
+            request += 1;
+            window.removeEventListener("popstate", syncRoute);
+            window.removeEventListener("animesoul:navigation", syncRoute);
+        };
+    }, [setActive, setCatalog, setDubbingFilter, setFormatFilter, setStatusFilter, setGenre, setGroupFilter, setQuery, setRatingFrom, setRatingSource, setSort, setView, setYearFrom, setYearTo]);
+    useEffect(() => {
+        if (view !== "catalog" || active || routeLoading || window.location.pathname !== "/catalog") return;
+        const params = new URLSearchParams();
+        const values: [string, string, string][] = [
+            ["q", query, ""], ["genre", genre, "Все"], ["sort", sort, "rating-desc"],
+            ["yearFrom", yearFrom, ""], ["yearTo", yearTo, ""], ["group", groupFilter, "all"],
+            ["format", formatFilter, "all"], ["dubbing", dubbingFilter, "all"],
+            ["status", statusFilter, "all"],
+            ["ratingSource", ratingSource, "average"], ["ratingFrom", ratingFrom, ""],
+        ];
+        for (const [key, value, fallback] of values) if (value !== fallback) params.set(key, value);
+        const currentPage = new URLSearchParams(window.location.search).get("page");
+        if (currentPage && Number(currentPage) > 1) params.set("page", currentPage);
+        const search = params.toString();
+        navigateTo(`/catalog${search ? `?${search}` : ""}`);
+    }, [view, active, routeLoading, query, genre, sort, yearFrom, yearTo, groupFilter, formatFilter, statusFilter, dubbingFilter, ratingSource, ratingFrom]);
     const communityAnimeIds = useMemo(
         () => [...new Set([
             ...catalog.map(anime => anime.anime_id),
@@ -270,6 +366,7 @@ export default function Home() {
         active,
         catalog,
         formatFilter,
+        statusFilter,
         dubbingFilter,
         genre,
         groupFilter,
@@ -311,6 +408,16 @@ export default function Home() {
     );
     const sortedTracked = useMemo(() => [...tracked].sort(compareTrackedByRelease), [tracked]);
     const totalNewEpisodes = useMemo(() => tracked.reduce((sum, t) => sum + t.newEpisodes, 0), [tracked]);
+    const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => read(NOTIFICATION_READ_KEY, []));
+    const notifications = useMemo(() => episodeNotifications(tracked, readNotificationIds), [tracked, readNotificationIds]);
+    useEffect(() => {
+        if (view !== "tracking") return;
+        const unread = notifications.filter(item => !item.read);
+        if (!unread.length) return;
+        const nextRead = [...new Set([...readNotificationIds, ...unread.map(item => item.id)])];
+        setReadNotificationIds(nextRead);
+        write(NOTIFICATION_READ_KEY, nextRead);
+    }, [view, notifications, readNotificationIds]);
     const animeProgress = calculateAnimeProgress;
     const folderStats = (folder: Folder) => calculateFolderProgress(folder, progress);
     const statistics = useMemo(
@@ -381,18 +488,33 @@ export default function Home() {
         if (IS_ANDROID_APP && view === "ratings") showRatings();
         else openLibrary();
     };
+    const showTracking = () => {
+        const nextRead = [...new Set([...readNotificationIds, ...notifications.map(item => item.id)])];
+        setReadNotificationIds(nextRead);
+        write(NOTIFICATION_READ_KEY, nextRead);
+        setActive(null); setView("tracking"); navigateTo("/tracking"); window.scrollTo({top: 0});
+    };
+    const showCollections = () => { setActive(null); setView("library"); navigateTo("/library"); window.scrollTo({top: 0}); };
+    const showHistory = () => { setActive(null); setView("history"); navigateTo("/history"); window.scrollTo({top: 0}); };
     const sharedHeaderProps = {
         query,
         setQuery,
-        activeView: active && watchForeground
+        activeView: view === "remote" ? "watch" as const : active && watchForeground
             ? (IS_ANDROID_APP ? "watch" as const : "catalog" as const)
             : view,
         onHome: goHome,
         onLibrary: showMobileStatisticsSection,
         onRatings: showRatings,
         onDownloads: showDownloads,
-        onCurrent: showCurrent,
-        hasCurrent: Boolean(active),
+        onTracking: showTracking,
+        onCollections: showCollections,
+        onHistory: showHistory,
+        hasNewEpisodes: notifications.some(item => !item.read),
+        onCurrent: () => {
+            if (IS_ANDROID_APP && (watchMode === "remote" || !active)) { setWatchMode("remote"); setView("remote"); setWatchForeground(false); }
+            else showCurrent();
+        },
+        hasCurrent: Boolean(active) || (IS_ANDROID_APP && lanPeers.length > 0),
         theme,
         setTheme,
         playerPrefs,
@@ -408,6 +530,11 @@ export default function Home() {
         onImport: importConfig,
         onStorageReload: reloadStorage,
     };
+    useEffect(() => { if (watchForeground && active) setWatchMode("phone"); }, [watchForeground, active]);
+    const watchModes = IS_ANDROID_APP && <nav className="mobile-section-tabs" aria-label="Режим просмотра">
+        <button className={watchMode === "phone" ? "active" : undefined} aria-pressed={watchMode === "phone"} onClick={() => { setWatchMode("phone"); if (active) showCurrent(); }}>Смотрю на телефоне</button>
+        <button className={watchMode === "remote" ? "active" : undefined} aria-pressed={watchMode === "remote"} onClick={() => { setWatchMode("remote"); setWatchForeground(false); setView("remote"); }}>Пульт</button>
+    </nav>;
     let activeWatch: ReactNode = null;
     if (active) {
         const activeTracker = tracked.find(tracker => (
@@ -415,11 +542,11 @@ export default function Home() {
             || tracker.animeIds?.includes(active.anime_id)
         ));
         const watchHeader = (
-            <Header
+            <> <Header
                 {...sharedHeaderProps}
                 onSearch={searchCatalog}
                 onCatalog={IS_ANDROID_APP ? showMobileCatalogSection : showCatalog}
-            />
+            />{watchModes}</>
         );
         const activeWatchActions = createActiveWatchActions({
             anime: active,
@@ -570,10 +697,7 @@ export default function Home() {
         animeProgress,
         folderStats,
         openAnime,
-        chooseCatalog: () => {
-            setView("catalog");
-            window.scrollTo({top: 0, behavior: "smooth"});
-        },
+        chooseCatalog: showCatalog,
         openCollection: kind => setCollectionOverview(kind),
         updatePlayerPrefs: patch => {
             const next = {...playerPrefs, ...patch};
@@ -593,7 +717,8 @@ export default function Home() {
         removeFromFolder,
         openKnownAnime: animeId => {
             const anime = known(animeId);
-            if (anime) setActive(anime);
+            if (anime) openAnime(anime);
+            else navigateTo(animeRoute(animeId));
         },
         watchNewEpisode: animeId => {
             const anime = known(animeId);
@@ -601,6 +726,7 @@ export default function Home() {
             setResumeRequested(false);
             setNewEpisodeRequested(true);
             setActive(anime);
+            navigateTo(animeRoute(animeId, undefined, undefined, true));
         },
         untrack: animeId => {
             saveTracked(tracked.filter(item => item.animeId !== animeId));
@@ -642,13 +768,19 @@ export default function Home() {
                 },
             });
             openAnime(anime, true);
+            navigateTo(animeRoute(item.animeId, item.season, item.episode, true), true);
         },
     };
 
     return (
       <>
         {activeWatch}
-        {(!active || !watchForeground) && <main className="app">
+        {(!active || !watchForeground) && <main className="app ambient-page">
+            <AmbientBackdrop
+                anime={heroPreviewAnime ?? lastAnime}
+                animeId={lastPoint?.state.originAnimeId ?? lastState?.originAnimeId ?? lastAnime?.anime_id ?? (last ? Number(last.animeId) : undefined)}
+                enabled={playerPrefs.animeAmbient !== false}
+            />
             {IS_ANDROID_APP && <CastSessionBar />}
             <Header
                 {...sharedHeaderProps}
@@ -656,6 +788,7 @@ export default function Home() {
                 onCatalog={IS_ANDROID_APP ? showMobileCatalogSection : showCatalog}
             />
 
+            {IS_ANDROID_APP && view === "remote" && <>{watchModes}{watchMode === "remote" ? <Suspense fallback={<p>Загрузка пульта…</p>}><LanRemotePanel peers={lanPeers} /></Suspense> : <p>Откройте аниме из каталога для просмотра на телефоне.</p>}</>}
             {IS_ANDROID_APP && (view === "catalog" || view === "downloads") && (
                 <nav className="mobile-section-tabs" aria-label="Каталог и скачанное">
                     <button
@@ -698,9 +831,15 @@ export default function Home() {
             )}
 
             <Suspense fallback={<p className="loading" role="status">Загружаем раздел…</p>}>
+                {routeLoading && <p className="loading" role="status">Загружаем страницу аниме…</p>}
+                {routeError && <div className="empty" role="alert">{routeError} <button type="button" onClick={() => window.dispatchEvent(new Event("animesoul:navigation"))}>Повторить</button></div>}
                 {view === "home" && (
                     <HomePage model={homePageModel} actions={homePageActions} />
                 )}
+                {(view === "tracking" || view === "library" || view === "history") && (
+                    <LibraryPage model={homePageModel} actions={homePageActions} kind={view} />
+                )}
+                {view === "notFound" && <section className="empty route-not-found"><h1>Страница не найдена</h1><button type="button" onClick={goHome}>На главную</button></section>}
                 {view === "stats" && (
                     <StatisticsPage statistics={statistics} onHome={goHome} />
                 )}
@@ -717,12 +856,19 @@ export default function Home() {
                 {view === "downloads" && (
                     <DownloadsPage onCatalog={showCatalog} onOpen={openAnime} progress={progress} />
                 )}
-                {view === "catalog" && (
+                {view === "catalog" && !routeLoading && !routeError && (
                     <CatalogPage
+                        ongoingLoading={ongoing.loading}
+                        ongoingError={ongoing.error}
+                        ongoingHasMore={ongoing.hasMore}
+                        onLoadOngoing={() => void ongoing.load()}
+                        catalog={franchises}
+                        favoriteGenres={statistics.favoriteGenres}
                         query={query}
                         sort={sort}
                         groupFilter={groupFilter}
                         formatFilter={formatFilter}
+                        statusFilter={statusFilter}
                         dubbingFilter={dubbingFilter}
                         dubbings={dubbings}
                         yearFrom={yearFrom}
@@ -749,6 +895,7 @@ export default function Home() {
                         setSort={setSort}
                         setGroupFilter={setGroupFilter}
                         setFormatFilter={setFormatFilter}
+                        setStatusFilter={setStatusFilter}
                         setDubbingFilter={setDubbingFilter}
                         setYearFrom={setYearFrom}
                         setYearTo={setYearTo}
@@ -766,12 +913,21 @@ export default function Home() {
                         onFolders={setFolderPicker}
                         onCardVisible={requestCardMeta}
                         onLoadMore={() => void loadMore()}
-                        onRetry={() => void load(0, false, query)}
+                        onRetry={() => { trackUiAction("retry_error", {screen: "catalog"}); void load(0, false, query); }}
                     />
                 )}
             </Suspense>
 
-            <AppFooter />
+            <AppFooter activeView={view} onNavigate={target => {
+                if (target === "home") goHome();
+                else if (target === "catalog") showCatalog();
+                else if (target === "downloads") showDownloads();
+                else if (target === "stats") openLibrary();
+                else if (target === "tracking") showTracking();
+                else if (target === "library") showCollections();
+                else if (target === "history") showHistory();
+                else if (target === "ratings") showRatings();
+            }} />
 
             <Suspense fallback={null}>
                 {collectionOverview && (

@@ -379,6 +379,11 @@ footer span:nth-of-type(1) {
   flex: 1;
 }
 
+footer .anime4k-credit a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
 .watch-shell {
   max-width: 1500px;
   margin: auto;

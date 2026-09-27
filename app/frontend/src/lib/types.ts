@@ -11,6 +11,7 @@ export type Anime = {
   anime_id: number;
   title: string;
   original?: string;
+  source?: string;
   other_titles?: string[] | string;
   title_en?: string;
   title_ru?: string;
@@ -228,6 +229,10 @@ export type PlayerPrefs = {
   compactEpisodeList: boolean;
   /** Experimental desktop library layout; never applied on mobile. */
   desktopLibraryBeta: boolean;
+  /** Soft poster-coloured lighting on anime detail pages. */
+  animeAmbient: boolean;
+  /** Translucent blurred application header. */
+  headerGlass: boolean;
   toolbarIconOnly: boolean;
   /** Keep the legacy toolbar around the custom AnimeSoul player. */
   customPlayerToolbarVisible: boolean;

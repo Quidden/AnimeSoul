@@ -1,3 +1,5 @@
+import { animeFormat } from "../../lib/catalogFilters";
+import {useOngoingCatalog} from "./useOngoingCatalog";
 import {
     type Dispatch,
     type SetStateAction,
@@ -12,9 +14,11 @@ import { STORAGE_KEYS as K } from "../../lib/settings";
 import {
     franchiseKey,
     groupFranchises,
-    isMovieAnime,
+    releaseStatus,
 } from "../../lib/anime";
 import { writeLocal as write } from "../../lib/storage";
+import { routeFromLocation } from "../navigation/routes";
+
 import {
     fetchAnimeDetails,
     fetchAnimeVideos,
@@ -22,7 +26,12 @@ import {
     prefetchCatalogSearch,
 } from "./api";
 
-export type ApplicationView = "home" | "catalog" | "stats" | "ratings" | "downloads";
+function pageFromLocation(): number {
+    const value = Number(new URLSearchParams(window.location.search).get("page") ?? 1);
+    return Number.isInteger(value) && value >= 1 ? Math.min(value, 10) : 1;
+}
+
+export type ApplicationView = "home" | "catalog" | "stats" | "ratings" | "downloads" | "remote" | "tracking" | "library" | "history" | "notFound";
 
 interface UseCatalogControllerOptions {
     favorites: number[];
@@ -49,18 +58,26 @@ export function useCatalogController({
     const [active, setActive] = useState<Anime | null>(null);
     const [resumeRequested, setResumeRequested] = useState(false);
     const [newEpisodeRequested, setNewEpisodeRequested] = useState(false);
-    const [view, setView] = useState<ApplicationView>("home");
+    const [view, setView] = useState<ApplicationView>(() => {
+        if (typeof window === "undefined") return "home";
+        const route = routeFromLocation();
+        return route === "anime" || route === "animeMap" ? "catalog" : route;
+    });
 
-    const [query, setQuery] = useState("");
-    const [genre, setGenre] = useState("Все");
-    const [sort, setSort] = useState("rating-desc");
-    const [yearFrom, setYearFrom] = useState("");
-    const [yearTo, setYearTo] = useState("");
-    const [groupFilter, setGroupFilter] = useState("all");
-    const [formatFilter, setFormatFilter] = useState("all");
-    const [dubbingFilter, setDubbingFilter] = useState("all");
-    const [ratingSource, setRatingSource] = useState("average");
-    const [ratingFrom, setRatingFrom] = useState("");
+    const catalogParam = (key: string, fallback: string) =>
+        typeof window === "undefined" ? fallback : new URLSearchParams(window.location.search).get(key) ?? fallback;
+    const [query, setQuery] = useState(() => catalogParam("q", ""));
+    const ongoing = useOngoingCatalog(view === "catalog" && !active && !query.trim());
+    const [genre, setGenre] = useState(() => catalogParam("genre", "Все"));
+    const [sort, setSort] = useState(() => catalogParam("sort", "rating-desc"));
+    const [yearFrom, setYearFrom] = useState(() => catalogParam("yearFrom", ""));
+    const [yearTo, setYearTo] = useState(() => catalogParam("yearTo", ""));
+    const [groupFilter, setGroupFilter] = useState(() => catalogParam("group", "all"));
+    const [formatFilter, setFormatFilter] = useState(() => catalogParam("format", "all"));
+    const [statusFilter, setStatusFilter] = useState(() => catalogParam("status", "all"));
+    const [dubbingFilter, setDubbingFilter] = useState(() => catalogParam("dubbing", "all"));
+    const [ratingSource, setRatingSource] = useState(() => catalogParam("ratingSource", "average"));
+    const [ratingFrom, setRatingFrom] = useState(() => catalogParam("ratingFrom", ""));
 
     const [randomOpen, setRandomOpen] = useState(false);
     const [randomGenre, setRandomGenre] = useState("Все");
@@ -73,6 +90,7 @@ export function useCatalogController({
     const [catalogReady, setCatalogReady] = useState(false);
     const [error, setError] = useState("");
     const loadRequestRef = useRef(0);
+    const catalogPageRef = useRef(typeof window === "undefined" ? 1 : pageFromLocation());
 
     useEffect(() => {
         if (active) setView("catalog");
@@ -85,19 +103,23 @@ export function useCatalogController({
         setError("");
 
         try {
-            const anime = await fetchCatalogPage({
-                limit: 24,
-                offset: next,
-                query: search,
-            });
+            let anime: Anime[] = [];
+            let loadedOffset = next;
+            const pages = next === 0 && !append && window.location.pathname === "/catalog"
+                ? pageFromLocation() : 1;
+            for (let index = 0; index < pages; index += 1) {
+                const batch = await fetchCatalogPage({limit: 24, offset: loadedOffset, query: search});
+                anime = [...anime, ...batch];
+                loadedOffset += batch.length;
+                if (batch.length < 24) break;
+            }
 
             if (requestId !== loadRequestRef.current) return;
             setCatalog(current => {
                 if (append) return uniqueAnime([...current, ...anime]);
-                if (search.trim()) return uniqueAnime([...anime, ...current]);
                 return anime;
             });
-            if (!search.trim()) setOffset(next + anime.length);
+            if (!search.trim()) setOffset(loadedOffset);
         } catch (loadError) {
             if (requestId !== loadRequestRef.current) return;
             setError(loadError instanceof Error
@@ -107,6 +129,24 @@ export function useCatalogController({
             if (requestId === loadRequestRef.current) setLoading(false);
         }
     }
+    const loadLatestRef = useRef(load);
+    loadLatestRef.current = load;
+
+    useEffect(() => {
+        const restorePage = () => {
+            if (window.location.pathname !== "/catalog") return;
+            const page = pageFromLocation();
+            if (page === catalogPageRef.current) return;
+            catalogPageRef.current = page;
+            void loadLatestRef.current(0, false, new URLSearchParams(window.location.search).get("q") ?? "");
+        };
+        window.addEventListener("popstate", restorePage);
+        window.addEventListener("animesoul:navigation", restorePage);
+        return () => {
+            window.removeEventListener("popstate", restorePage);
+            window.removeEventListener("animesoul:navigation", restorePage);
+        };
+    }, []);
 
     useEffect(() => {
         const search = query.trim();
@@ -128,6 +168,10 @@ export function useCatalogController({
     }, [query]);
 
     async function loadMore() {
+        if (statusFilter === "airing") {
+            if (ongoing.hasMore) await ongoing.load();
+            return;
+        }
         setLoading(true);
         setError("");
 
@@ -172,7 +216,13 @@ export function useCatalogController({
 
             setCatalog(current => uniqueAnime([...current, ...fresh]));
             setOffset(cursor);
-            if (!fresh.length) {
+            if (fresh.length) {
+                const nextPage = Math.min(catalogPageRef.current + 1, 10);
+                catalogPageRef.current = nextPage;
+                const url = new URL(window.location.href);
+                url.searchParams.set("page", String(nextPage));
+                window.history.pushState({}, "", url.pathname + url.search);
+            } else {
                 setError("Больше новых аниме в каталоге не найдено");
             }
         } catch (loadError) {
@@ -186,7 +236,7 @@ export function useCatalogController({
 
     function matchesActiveFilters(anime: Anime) {
         const familyCount = anime.franchiseCount ?? 1;
-        const movie = isMovieAnime(anime);
+
 
         return (
             (genre === "Все" || anime.genres?.some(item => item.title === genre))
@@ -198,14 +248,15 @@ export function useCatalogController({
             )
             && (
                 formatFilter === "all"
-                || (formatFilter === "movie" ? movie : !movie)
+                || animeFormat(anime) === formatFilter
             )
+            && (statusFilter === "all" || releaseStatus(anime).kind === statusFilter)
         );
     }
 
     useEffect(() => {
         if (view === "catalog" && !active && !catalogReady) {
-            void load(0, false, "");
+            void loadLatestRef.current(0, false, new URLSearchParams(window.location.search).get("q") ?? "");
         }
     }, [view, active, catalogReady]);
 
@@ -310,12 +361,15 @@ export function useCatalogController({
         };
     }, [idsNeedingStats.join(","), view, active]);
 
+    const combinedCatalog = useMemo(() => uniqueAnime([...catalog, ...ongoing.items]), [catalog, ongoing.items]);
     return {
+        ongoing,
         active,
-        catalog,
+        catalog: combinedCatalog,
         error,
         dubbingFilter,
         formatFilter,
+        statusFilter,
         genre,
         groupFilter,
         loading,
@@ -340,6 +394,7 @@ export function useCatalogController({
         setCatalog,
         setDubbingFilter,
         setFormatFilter,
+        setStatusFilter,
         setGenre,
         setGroupFilter,
         setNewEpisodeRequested,

@@ -60,34 +60,20 @@ function WatchingRow({ entry, model, actions }: {
   const wholeProgress = watchTimeProgress(entry.item);
 
   return (
-    <article className="home-media-card home-watching-card">
-      <CardArtwork anime={anime} />
-      <div className="home-media-card-body">
-        <div className="home-card-status"><ReleaseMark anime={anime} status={model.cardMeta[entry.animeId]?.status} /></div>
-        <button type="button" className="home-card-title" onClick={() => anime && actions.openAnime(anime, true)}>
-          {anime?.title ?? `Аниме #${entry.animeId}`}
-        </button>
-        <p className="home-card-subtitle">Сезон {entry.season} · серия {entry.episode} · {formatTime(entry.state.position)}</p>
-        <div className="home-card-metrics">
-          <CardMetric label="Просмотрено" value={`${wholeProgress}%`} />
-          <CardMetric label="Последний просмотр" value={formatUpdatedAt(entry.updatedAt)} />
-        </div>
-        <div className="home-card-progress" aria-label={`Просмотрено ${wholeProgress}%`}>
-          <i style={{ width: `${wholeProgress}%` }} />
-        </div>
-        <div className="home-card-footer">
-          <small>{entry.item.totalEpisodes ? `Всего серий: ${entry.item.totalEpisodes}` : "Прогресс сохранён"}</small>
-          <div className="home-card-actions">
-            <button type="button" className="home-action-button home-action-danger" onClick={() => actions.hideWatching(entry.animeId)}>
-              Убрать
-            </button>
-            {anime && (
-              <button type="button" className="home-action-button home-play-button" onClick={() => actions.openAnime(anime, true)}>
-                <span aria-hidden="true">▶</span> Продолжить
-              </button>
-            )}
-          </div>
-        </div>
+    <article className="anime-card home-catalog-card">
+      <div className="poster">
+        {anime?.poster?.big ? <img src={anime.poster.big} alt="" loading="lazy" /> : <span className="home-catalog-poster-empty" aria-hidden="true">◆</span>}
+        <span className="home-catalog-status">{anime ? <ReleaseMark anime={anime} status={model.cardMeta[entry.animeId]?.status} /> : "Недоступно"}</span>
+        {anime && <button type="button" className="home-catalog-poster-action" aria-label={`Продолжить просмотр: ${anime.title}`} onClick={() => actions.openAnime(anime, true)}>▶</button>}
+      </div>
+      <h3>{anime?.title ?? `Аниме #${entry.animeId}`}</h3>
+      <p className="home-catalog-meta">{anime?.year ?? "—"} · {anime?.type?.name ?? "Аниме"}{anime?.rating?.average ? ` · ★ ${anime.rating.average.toFixed(1)}` : ""}</p>
+      <p className="home-catalog-episode">Сезон {entry.season} · серия {entry.episode} · {formatTime(entry.state.position)}</p>
+      {anime?.genres?.length ? <div className="tagline">{anime.genres.slice(0, 2).map(genre => <span key={genre.alias}>{genre.title}</span>)}</div> : null}
+      {!anime && <p className="home-catalog-unavailable">Данные об аниме сейчас недоступны. Прогресс сохранён.</p>}
+      <div className="card-progress" aria-label={`Просмотрено ${wholeProgress}%`}><i style={{width: `${wholeProgress}%`}} /><small>{wholeProgress}% просмотра</small></div>
+      <div className="home-catalog-card-actions">
+        {anime ? <button type="button" className="primary" onClick={() => actions.openAnime(anime, true)}>▶ {entry.state.position > 0 ? "Продолжить" : "Начать просмотр"}</button> : <button type="button" onClick={() => actions.hideWatching(entry.animeId)}>Убрать из списка</button>}
       </div>
     </article>
   );

@@ -15,7 +15,7 @@ import httpx
 from fastapi import FastAPI
 
 from backend.app.services.lan import LanService, save_data
-from backend.app.services.lan_models import EpisodeManifest
+from backend.app.services.lan_models import ControlCommand, EpisodeManifest
 from backend.app.services.lan_protocol import Challenges, PeerClient, encode, local_address, signature
 from backend.app.services.lan_transfer import export_episode, receive, register_episode
 from backend.app.services.offline_library import OfflineLibraryService
@@ -39,6 +39,13 @@ def metadata(episode="1"):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_remote_volume_validation(self):
+        for value in (0, 0.35, 1):
+            self.assertEqual(ControlCommand(action="volume", volume=value).volume, value)
+        for value in (-1, 1.1, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                ControlCommand(action="volume", volume=value)
+
     def test_only_lan_literal_addresses(self):
         self.assertEqual(local_address("192.168.1.3"), "192.168.1.3")
         for value in ("127.0.0.1", "8.8.8.8", "localhost", "192.168.1.1:8000", "::1", "169.254.169.254.evil"):

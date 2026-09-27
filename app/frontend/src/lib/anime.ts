@@ -216,15 +216,14 @@ export function latestResumePoint(progress?: AnimeProgress): ResumePoint | null 
   // A manual eye mark exists for statistics only. It must not replace the
   // episode that was actually opened by the player.
   const candidates = Object.entries(progress.episodes)
-    .filter(([, state]) =>
-      !state.manuallyCompleted &&
-      (!isEpisodeWatched(state) || Boolean(state.rewatchArmed && (state.percent ?? 0) < 100)),
-    )
+    .filter(([, state]) => !state.manuallyCompleted)
     .sort((a, b) => {
       // Opening a player may briefly create a newer 0:00 entry. Prefer an
       // actual playback position so it cannot hide the real continuation.
-      const aHasPlayback = episodeResumePosition(a[1]) > 5 ? 1 : 0;
-      const bHasPlayback = episodeResumePosition(b[1]) > 5 ? 1 : 0;
+      // Completed episodes still identify the latest viewing. Using their
+      // resume position (0) here would revive an older, unfinished season.
+      const aHasPlayback = a[1].position > 0 ? 1 : 0;
+      const bHasPlayback = b[1].position > 0 ? 1 : 0;
       return bHasPlayback - aHasPlayback || b[1].updatedAt - a[1].updatedAt;
     });
   const latest = candidates[0];

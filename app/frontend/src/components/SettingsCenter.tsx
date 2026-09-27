@@ -56,11 +56,13 @@ export function SettingsCenter(props: Props) {
   const [toolbar, setToolbarState] = useState<ToolbarPosition>(read(K.toolbar, "bottom"));
   const modalRef = useRef<HTMLElement>(null);
   const tabListRef = useRef<HTMLDivElement>(null);
-  const googleDrive = useGoogleDriveSettings({ onStorageReload: props.onStorageReload });
+  const googleDrive = useGoogleDriveSettings({ onStorageReload: props.onStorageReload, profileId: props.activeProfile });
   const {
     syncing,
     initialChoiceModal,
-    setInitialChoiceModal,
+    initialChoiceError,
+    dismissInitialChoice,
+    requestInitialChoice,
     loadGDriveStatus,
     syncNow: handleSyncNow,
   } = googleDrive;
@@ -85,11 +87,13 @@ export function SettingsCenter(props: Props) {
   useEffect(() => {
     const handleChoiceEvent = () => {
       setOpen(true);
-      setInitialChoiceModal(true);
-      loadGDriveStatus();
+      requestInitialChoice();
+      void loadGDriveStatus();
     };
     return listenAppEvent("open-gdrive-choice", handleChoiceEvent);
-  }, [loadGDriveStatus, setInitialChoiceModal]);
+  }, [loadGDriveStatus, requestInitialChoice]);
+
+  useEffect(() => { void loadGDriveStatus(); }, [loadGDriveStatus]);
 
   useEffect(() => listenAppEvent("open-settings", ({ tab, targetTitle }) => {
     if (IS_ANDROID_APP && tab === "party") return;
@@ -385,7 +389,8 @@ export function SettingsCenter(props: Props) {
       <GoogleDriveInitialSyncModal
         open={initialChoiceModal}
         syncing={syncing}
-        onClose={() => setInitialChoiceModal(false)}
+        error={initialChoiceError}
+        onClose={dismissInitialChoice}
         onSync={mode => void handleSyncNow(mode, true)}
       />
     </>

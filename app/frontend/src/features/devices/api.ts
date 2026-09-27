@@ -13,12 +13,12 @@ export type DeviceStatus = {
   localPriority: boolean; peers: Device[]; transfers: Transfer[];
 };
 export type LanCommand = {
-  id: string; action: "play" | "pause" | "seek" | "open" | "episode" | "next" | "previous";
-  animeId?: number; season?: number; episode?: string; dubbing?: string; seconds?: number;
+  id: string; action: "play" | "pause" | "seek" | "open" | "episode" | "next" | "previous" | "volume";
+  animeId?: number; season?: number; episode?: string; dubbing?: string; seconds?: number; volume?: number;
 };
 export type LanPlayer = {
   animeId?: number; title?: string; season?: number; episode?: string; dubbing?: string;
-  position?: number; duration?: number; playing?: boolean;
+  position?: number; duration?: number; playing?: boolean; volume?: number; preview?: string;
   episodes?: { season: number; episode: string; dubbing: string }[];
 };
 export type RemoteState = { id: string; name: string; saves: boolean; media: boolean; control: boolean; player: LanPlayer; results: Record<string, string> };

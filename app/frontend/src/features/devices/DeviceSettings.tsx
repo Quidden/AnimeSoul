@@ -15,7 +15,7 @@ function PeerSettings({ peer, update, revoke, browse }: {
     <b>{peer.name}</b>
     <strong role="status">{peer.online ? "● Связано · в сети" : "○ Связано · нет связи"}</strong>
     {peer.error && <small>{peer.error}</small>}
-    <div className="device-actions"><button type="button" onClick={browse}>Скачанные серии и пульт</button></div>
+    <div className="device-actions"><button type="button" onClick={browse}>Скачанные серии</button></div>
     <details><summary>Адрес, разрешения и управление связью</summary>
     <fieldset disabled={busy}>
       <label>Адрес в сети<input value={draft.host} onChange={e => setDraft({ ...draft, host: e.target.value })} /></label>
@@ -38,10 +38,6 @@ function RemoteDevice({ peer, report, transferred }: { peer: Device; report: (te
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<{ id: string; at: number } | null>(null);
-  const [animeId, setAnimeId] = useState("");
-  const [season, setSeason] = useState(1);
-  const [episode, setEpisode] = useState("1");
-  const [seconds, setSeconds] = useState(0);
   const [transferring, setTransferring] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
@@ -87,30 +83,8 @@ function RemoteDevice({ peer, report, transferred }: { peer: Device; report: (te
     } catch (reason) { report(messageOf(reason)); }
   };
   return <article className="device-card device-remote">
-    <h3>{peer.name}: видео и управление</h3>
+    <h3>{peer.name}: скачанные серии</h3>
     {error && <p role="alert">{error}</p>}
-    <p>{state?.player.title ? `${state.player.title} · сезон ${state.player.season}, серия ${state.player.episode} · ${state.player.dubbing || ""}` : "Плеер не открыт или управление не разрешено."}</p>
-    {state?.player.animeId && <p>{state.player.playing ? "Играет" : "Пауза"} · {Math.floor(state.player.position ?? 0)} / {Math.floor(state.player.duration ?? 0)} сек.</p>}
-    <fieldset disabled={!state?.control || !!pending}>
-      <div className="device-actions">
-        <button type="button" onClick={() => void command({ action: "previous" })}>Предыдущая</button>
-        <button type="button" onClick={() => void command({ action: "play" })}>Воспроизвести</button>
-        <button type="button" onClick={() => void command({ action: "pause" })}>Пауза</button>
-        <button type="button" onClick={() => void command({ action: "next" })}>Следующая</button>
-      </div>
-      <label>Позиция, сек.<input type="number" min="0" max="604800" value={seconds} onChange={e => setSeconds(Number(e.target.value))} /></label>
-      <button type="button" onClick={() => void command({ action: "seek", seconds })}>Перемотать</button>
-      <label>Выбрать серию в открытом аниме<select value="" onChange={e => {
-        const target = state?.player.episodes?.[Number(e.target.value)];
-        if (target) void command({ action: "episode", ...target });
-      }}><option value="">Сезон / серия / озвучка</option>{state?.player.episodes?.map((item, index) => <option key={index} value={index}>{item.season} / {item.episode} / {item.dubbing}</option>)}</select></label>
-      <details><summary>Открыть другое аниме по ID каталога</summary>
-        <label>ID аниме<input inputMode="numeric" value={animeId} onChange={e => setAnimeId(e.target.value)} /></label>
-        <label>Сезон<input type="number" min="1" max="99" value={season} onChange={e => setSeason(Number(e.target.value))} /></label>
-        <label>Серия<input value={episode} onChange={e => setEpisode(e.target.value)} /></label>
-        <button type="button" disabled={!Number(animeId)} onClick={() => void command({ action: "open", animeId: Number(animeId), season, episode })}>Открыть на устройстве</button>
-      </details>
-    </fieldset>
     <div className="device-actions">
       <button type="button" onClick={() => void loadLibrary()}>Показать скачанное на устройстве</button>
       <button type="button" disabled={!selected.length || transferring || !peer.media} onClick={async () => {

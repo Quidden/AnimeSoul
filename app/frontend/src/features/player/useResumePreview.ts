@@ -5,7 +5,6 @@ import {
     fetchAnimeTrailers,
 } from "../catalog/api";
 import {
-    episodeResumePosition,
     latestResumePoint,
     resolveResumeAnime,
 } from "../../lib/anime";
@@ -40,7 +39,7 @@ export function useResumePreview({
             }))
             .filter(entry =>
                 entry.point
-                && episodeResumePosition(entry.point.state) > 0,
+                && entry.point.state.position > 0,
             )
             .sort((left, right) =>
                 (right.point?.state.updatedAt ?? 0)

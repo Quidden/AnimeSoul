@@ -156,6 +156,7 @@ export function DownloadPicker({
           <button type="button" onClick={onClose} aria-label="Закрыть выбор серий">×</button>
         </header>
 
+        <p>Скачивается исходное видео в выбранном качестве. Апскейл применяется при просмотре в AnimeSoul; в другом плеере улучшения не будет.</p>
         <div className="download-picker-controls">
           <label>
             Озвучка

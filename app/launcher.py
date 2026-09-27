@@ -24,6 +24,9 @@ from typing import Any
 
 import webview
 
+from backend.app.version import APP_VERSION
+from release_updates import RELEASES_URL, check_for_updates
+
 from runtime_instance import (
     find_available_port,
     read_runtime_state,
@@ -105,7 +108,7 @@ def validate_public_token(token: str) -> tuple[bool, str]:
             "X-Application": token,
             "Lang": "ru",
             "Accept": "application/json",
-            "User-Agent": "AnimeSoul-Launcher/0.2.7",
+            "User-Agent": f"AnimeSoul-Launcher/{APP_VERSION}",
         },
     )
     try:
@@ -299,7 +302,14 @@ class LauncherApi:
             "token": str(settings.get("yummy_public_token", "")),
             "mode": str(settings.get("launch_mode", "browser")),
             "configPath": str(config_file()),
+            "version": APP_VERSION,
         }
+
+    def check_updates(self) -> dict[str, object]:
+        return check_for_updates()
+
+    def open_releases(self) -> None:
+        webbrowser.open(RELEASES_URL)
 
     def open_documentation(self) -> None:
         webbrowser.open(API_DOCUMENTATION_URL)
@@ -544,6 +554,12 @@ LAUNCHER_HTML = r"""
   <main class="card">
     <div class="brand"><div class="logo">魂</div><h1>AnimeSoul</h1></div>
     <p class="subtitle">Локальная аниме-библиотека · Python + React</p>
+    <section aria-label="Версия и обновления" style="margin-bottom: 20px">
+      <strong id="version">Версия __APP_VERSION__</strong>
+      <div class="help" id="updateStatus" role="status">Проверяем обновления на GitHub…</div>
+      <button class="docs" id="checkUpdates" type="button">Проверить обновления</button>
+      <button class="docs" id="openReleases" type="button">Релизы на GitHub ↗</button>
+    </section>
     <p class="thanks">Огромное спасибо разработчикам YummyAnime за открытый API — благодаря их работе стало возможным создание AnimeSoul.</p>
     <p class="muted">Для запуска нужен личный Public token. Общий ключ не входит в open-source проект, чтобы не создавать лишнюю нагрузку на API.</p>
 
@@ -586,6 +602,30 @@ LAUNCHER_HTML = r"""
     const setBusy = value => buttons.forEach(button => button.disabled = value);
     const showStatus = (message, kind = '') => { status.textContent = message; status.className = `status ${kind}`; };
 
+    let checkingUpdates = false;
+    const refreshUpdates = async () => {
+      if (checkingUpdates || !window.pywebview?.api) return;
+      checkingUpdates = true;
+      const button = document.querySelector('#checkUpdates');
+      const message = document.querySelector('#updateStatus');
+      button.disabled = true;
+      message.textContent = 'Проверяем обновления на GitHub…';
+      try {
+        const result = await window.pywebview.api.check_updates();
+        message.textContent = result.message;
+        message.style.color = result.state === 'available' ? '#6de3a5' : '';
+        document.querySelector('#openReleases').textContent = result.state === 'available'
+          ? `Скачать версию ${result.latestVersion} ↗` : 'Релизы на GitHub ↗';
+      } catch {
+        message.textContent = 'Не удалось проверить обновления. Повтори позже.';
+      } finally {
+        checkingUpdates = false;
+        button.disabled = false;
+      }
+    };
+    document.querySelector('#checkUpdates').addEventListener('click', refreshUpdates);
+    document.querySelector('#openReleases').addEventListener('click', () => window.pywebview.api.open_releases());
+
     const renderServerStatus = value => {
       const state = value?.state || 'stopped';
       serverPanel.className = `server-panel ${state}`;
@@ -614,6 +654,8 @@ LAUNCHER_HTML = r"""
       token.value = settings.token || '';
       path.textContent = `Данные сохраняются в ${settings.configPath}`;
       showStatus('Готово к запуску');
+      document.querySelector('#version').textContent = `Версия ${settings.version}`;
+      void refreshUpdates();
       await refreshServerStatus();
       serverTimer = window.setInterval(refreshServerStatus, 2500);
     });
@@ -674,7 +716,7 @@ def main() -> None:
 
     webview.create_window(
         "AnimeSoul Launcher",
-        html=LAUNCHER_HTML,
+        html=LAUNCHER_HTML.replace("__APP_VERSION__", APP_VERSION),
         js_api=LauncherApi(),
         width=760,
         height=850,

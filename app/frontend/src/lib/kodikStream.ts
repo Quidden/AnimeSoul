@@ -28,7 +28,11 @@ export type KodikSubtitle = {
   default?: boolean;
 };
 
+export type KodikThumbnail = { start: number; end: number; src: string };
+
 export type KodikStreamInfo = {
+  /** Provider frames must refer to this exact video edit. */
+  thumbnails?: KodikThumbnail[];
   sources: KodikDirectSource[];
   subtitles: KodikSubtitle[];
   skips?: {
@@ -59,7 +63,7 @@ export function hlsLevelForQuality(levels: Array<{ height?: number }>, quality: 
   return measured.sort((left, right) => left.height - right.height)[0].index;
 }
 
-/** Dubbing changes for the same episode can keep the visible video stream intact. */
+/** Detect a same-episode dubbing change; this is not proof of compatible video edits. */
 export function isSameEpisodeDubbingSwitch(
   previous: KodikStreamRequest,
   next: KodikStreamRequest,
@@ -140,6 +144,7 @@ export async function fetchKodikStream(
   }
   const info = {
     sources: payload.sources,
+    thumbnails: Array.isArray(payload.thumbnails) ? payload.thumbnails : undefined,
     subtitles: Array.isArray(payload.subtitles) ? payload.subtitles : [],
     skips: payload.skips,
   };
