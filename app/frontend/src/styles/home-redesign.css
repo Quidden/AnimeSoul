@@ -192,6 +192,48 @@
   gap: 9px;
 }
 
+.home-release-timer {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 12px;
+  color: rgb(255 255 255 / 68%);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.home-release-timer-label { white-space: nowrap; }
+.home-release-timer .next-episode-countdown { display: flex; align-items: baseline; gap: 6px; color: rgb(255 255 255 / 88%); font-variant-numeric: tabular-nums; }
+.home-release-timer .countdown-caption { display: none; }
+.home-release-timer .countdown-unit { display: inline-flex; align-items: baseline; gap: 3px; }
+.home-release-timer .countdown-unit b { font-size: 13px; font-weight: 650; }
+.home-release-timer .countdown-unit small { color: rgb(255 255 255 / 64%); font-size: 12px; }
+
+.watching-list .home-catalog-status { max-width: calc(100% - 62px); }
+.home-watching-dismiss {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  line-height: 1;
+  cursor: pointer;
+}
+.home-watching-dismiss svg { filter: drop-shadow(0 1px 3px rgb(0 0 0 / 90%)); }
+.home-watching-dismiss:hover { background: rgb(11 8 23 / 35%); }
+.home-watching-dismiss:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .home-hero-settings-wrap {
   position: absolute;
   right: clamp(20px, 3.2vw, 58px);

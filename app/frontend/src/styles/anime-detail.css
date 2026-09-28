@@ -1,0 +1,140 @@
+/* Open, compact title layout with actions anchored below the poster. */
+.anime-detail-page .watch-anime-hero {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 52px);
+}
+.anime-detail-page .watch-anime-hero h1 {
+  max-width: 30ch;
+  font-size: clamp(28px, 3vw, 46px);
+  line-height: 1.15;
+  letter-spacing: -.025em;
+  margin: 18px 0 12px;
+}
+.anime-detail-page .watch-anime-rail > img { box-shadow: none; border-radius: 12px; }
+.watch-poster-actions, .watch-poster-actions > aside { display: flex; flex-direction: column; gap: 8px; }
+.watch-poster-actions > aside { order: -1; }
+.watch-poster-actions button, .watch-poster-actions > a {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.watch-poster-actions .danger { color: var(--muted); }
+.watch-poster-actions .track-settings { position: static; width: 100%; min-width: 0; margin: 0; }
+.watch-poster-actions .track-settings label { display: flex; gap: 8px; padding: 6px 0; font-size: 12px; }
+.anime-detail-page .watch-anime-genres { margin-top: 18px; }
+.anime-detail-page .watch-anime-genres button { background: transparent; }
+.anime-information { margin-top: 26px; }
+.anime-information h2, .anime-story-media h2 { margin: 0 0 14px; font-size: 18px; font-weight: 650; }
+.anime-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 28px; margin: 0; }
+.anime-facts > div { display: grid; grid-template-columns: minmax(85px, .85fr) minmax(0, 1.3fr); gap: 12px; font-size: 13px; line-height: 1.5; }
+.anime-facts dt { color: var(--muted); }
+.anime-facts dd { margin: 0; overflow-wrap: anywhere; }
+.anime-information .release-schedule { margin: 20px 0 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; }
+.anime-information .release-schedule > div { margin-bottom: 8px; }
+.anime-information .release-schedule h2 { display: none; }
+.anime-information .release-schedule article { padding: 10px 0; flex-wrap: wrap; gap: 12px; }
+.release-schedule-time, .anime-next-release { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.anime-next-release { margin-top: 18px; }
+.release-schedule-time .next-episode-countdown, .anime-next-release .next-episode-countdown { color: var(--accent); }
+.anime-detail-page .anime-information-ratings { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 14px; min-width: 0; margin: 18px 0 0; padding: 0; background: none; border: 0; border-radius: 0; }
+.anime-information-ratings .rating-board.compact { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; gap: 12px 16px; }
+.anime-information-ratings .rating-board.compact .rating-chip { min-width: 0; padding: 0; gap: 4px; border: 0; border-radius: 0; background: none; white-space: nowrap; }
+.anime-information-ratings .rating-board.compact .rating-chip small { color: var(--muted); font-size: 10px; }
+.anime-information-ratings .rating-board.compact .rating-chip b { color: #e8b95c; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.anime-information-ratings .rating-board.compact .rating-chip.community b { color: #61c6d9; }
+html[data-color-scheme="light"] .anime-information-ratings .rating-chip b { color: #91620b; }
+html[data-color-scheme="light"] .anime-information-ratings .rating-chip.community b { color: #087d91; }
+.anime-information-ratings > .score-picker { flex-direction: row; align-items: center; padding: 0; border: 0; }
+.anime-information-ratings .score-picker select { min-width: 66px; width: auto; padding: 5px 20px 5px 7px; background: var(--bg); color: var(--accent); border-color: var(--line); border-radius: 6px; }
+.anime-title-source { display: inline-block; margin: 4px 0 18px; color: var(--muted); font-size: 12px; text-decoration: none; }
+.anime-title-source:hover { color: var(--accent); }
+.anime-title-source:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.anime-story-media { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.anime-story-media:has(.watch-trailer):has(.anime-synopsis) { grid-template-columns: minmax(0, 1.15fr) minmax(240px, 1fr); }
+.anime-story-media .watch-anime-description { margin: 0; max-width: none; font-size: 14px; line-height: 1.8; }
+.anime-story-media .watch-trailer, .anime-story-media .watch-trailer-content { margin: 0; }
+.anime-story-media .watch-trailer:only-child { max-width: 560px; width: 100%; }
+@media (max-width: 1000px) {
+  .anime-facts { grid-template-columns: 1fr; }
+  .anime-story-media:has(.watch-trailer):has(.anime-synopsis) { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .anime-detail-page .watch-anime-hero { grid-template-columns: 1fr; gap: 28px; }
+  .anime-detail-page .watch-anime-hero-copy { grid-row: auto; }
+  .anime-detail-page .watch-anime-rail { width: min(100%, 280px); max-width: none; }
+  .anime-detail-page .watch-anime-hero h1 { font-size: 28px; }
+}
+
+.anime-title-media { display: flow-root; }
+.anime-trailer-panel { float: right; width: 46%; max-width: 480px; margin: 0 0 24px 28px; }
+.anime-title-media > .anime-title-copy { display: flow-root; }
+.anime-title-media > .anime-description-wide { display: block; margin-top: 4px; }
+.anime-description-wide .watch-anime-description { overflow-wrap: anywhere; }
+.anime-title-media .watch-trailer { margin: 0; }
+.anime-title-media .watch-trailer h2 { margin: 10px 0 0; font-size: 13px; color: var(--muted); font-weight: 500; }
+.anime-title-media .watch-trailer-content { margin: 0; }
+.anime-facts.anime-facts-inline { display: flex; flex-wrap: wrap; gap: 16px 36px; }
+.anime-facts-inline > div { display: flex; flex-direction: column; gap: 4px; }
+.anime-facts a, .watch-anime-breadcrumb a { color: inherit; text-decoration: none; text-underline-offset: 4px; transition: color .18s; }
+.anime-facts a:hover, .watch-anime-breadcrumb a:hover { color: var(--accent); text-decoration: underline; }
+.anime-facts a:focus-visible, .watch-anime-breadcrumb a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 2px; }
+.anime-detail-page .next-episode-countdown { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; }
+.anime-detail-page .next-episode-countdown .countdown-unit { display: inline-flex; flex-direction: row; align-items: baseline; gap: 3px; }
+.countdown-unit b { display: inline-block; min-width: 2ch; font-variant-numeric: tabular-nums; animation: countdown-tick .28s ease-out; }
+.countdown-unit small, .countdown-caption { color: var(--muted); font-size: 11px; }
+@keyframes countdown-tick { from { opacity: .25; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .countdown-unit b { animation: none; } }
+@media (max-width: 1200px) {
+  .anime-title-media { display: flex; flex-direction: column; }
+  .anime-trailer-panel { float: none; order: 2; width: 100%; max-width: none; margin: 24px 0 0; }
+}
+@media (max-width: 480px) { .anime-information-ratings .rating-board.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; } }
+
+.anime-title-copy { min-width: 0; }
+.release-highlight { width: fit-content; max-width: 100%; margin-top: 24px; padding: 16px 20px 18px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line)); border-radius: 14px; background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent); }
+.release-highlight-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-bottom: 14px; font-size: 12px; }
+.release-highlight-heading > span { color: var(--accent); font-weight: 700; }
+.release-highlight-heading time, .release-highlight-title { color: var(--muted); }
+.release-highlight-title { display: block; margin-bottom: 12px; font-size: 12px; }
+.anime-detail-page .release-highlight .next-episode-countdown { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(8px, 1.2vw, 18px); }
+.release-highlight .countdown-caption { display: none; }
+.anime-detail-page .release-highlight .countdown-unit { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.release-highlight .countdown-unit b { padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--bg)); color: var(--ink); font-size: clamp(22px, 2.2vw, 36px); line-height: 1.1; font-weight: 750; text-align: center; }
+.release-highlight .countdown-unit small { font-size: 11px; }
+.watch-anime-rail .release-highlight { width: 100%; min-width: 0; box-sizing: border-box; margin-top: 8px; padding: 14px 12px; }
+.anime-detail-page .watch-anime-rail .release-highlight .next-episode-countdown { gap: 6px; }
+.watch-anime-rail .release-highlight .countdown-unit b { padding: 8px 4px; font-size: 24px; }
+.release-schedule-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.release-schedule-list { max-height: 420px; overflow-y: auto; scrollbar-gutter: stable; }
+.release-schedule > summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.release-schedule > summary::marker { color: var(--accent); }
+.release-schedule > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+.release-schedule-count { margin-left: 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .release-highlight { padding: 14px; } }
+
+.trailer-selectors { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+.anime-title-media .trailer-selectors h2 { flex-basis: 100%; margin: 0; }
+.trailer-selectors label { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: var(--muted); font-size: 11px; }
+.trailer-selectors select { min-width: 0; max-width: 250px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); font: inherit; }
+.watch-trailer .trailer-season-notice { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+/* Lighting stays local to the title page; the user's base theme remains intact. */
+.anime-detail-page { position: relative; isolation: isolate; }
+html[data-anime-ambient="on"] .anime-detail-page .watch-anime-rail > img { box-shadow: 0 12px 50px color-mix(in srgb, var(--accent) 12%, transparent); }
+html[data-anime-ambient="on"] .anime-detail-page .watch-start { box-shadow: 0 5px 30px color-mix(in srgb, var(--accent) 24%, transparent); }
+html[data-anime-ambient="on"] .anime-detail-page .release-highlight { box-shadow: 0 8px 42px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px 0 color-mix(in srgb, var(--accent) 12%, transparent); }
+html[data-anime-ambient="on"] .anime-detail-page .countdown-unit b { text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 32%, transparent); }

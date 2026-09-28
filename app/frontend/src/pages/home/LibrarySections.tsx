@@ -65,6 +65,16 @@ function WatchingRow({ entry, model, actions }: {
         {anime?.poster?.big ? <img src={anime.poster.big} alt="" loading="lazy" /> : <span className="home-catalog-poster-empty" aria-hidden="true">◆</span>}
         <span className="home-catalog-status">{anime ? <ReleaseMark anime={anime} status={model.cardMeta[entry.animeId]?.status} /> : "Недоступно"}</span>
         {anime && <button type="button" className="home-catalog-poster-action" aria-label={`Продолжить просмотр: ${anime.title}`} onClick={() => actions.openAnime(anime, true)}>▶</button>}
+        <button
+          type="button"
+          className="home-watching-dismiss"
+          title="Убрать из «Смотрю сейчас»"
+          aria-label={`Убрать из «Смотрю сейчас»: ${anime?.title ?? `Аниме #${entry.animeId}`}`}
+          onClick={event => {
+            event.stopPropagation();
+            actions.hideWatching(entry.animeId);
+          }}
+        ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>
       </div>
       <h3>{anime?.title ?? `Аниме #${entry.animeId}`}</h3>
       <p className="home-catalog-meta">{anime?.year ?? "—"} · {anime?.type?.name ?? "Аниме"}{anime?.rating?.average ? ` · ★ ${anime.rating.average.toFixed(1)}` : ""}</p>

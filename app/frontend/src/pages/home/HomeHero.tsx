@@ -7,6 +7,7 @@ import { episodeResumePosition, formatTime } from "../../lib/anime";
 import { IS_ANDROID_APP } from "../../lib/platform";
 import { homeTrailerEmbedUrl, isYouTubeTrailer } from "../../lib/trailer";
 import type { HeroTrailer } from "../../lib/types";
+import { HomeReleaseTimer } from "./HomeReleaseTimer";
 import type { HomePageActions, HomePageModel, HomePageProps } from "./types";
 
 const YOUTUBE_UI_SETTLE_MS = 2300;
@@ -129,6 +130,7 @@ export function HomeHero({ model, actions }: HomePageProps) {
                 : "⌕ Открыть каталог"}
           </span>
         </div>
+        {anime && <HomeReleaseTimer anime={anime} />}
       </div>
     </section>
   );

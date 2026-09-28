@@ -126,6 +126,7 @@ export function CatalogPage({
     onRetry,
 }: CatalogPageProps) {
     const [recommendationsOpen, setRecommendationsOpen] = useState(false);
+    const [shelfLimit, setShelfLimit] = useState(12);
     const [preferredGenre, setPreferredGenre] = useState("");
     const recommendations = useMemo(() => recommendAnime(catalog, favoriteGenres, progress, preferredGenre), [catalog, favoriteGenres, progress, preferredGenre]);
     const [compact, setCompact] = useState(() => IS_ANDROID_APP || window.matchMedia("(max-width: 900px)").matches);
@@ -172,12 +173,12 @@ export function CatalogPage({
     const hasSearch = Boolean(query.trim());
     const discovery = !hasSearch && activeFilterCount === 0;
     const collections = [
+        {key: "popular", title: "Популярное", items: [...catalog].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)),
+            apply: () => { resetFilters(); setSort("views"); }},
         {key: "ongoing", title: "Онгоинги", items: catalog.filter(anime => releaseStatus(anime).kind === "airing").sort((a, b) => (b.rating?.average ?? 0) - (a.rating?.average ?? 0)),
             apply: () => { resetFilters(); setStatusFilter("airing"); }},
         {key: "new", title: "Новинки", items: [...catalog].sort((a, b) => (b.year ?? 0) - (a.year ?? 0)),
             apply: () => { resetFilters(); setSort("year-desc"); }},
-        {key: "popular", title: "Популярное", items: [...catalog].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)),
-            apply: () => { resetFilters(); setSort("views"); }},
         {key: "rated", title: "С высокой оценкой", items: catalog.filter(anime => (anime.rating?.average ?? 0) >= 8).sort((a, b) => (b.rating?.average ?? 0) - (a.rating?.average ?? 0)),
             apply: () => { resetFilters(); setRatingFrom("8"); }},
     ];
@@ -309,7 +310,7 @@ export function CatalogPage({
                 <p>{favoriteGenres.some(([, count]) => count > 0)
                     ? `По вашим жанрам: ${favoriteGenres.filter(([, count]) => count > 0).slice(0, 4).map(([name]) => name).join(", ")}.`
                     : "Посмотрите несколько серий — жанры из статистики помогут подобрать аниме."}</p>
-                <small>Подбор из загруженного каталога, без уже начатых аниме. «Показать ещё» расширяет выбор.</small></div>
+                <small>Подбор по просмотренным жанрам. Нижняя кнопка раскрывает следующие карточки и загружает новые страницы каталога и онгоингов.</small></div>
             <label className="catalog-preferred-genre">Приоритетный жанр
                 <select value={preferredGenre} onChange={event => setPreferredGenre(event.target.value)}>
                     <option value="">По всем моим жанрам</option>
@@ -349,12 +350,19 @@ export function CatalogPage({
         </div>}
         {discovery ? <div className="catalog-collections">{collections.map(collection =>
             <CatalogShelf key={collection.key} title={collection.title} onViewAll={() => { collection.apply(); window.scrollTo({top: 0, behavior: "smooth"}); }}>
-                {collection.items.length ? collection.items.slice(0, 18).map(renderCard)
+                {collection.items.length ? collection.items.slice(0, shelfLimit).map(renderCard)
                     : <p className="catalog-shelf-empty">{(collection.key === "ongoing" ? ongoingLoading : loading) ? "Загружаем…" : collection.key === "ongoing" && !ongoingError ? "Сейчас нет доступных онгоингов." : "В загруженной части каталога пока нет аниме."}</p>}
                 {collection.key === "ongoing" && ongoingError && <div className="catalog-shelf-empty" role="alert">{ongoingError}<button type="button" onClick={onLoadOngoing}>Повторить</button></div>}
             </CatalogShelf>)}</div> : <div className="cards">{visible.map(renderCard)}</div>}
         {!discovery && statusFilter === "airing" && ongoingError && <div role="alert" className="catalog-feedback">{ongoingError}<button type="button" onClick={onLoadOngoing}>Повторить</button></div>}
-        {!hasSearch && (!error || visible.length > 0) && (statusFilter !== "airing" || ongoingHasMore) && <button type="button" className="load-more" disabled={loading || (statusFilter === "airing" && ongoingLoading)} onClick={onLoadMore}>
+        {!hasSearch && discovery && <button type="button" className="load-more" disabled={loading || ongoingLoading} onClick={() => {
+            setShelfLimit(current => current + 12);
+            void onLoadMore();
+            if (ongoingHasMore) onLoadOngoing();
+        }}>
+            {loading || ongoingLoading ? "Загружаем новые аниме…" : "Показать ещё"}
+        </button>}
+        {!hasSearch && !discovery && (!error || visible.length > 0) && (statusFilter !== "airing" || ongoingHasMore) && <button type="button" className="load-more" disabled={loading || (statusFilter === "airing" && ongoingLoading)} onClick={onLoadMore}>
             {loading || (statusFilter === "airing" && ongoingLoading) ? "Загружаем новые аниме…" : "Показать ещё"}
         </button>}
         </div>

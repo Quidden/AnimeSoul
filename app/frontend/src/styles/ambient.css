@@ -1,0 +1,27 @@
+/* Shared viewport lighting, layered above the theme and below page content. */
+.ambient-page { position: relative; isolation: isolate; }
+.anime-ambient { display: none; position: fixed; z-index: -1; pointer-events: none; inset: 0; overflow: hidden; }
+html[data-anime-ambient="on"] .anime-ambient { display: block; background: radial-gradient(ellipse at 20% 28%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 65%); }
+.anime-ambient img { width: 100%; height: 100%; object-fit: cover; filter: blur(70px) saturate(.7); opacity: .13; transform: scale(1.08); }
+html[data-anime-ambient="on"][data-color-scheme="light"] .anime-ambient img { opacity: .07; }
+@media (max-width: 640px) { .anime-ambient img { filter: blur(40px) saturate(.7); opacity: .1; } }
+
+/* Slow transforms avoid flashing and leave the user's base colour dominant. */
+html[data-anime-ambient="on"] .anime-ambient img { animation: ambient-drift 38s ease-in-out infinite alternate; }
+.ambient-theme-clouds { position: absolute; inset: -15%; background: radial-gradient(ellipse at 25% 35%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 48%), radial-gradient(ellipse at 75% 70%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 42%); animation: ambient-clouds 46s ease-in-out infinite alternate; }
+.anime-ambient:has(img) .ambient-theme-clouds { opacity: .4; }
+@keyframes ambient-drift { from { transform: scale(1.18) translate(-2%, -1%) rotate(-2deg); } to { transform: scale(1.25) translate(2%, 2%) rotate(2deg); } }
+@keyframes ambient-clouds { from { transform: translate(-3%, -2%) scale(1); } to { transform: translate(4%, 3%) scale(1.12); } }
+.hero-trailer-glow { position: absolute; inset: -5%; z-index: 2; pointer-events: none; opacity: .4; mask-image: radial-gradient(ellipse, transparent 45%, #000 88%); background: radial-gradient(ellipse, transparent 55%, color-mix(in srgb, var(--accent) 25%, transparent)); }
+.hero-trailer-glow > img, .hero-trailer-glow > canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(35px) saturate(1.15); }
+.hero-trailer-glow > img { animation: ambient-drift 32s ease-in-out infinite alternate; }
+.hero-trailer-glow > canvas { opacity: 0; transition: opacity 1s; }
+.hero-trailer-glow > canvas[data-live="true"] { opacity: 1; }
+.hero-trailer-glow > canvas[data-live="true"] + img { opacity: 0; }
+html[data-anime-ambient="off"] .hero-trailer-glow { display: none; }
+html[data-anime-ambient="on"] .home-cinema-hero.empty-resume, html[data-anime-ambient="on"] .home-cinema-hero.empty-resume .home-cinema-media { background: transparent; }
+html[data-anime-ambient="on"] .home-cinema-hero.empty-resume .home-cinema-placeholder { color: color-mix(in srgb, var(--accent) 35%, var(--ink)); text-shadow: 0 0 60px color-mix(in srgb, var(--accent) 20%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  html[data-anime-ambient="on"] .anime-ambient img, .ambient-theme-clouds, .hero-trailer-glow > img { animation: none; }
+  .hero-trailer-glow > canvas { transition: none; }
+}
