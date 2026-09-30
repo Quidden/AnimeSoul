@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { lanRequest, type Device, type LanCommand, type RemoteState } from "./api";
 import "./devices.css";
 import { useLanPeers } from "./useLanPeers";
+import { emitAppEvent } from "../../lib/events";
 
 
 function useRemote(peerId: string) {
@@ -9,6 +10,7 @@ function useRemote(peerId: string) {
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState<{ id: string; at: number } | null>(null);
   const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     const controller = new AbortController();
     let busy = false;
@@ -20,7 +22,7 @@ function useRemote(peerId: string) {
         if (!controller.signal.aborted) setState(next);
       } catch (error) {
         if (!controller.signal.aborted) { setState(null); setMessage(String(error instanceof Error ? error.message : error)); }
-      } finally { busy = false; }
+      } finally { busy = false; if (!controller.signal.aborted) setLoading(false); }
     };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 1000);
@@ -46,12 +48,12 @@ function useRemote(peerId: string) {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Ошибка управления."); }
     finally { setSending(false); }
   };
-  return { state, message, command, busy: sending || !!pending };
+  return { state, message, command, loading, busy: sending || !!pending };
 }
 
 const time = (value: number) => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, "0")}`;
 function RemoteControls({ peer }: { peer: Device }) {
-  const { state, message, command, busy } = useRemote(peer.id);
+  const { state, message, command, busy, loading } = useRemote(peer.id);
   const [seek, setSeek] = useState<number | null>(null);
   const [volume, setVolume] = useState<number | null>(null);
   const player = state?.player;
@@ -63,7 +65,7 @@ function RemoteControls({ peer }: { peer: Device }) {
   const commitVolume = () => { if (volume !== null) { void command({ action: "volume", volume }); setVolume(null); } };
   return <section className="device-card lan-remote" aria-label={`Пульт: ${peer.name}`}>
     <h2>{peer.name}</h2>
-    <p>{!state ? "Нет связи с устройством" : !state.control ? "На устройстве не разрешено управление" : !player?.animeId ? "Откройте аниме и нажмите «Включить на устройстве»" : player.title}</p>
+    <p>{loading ? "Подключаемся к устройству…" : !state ? "Нет связи с устройством" : !state.control ? "На устройстве не разрешено управление" : !player?.animeId ? "Откройте аниме на ПК или нажмите «Включить на устройстве»" : player.title}</p>
     {player?.preview && <img className="lan-preview" src={player.preview} alt={`Превью серии ${player.episode}`} />}
     {player?.animeId && <p>Сезон {player.season} · Серия {player.episode} · {player.dubbing} · {player.playing ? "Воспроизведение" : "Пауза"}</p>}
     <fieldset disabled={!state?.control || !player?.animeId || busy}>
@@ -72,9 +74,9 @@ function RemoteControls({ peer }: { peer: Device }) {
       </label>
       <div className="device-actions">
         <button onClick={() => void command({ action: "previous" })}>⏮ Предыдущая</button>
-        <button disabled={!duration} onClick={() => void command({ action: "seek", seconds: Math.max(0, position - 5) })}>−5 с</button>
+        <button disabled={!duration} onClick={() => void command({ action: "seek", seconds: Math.max(0, position - 10) })}>−10 с</button>
         <button onClick={() => void command({ action: player?.playing ? "pause" : "play" })}>{player?.playing ? "⏸ Пауза" : "▶ Играть"}</button>
-        <button disabled={!duration} onClick={() => void command({ action: "seek", seconds: Math.min(duration, position + 5) })}>+5 с</button>
+        <button disabled={!duration} onClick={() => void command({ action: "seek", seconds: Math.min(duration, position + 10) })}>+10 с</button>
         <button onClick={() => void command({ action: "next" })}>Следующая ⏭</button>
       </div>
       <label>Громкость · {Math.round((volume ?? player?.volume ?? 1) * 100)}%
@@ -99,6 +101,7 @@ export function LanRemotePanel({ peers }: { peers: Device[] }) {
   return <div className="lan-watch-panel">
     {peers.length > 1 && <label>Устройство <select value={peer?.id || ""} onChange={e => setSelected(e.target.value)}>{peers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
     {peer ? <RemoteControls key={peer.id} peer={peer} /> : <p>Нет связанных устройств. Подключите устройство в настройках.</p>}
+    <button type="button" onClick={() => emitAppEvent("open-settings", { tab: "devices" })}>Подключение и настройки устройств</button>
   </div>;
 }
 

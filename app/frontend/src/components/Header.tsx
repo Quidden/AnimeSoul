@@ -14,6 +14,8 @@ import {
 } from "../features/settings/settingsCatalog";
 import { IS_ANDROID_APP } from "../lib/platform";
 import { useHeaderCloudSync } from "../features/header/useHeaderCloudSync";
+import { useMobileLayout } from "../hooks/useMobileLayout";
+import { useModalAccessibility } from "../lib/modalAccessibility";
 
 type HeaderProps = {
   query: string;
@@ -30,6 +32,9 @@ type HeaderProps = {
   hasNewEpisodes?: boolean;
   onCurrent: () => void;
   hasCurrent: boolean;
+  currentTitle?: string;
+  onPhone?: () => void;
+  onRemote?: () => void;
   theme?: Theme;
   setTheme?: (theme: Theme) => void;
   playerPrefs?: PlayerPrefs;
@@ -95,6 +100,9 @@ export function Header({
   hasNewEpisodes = false,
   onCurrent,
   hasCurrent,
+  currentTitle,
+  onPhone,
+  onRemote,
   theme,
   setTheme,
   playerPrefs,
@@ -112,6 +120,10 @@ export function Header({
   onStorageReload,
   activeView,
 }: HeaderProps) {
+  const mobile = useMobileLayout();
+  const [mobilePanel, setMobilePanel] = useState<"search" | "menu" | "watch" | null>(null);
+  const mobilePanelRef = useRef<HTMLElement>(null);
+  useModalAccessibility(Boolean(mobile && mobilePanel), () => setMobilePanel(null), mobilePanelRef);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationId = useId();
   const navigationRef = useRef<HTMLDivElement>(null);
@@ -342,7 +354,7 @@ export function Header({
     { view: "ratings", icon: "ratings", label: "Оценки", mobileLabel: "Оценки", navigate: onRatings },
   ];
 
-  return <><header className={`app-header${IS_ANDROID_APP && !mobileSearchVisible ? " search-hidden" : ""}`}>
+  return <><header className={`app-header${mobile ? " mobile-header-hidden" : ""}${IS_ANDROID_APP && !mobileSearchVisible ? " search-hidden" : ""}`}>
     <div className="header-start">
       <Brand onClick={() => navigateFromBottomBar(onHome)} />
     </div>
@@ -516,7 +528,37 @@ export function Header({
       </div>
     </div>
   </header>
-    {statusNotice && createPortal(<div className={`app-status-toast ${statusNotice.tone}`} role="status" aria-live="polite"><i />{statusNotice.text}</div>, document.body)}
+    {mobile && <nav className="mobile-bottom-nav" aria-label="Навигация телефона">
+      <div className={`mobile-nav-status ${statusNotice?.tone ?? ""}`} role="status" aria-live="polite">{statusNotice && <><i aria-hidden="true" /><span>{IS_ANDROID_APP ? statusNotice.text.replace("на ПК", "на устройстве") : statusNotice.text}</span></>}</div>
+      <button type="button" aria-current={activeView === "home" ? "page" : undefined} onClick={() => navigateFromBottomBar(onHome)}><NavIcon name="home" /><span>Главная</span></button>
+      <button type="button" aria-expanded={mobilePanel === "search"} onClick={() => setMobilePanel("search")}><NavIcon name="search" /><span>Поиск</span></button>
+      <button type="button" className={hasCurrent ? "has-current" : undefined} aria-current={activeView === "watch" || activeView === "remote" ? "page" : undefined} aria-expanded={mobilePanel === "watch"} onClick={() => setMobilePanel("watch")}><NavIcon name="watch" /><span>Смотрю</span></button>
+      <button type="button" aria-current={activeView === "library" ? "page" : undefined} onClick={() => navigateFromBottomBar(onCollections)}><NavIcon name="catalog" /><span>Библиотека</span></button>
+      <button type="button" aria-expanded={mobilePanel === "menu"} onClick={() => setMobilePanel("menu")}><span className="mobile-menu-icon" aria-hidden="true">☰</span><span>Ещё</span></button>
+    </nav>}
+    {mobile && mobilePanel && createPortal(<div className="mobile-sheet-backdrop" onClick={event => { if (event.target === event.currentTarget) setMobilePanel(null); }}>
+      <section ref={mobilePanelRef} className="mobile-app-sheet" role="dialog" aria-modal="true" aria-label={mobilePanel === "search" ? "Поиск и каталог" : mobilePanel === "watch" ? "Смотрю" : "Разделы приложения"} tabIndex={-1}>
+        <div className="mobile-sheet-heading"><h2>{mobilePanel === "search" ? "Поиск и каталог" : mobilePanel === "watch" ? "Смотрю" : "AnimeSoul"}</h2><button type="button" aria-label="Закрыть меню" onClick={() => setMobilePanel(null)}>×</button></div>
+        {mobilePanel === "watch" ? <div className="mobile-watch-choices">
+          <button type="button" disabled={!onPhone} onClick={() => { setMobilePanel(null); onPhone?.(); }}><NavIcon name="watch" /><span><b>Продолжить на телефоне</b><small>{currentTitle || "Сначала выберите аниме в каталоге"}</small></span></button>
+          <button type="button" onClick={() => { setMobilePanel(null); onRemote?.(); }}><NavIcon name="settings" /><span><b>Пульт ПК</b><small>Управление просмотром на подключённом компьютере</small></span></button>
+        </div> : mobilePanel === "search" ? <>
+          <form className="mobile-search-form" onSubmit={event => { event.preventDefault(); setMobilePanel(null); submitGlobalSearch(); }}>
+            <input aria-label="Поиск аниме и настроек" placeholder="Аниме или настройка…" value={query} onChange={event => setQuery(event.target.value)} />
+            <button type="submit" aria-label="Найти"><NavIcon name="search" /></button>
+          </form>
+          <button type="button" className="mobile-sheet-link" onClick={() => { setMobilePanel(null); onCatalog(); }}>Открыть каталог и фильтры →</button>
+          <div className="mobile-search-results">
+            {suggestions.map(anime => <button type="button" key={anime.anime_id} onClick={() => { setMobilePanel(null); onSuggestion?.(anime); }}>{anime.poster?.big && <img src={anime.poster.big} alt="" />}<span>{anime.title}<small>{anime.year}</small></span></button>)}
+            {settingsSuggestions.map(setting => <button type="button" key={setting.id} onClick={() => { setMobilePanel(null); openSettingsSuggestion(setting); }}><NavIcon name="settings" /><span>{setting.title}<small>Настройка</small></span></button>)}
+          </div>
+        </> : <div className="mobile-menu-grid">
+          {sectionNavigation.filter(item => item.view !== "home").map(item => <button type="button" key={item.view} onClick={() => { setMobilePanel(null); navigateFromBottomBar(item.navigate); }}><NavIcon name={item.icon} /><span>{item.label}</span></button>)}
+          {settingsAvailable && <button type="button" onClick={() => { setMobilePanel(null); emitAppEvent("open-settings", { tab: "appearance", overview: true }); }}><NavIcon name="settings" /><span>Настройки</span></button>}
+        </div>}
+      </section>
+    </div>, document.body)}
+    {!mobile && statusNotice && createPortal(<div className={`app-status-toast ${statusNotice.tone}`} role="status" aria-live="polite"><i />{statusNotice.text}</div>, document.body)}
   </>;
 }
 

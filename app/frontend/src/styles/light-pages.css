@@ -1,0 +1,125 @@
+/* Shared page controls and supporting text in the light palette. */
+html[data-color-scheme="light"] {
+  & .outline, & .load-more, & .modal-close, & .history-enable-control {
+    background: var(--panel);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  & .outline:hover, & .load-more:hover { background: var(--bg); border-color: var(--accent); }
+  & .primary, & .genre-row button.selected { color: #fff; }
+  & .poster button { color: #fff; }
+  & footer, & .filter-panel label, & .card-progress small,
+  & .stats-grid small, & .statistics-panel > p, & .activity-heading p,
+  & .activity-day-detail > div:first-child span, & .activity-day-list article small,
+  & .activity-day-list article em, & .weekday-chart > div > span,
+  & .activity-months, & .activity-weekdays, & .activity-legend, & .month-chart small,
+  & .ratings-table-head, & .rating-season-row > summary > span, & .rating-chip small { color: var(--muted); }
+  & .genre-stats i, & .weekday-chart > div > i { background: var(--line); }
+  & .month-chart > div > span { background: linear-gradient(180deg, transparent, var(--bg)); }
+  & .activity-day-list, & .activity-calendar-viewport { scrollbar-color: var(--accent) var(--bg); }
+  & .rewatch-list article { border-color: var(--line); }
+  & .rewatch-list em { color: #167244; }
+  & .activity-cell.level-1, & .activity-legend .level-1 { background: color-mix(in srgb, var(--accent) 28%, var(--panel)); }
+  & .activity-cell.level-2, & .activity-legend .level-2 { background: color-mix(in srgb, var(--accent) 48%, var(--panel)); }
+  & .activity-cell.level-3, & .activity-legend .level-3 { background: color-mix(in srgb, var(--accent) 72%, var(--panel)); }
+  & .activity-cell.level-4, & .activity-legend .level-4 { background: var(--accent); }
+  & .rating-anime-row, & .rating-season-row, & .rating-anime-details { border-color: var(--line); }
+  & .rating-anime-row > summary:hover { background: var(--bg); }
+  & .rating-chip b, & .rating-anime-row > summary > strong, & .score-picker select { color: #805508; }
+  & .rating-chip.average b, & .rating-anime-row > summary > strong:nth-of-type(2),
+  & .rating-season-row > summary strong { color: #167244; }
+  & .rating-chip.community b, & .rating-episode-row > small { color: #087084; }
+  & .tracking-date-card.is-sunday > time, & .tracking-calendar-weekday.is-sunday { color: #a52757; }
+  & .home-library-workspace .home-media-card .release-status.new { color: #167244 !important; }
+  & .home-library-workspace .home-media-card .release-status.other-dub { color: #805508 !important; }
+  & .home-library-workspace .home-media-card .release-status.quiet { color: var(--muted) !important; }
+  & .home-library-workspace .inline-release.airing { color: #225c9e; }
+  & .catalog-controls .catalog-filter-drawer .filter-panel > .filter-reset:not(:disabled) { color: #ac2440; }
+}
+
+/* Folder and favorites dialogs use the same surfaces as their page. */
+html[data-color-scheme="light"] {
+  & .collection-overview, & .folder-modal,
+  & .collection-overview-anime, & .collection-overview-tracker, & .collection-overview-folder {
+    background: var(--panel);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  & .collection-overview-anime:hover, & .collection-overview-tracker:hover,
+  & .collection-overview-folder:hover { background: var(--bg); border-color: var(--accent); }
+  & .collection-overview > header { border-color: var(--line); }
+  & .collection-overview > header p, & .collection-overview-anime span,
+  & .collection-overview-tracker span, & .collection-overview-tracker small,
+  & .collection-overview-folder span, & .collection-overview-empty { color: var(--muted); }
+  & .collection-overview-list { scrollbar-color: var(--accent) var(--bg); }
+  & .overview-poster-empty { background: var(--bg); }
+  & .overview-remove { background: #fbeaf0; color: #ac2440; border-color: #e5b8c3; }
+}
+
+/* Download status, metadata and the episode picker. Video stays black. */
+html[data-color-scheme="light"] {
+  & .downloads-stats, & .downloaded-anime-details,
+  & .downloaded-anime-details dd > span, & .downloaded-episode-sizes details {
+    background: var(--bg);
+    color: var(--ink);
+  }
+  & .downloads-scan-button, & .downloads-secondary-action, & .downloads-scan-notice,
+  & .downloaded-anime-state, & .downloaded-episode-sizes details p.is-watched { color: #167244; }
+  & .downloads-error, & .download-job.is-error p, & .downloaded-anime-delete-selected,
+  & .downloaded-anime-delete:hover, & .offline-delete-dialog-icon,
+  & .offline-delete-dialog .downloads-eyebrow { color: #ac2440; }
+  & .download-job-state, & .downloaded-anime-count, & .downloads-empty-steps b { color: var(--accent); }
+  & .download-job-state.is-downloading { color: #225c9e; }
+  & .download-job-state.is-paused { color: #805508; background: #fff3d8; }
+  & .download-job-state.is-error { color: #ac2440; background: #fbeaf0; }
+  & .download-job .download-job-selection, & .downloaded-anime-details dd,
+  & .downloaded-episode-sizes summary, & .downloaded-season-select-all,
+  & .downloaded-episode-sizes details p b, & .downloaded-anime-select,
+  & .downloaded-anime-delete { color: var(--ink); }
+  & .download-progress { background: var(--line); }
+  & .downloads-primary-action, & .downloaded-anime-open,
+  & .download-picker-footer > button { background: var(--accent); color: #fff; }
+  & .downloads-primary-action:hover, & .downloaded-anime-open:hover { background: #6041b9; }
+  & .offline-delete-dialog { background: var(--panel); color: var(--ink); }
+  & .download-picker-dialog, & .download-picker-season,
+  & .download-picker-header, & .download-picker-footer, & .download-picker-range,
+  & .download-picker-queue {
+    background: var(--panel);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  & .download-picker-header > button, & .download-picker-dialog select,
+  & .download-picker-bulk-actions button, & .download-picker-range button,
+  & .download-picker-season-heading button, & .download-picker-queue button,
+  & .download-picker-episodes > label {
+    background: var(--bg); color: var(--ink); border-color: var(--line);
+  }
+  & .download-picker-header p, & .download-picker-controls label,
+  & .download-picker-controls label > small, & .download-picker-bulk-actions > span,
+  & .download-picker-season-heading span, & .download-picker-range > span,
+  & .download-picker-empty, & .download-picker-episodes > p,
+  & .download-picker-queue h3, & .download-picker-queue small,
+  & .download-picker-footer span { color: var(--muted); }
+  & .download-picker-header span { color: var(--accent); }
+  & .download-picker-season-heading .download-picker-season-copy strong,
+  & .download-picker-footer strong { color: var(--ink); }
+  & .download-picker-episodes label.is-selected { background: var(--accent); color: #fff; }
+  & .download-picker-episodes label.is-downloaded { background: #e5f4ec; color: #167244; }
+  & .download-picker-episodes label.is-queued { background: #fff3d8; color: #805508; }
+  & .download-picker-episodes label.is-missing-dubbing { background: #fbeaf0; color: #ac2440; }
+}
+
+html[data-color-scheme="light"] {
+  & .home-library-workspace .history-enable-control { background: transparent; }
+  & .history-enable-control .toggle-row > span { color: var(--muted); }
+  & .downloaded-anime-body {
+    background: color-mix(in srgb, var(--panel) 96%, transparent);
+    border-radius: 12px;
+    padding-left: 16px;
+  }
+}
+
+html[data-color-scheme="light"] {
+  & .collection-overview .inline-release.airing { color: #225c9e; }
+  & .tagline span { background: var(--panel); color: var(--muted); border-color: var(--line); }
+}

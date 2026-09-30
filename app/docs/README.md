@@ -2,7 +2,7 @@
 
 # AnimeSoul documentation
 
-Maintained `app/` implementation, version **0.2.9**, schema **3**. Reviewed against source on **2026-09-26**. English is primary; Russian counterparts use `.ru.md`. Text paths are repository-relative unless stated otherwise.
+Maintained `app/` implementation, version **0.3.0**, schema **3**. Reviewed against source on **2026-09-26**. English is primary; Russian counterparts use `.ru.md`. Text paths are repository-relative unless stated otherwise.
 
 ## Reading map
 
@@ -38,6 +38,7 @@ Release notes also have English/Russian pairs and describe historical behavior. 
 
 | Version | English | Русский |
 | --- | --- | --- |
+| 0.3.0 | [EN](../RELEASE_0.3.0.md) | [RU](../RELEASE_0.3.0.ru.md) |
 | 0.2.9 | [EN](../RELEASE_0.2.9.md) | [RU](../RELEASE_0.2.9.ru.md) |
 | 0.2.8 | [EN](../RELEASE_0.2.8.md) | [RU](../RELEASE_0.2.8.ru.md) |
 | 0.2.7 | [EN](../RELEASE_0.2.7.md) | [RU](../RELEASE_0.2.7.ru.md) |

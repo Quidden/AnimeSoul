@@ -53,7 +53,8 @@ export function useModalAccessibility(
     const focusFrame = window.requestAnimationFrame(() => {
       const dialog = dialogRef.current;
       if (!dialog || !isTopmostDialog(dialog)) return;
-      const first = dialog.querySelector<HTMLElement>("[autofocus], " + FOCUSABLE_SELECTOR);
+      const first = Array.from(dialog.querySelectorAll<HTMLElement>("[autofocus], " + FOCUSABLE_SELECTOR))
+        .find(element => element.getClientRects().length > 0 && !element.hasAttribute("inert"));
       (first ?? dialog).focus({ preventScroll: true });
     });
 
@@ -107,7 +108,13 @@ export function useModalAccessibility(
       window.removeEventListener(NATIVE_BACK_EVENT, onNativeBack);
       unlockBodyScroll();
       if (previouslyFocused?.isConnected) {
-        window.requestAnimationFrame(() => previouslyFocused.focus({ preventScroll: true }));
+        window.requestAnimationFrame(() => {
+          const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+          const topmost = dialogs.item(dialogs.length - 1);
+          if (!topmost || topmost.contains(previouslyFocused)) {
+            previouslyFocused.focus({ preventScroll: true });
+          }
+        });
       }
     };
   }, [dialogRef, open]);

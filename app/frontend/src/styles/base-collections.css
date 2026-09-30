@@ -84,7 +84,7 @@
 
 .collection-overview>.modal-close {
   position: absolute;
-  z-index: 2;
+  z-index: 31;
   right: 18px;
   top: 18px;
 }

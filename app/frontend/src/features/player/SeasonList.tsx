@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { IS_ANDROID_APP } from "../../lib/platform";
+import { useMobileLayout } from "../../hooks/useMobileLayout";
 import { EpisodeHoverPreview } from "../../components/EpisodeHoverPreview";
 import { episodePreviewImages } from "../../components/EpisodeSlideshow";
 import { ScorePicker } from "../../components/ScorePicker";
@@ -29,7 +30,6 @@ interface SeasonListProps {
   previewAnimeById: Record<number, Anime>;
   episodeHoverPreview: boolean;
   compactEpisodeList: boolean;
-  desktopLibraryBeta?: boolean;
   newEpisodeKeys: Set<string>;
   onToggleSeason: (season: number) => void;
   onToggleSeasonWatched: (season: number, episodes: string[], videos: Video[]) => void;
@@ -66,7 +66,6 @@ export function SeasonList({
   previewAnimeById,
   episodeHoverPreview,
   compactEpisodeList,
-  desktopLibraryBeta = false,
   newEpisodeKeys,
   onToggleSeason,
   onToggleSeasonWatched,
@@ -75,7 +74,8 @@ export function SeasonList({
   onEpisodeRatingChange,
 }: SeasonListProps) {
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
-  const beta = desktopLibraryBeta && desktop && !IS_ANDROID_APP;
+  const mobile = useMobileLayout();
+  const beta = desktop && !IS_ANDROID_APP;
   const [browsed, setBrowsed] = useState({ playback: selectedSeason, season: selectedSeason });
   // Follow an episode chosen by the player, including when playback returns to
   // an earlier season after the user browsed a different one in the sidebar.
@@ -84,10 +84,11 @@ export function SeasonList({
   }
   const requestedSeason = browsed.playback === selectedSeason ? browsed.season : selectedSeason;
   const visibleSeason = seasons.find(group => group.number === requestedSeason)?.number ?? seasons[0]?.number;
-  const hiddenSeasons = beta ? seasons.filter(group => group.number !== visibleSeason).map(group => group.number) : collapsedSeasons;
+  const hiddenSeasons = beta || mobile ? seasons.filter(group => group.number !== visibleSeason).map(group => group.number) : collapsedSeasons;
   const airDates = useEpisodeAirDates(seasons, seasonVideos, previewAnimeById, hiddenSeasons);
   return (
-    <div className={`all-seasons${compactEpisodeList ? " compact-episodes" : ""}${beta ? " beta-season-browser" : ""}`}>
+    <div className={`all-seasons${compactEpisodeList ? " compact-episodes" : ""}${beta ? " beta-season-browser" : ""}${mobile ? " mobile-season-browser" : ""}`}>
+      {mobile && <div className="mobile-season-picker"><h2>Серии</h2><select aria-label="Сезон" value={visibleSeason} onChange={event => setBrowsed({ playback: selectedSeason, season: Number(event.target.value) })}>{seasons.map(group => <option key={group.number} value={group.number}>{group.label ?? `Сезон ${group.number}`}</option>)}</select></div>}
       {beta && <nav className="beta-season-nav" aria-label="Сезоны и выпуски">
         <h2>Сезоны и серии</h2>
         {seasons.map(group => {
@@ -101,7 +102,7 @@ export function SeasonList({
           </button>;
         })}
       </nav>}
-      {seasons.filter(group => !beta || group.number === visibleSeason).map((group) => {
+      {seasons.filter(group => (!beta && !mobile) || group.number === visibleSeason).map((group) => {
         const videos = seasonVideos[group.number] ?? [];
         const episodeNumbers = Array.from(new Set(videos.map((video) => video.number))).sort(
           (left, right) => Number(left) - Number(right),
@@ -116,7 +117,7 @@ export function SeasonList({
           .map((item) => schedule[item.anime_id])
           .find(Boolean);
         const nextDate = scheduleItem?.episodes?.next_date;
-        const collapsed = !beta && collapsedSeasons.includes(group.number);
+        const collapsed = !beta && !mobile && collapsedSeasons.includes(group.number);
         const emptyMessage =
           status.kind === "planned"
             ? `Запланировано${entry.year ? ` · ${entry.year}` : ""}`
@@ -133,7 +134,7 @@ export function SeasonList({
             key={group.number}
           >
             <div className="season-summary-row">
-              {beta ? <div className="season-summary beta-season-heading">
+              {beta || mobile ? <div className="season-summary beta-season-heading">
                 <h2>{seasonLabel}</h2>
                 <span>{watchedCount} из {episodeNumbers.length} просмотрено</span>
               </div> : <button
@@ -193,7 +194,7 @@ export function SeasonList({
                     return (
                       <EpisodeHoverPreview
                         key={number}
-                        enabled={episodeHoverPreview}
+                        enabled={!mobile && episodeHoverPreview}
                         images={episodePreviewImages(previewAnime, video?.originNumber ?? number)}
                         fallback={previewAnime.poster?.fullsize ?? previewAnime.poster?.big}
                         label={`${seasonLabel} · ${unit} ${number}`}

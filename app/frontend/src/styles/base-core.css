@@ -7,6 +7,13 @@
   --accent: #9a78ff;
 }
 
+html[data-color-scheme="light"] {
+  --panel: #ffffff;
+  --line: #d4cdda;
+  --ink: #28232d;
+  --muted: #655d70;
+}
+
 * {
   box-sizing: border-box;
 }

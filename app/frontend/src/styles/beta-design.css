@@ -1,4 +1,4 @@
-/* Beta navigation and pages share one quiet surface language. */
+/* Main navigation and pages share one quiet surface language. */
 html .app > .app-header {
   position: sticky;
   inset: 0 auto auto;
@@ -30,9 +30,9 @@ html[data-platform="android"] body .app > .app-header {
   min-height: 70px;
   height: auto;
 }
-html[data-desktop-library="beta"]:not([data-platform="android"]) body .app > .app-header { grid-template-columns: minmax(145px, 1fr) minmax(180px, 680px) minmax(48px, 1fr); }
-html[data-desktop-library="beta"]:not([data-platform="android"]) body .app > .app-header { grid-template-columns: minmax(145px, 1fr) minmax(180px, 680px) minmax(48px, 1fr) !important; }
-html[data-desktop-library="beta"]:not([data-platform="android"]) body .app-header .header-menu { display: block; }
+html[data-desktop-library="standard"]:not([data-platform="android"]) body .app > .app-header { grid-template-columns: minmax(145px, 1fr) minmax(180px, 680px) minmax(48px, 1fr); }
+html[data-desktop-library="standard"]:not([data-platform="android"]) body .app > .app-header { grid-template-columns: minmax(145px, 1fr) minmax(180px, 680px) minmax(48px, 1fr) !important; }
+html[data-desktop-library="standard"]:not([data-platform="android"]) body .app-header .header-menu { display: block; }
 html .app > .app-header > .header-start { display: flex; min-width: 0; grid-column: 1; }
 html .app > .app-header > .search-wrap {
   position: relative !important;
@@ -248,14 +248,14 @@ html body .app .watching-list > .home-catalog-card { display: block; width: auto
 .watch-anime-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: var(--muted); font-size: 11px; }
 .watch-anime-breadcrumb button { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; }
 .anime-detail-page .watch-anime-hero h1 { max-width: 19ch; margin: 22px 0 12px; font-size: clamp(34px, 4.25vw, 74px); font-weight: 850; line-height: 1.05; letter-spacing: -.045em; overflow-wrap: anywhere; }
-.watch-anime-original { margin: 0 0 3px; color: #d9d0e3 !important; font-size: 16px; font-weight: 600; }
+.watch-anime-original { margin: 0 0 3px; color: var(--muted) !important; font-size: 16px; font-weight: 600; }
 .watch-anime-alias { margin: 0; color: var(--muted); font-size: 12px; }
 .anime-detail-page .watch-anime-meta { margin: 20px 0 16px; }
 .anime-detail-page .watch-anime-meta span { padding: 8px 12px; border-radius: 9px; font-size: 12px; font-weight: 700; }
 .anime-detail-page .watch-anime-meta .watch-anime-rating { color: #ffda84; background: #5a3d0f55; }
 .watch-anime-genres { display: flex; flex-wrap: wrap; gap: 7px; }
 .watch-anime-genres button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: #ffffff09; color: var(--ink); font-size: 11px; cursor: pointer; }
-.watch-anime-description { max-width: 70ch; margin: 22px 0 0; color: #d2cad8 !important; font-size: 15px; line-height: 1.7; white-space: pre-line; }
+.watch-anime-description { max-width: 70ch; margin: 22px 0 0; color: var(--ink) !important; font-size: 15px; line-height: 1.7; white-space: pre-line; }
 .watch-info-heading { margin: 0 0 12px; font-size: 18px; }
 .watch-family-link { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 28px 0; padding: 20px 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
 .watch-family-link h2 { margin: 4px 0; font-size: 22px; }

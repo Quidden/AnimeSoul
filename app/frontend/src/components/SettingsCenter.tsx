@@ -24,10 +24,13 @@ import { OfflineSettings } from "../features/settings/OfflineSettings";
 import { CredentialsSettings } from "../features/settings/CredentialsSettings";
 import { PlaybackSettings } from "../features/settings/PlaybackSettings";
 import { WatchPartySettings } from "../features/settings/WatchPartySettings";
+import { DISCORD_FEATURE } from "../features/discord/presence";
 import { IS_ANDROID_APP } from "../lib/platform";
 import { useModalAccessibility } from "../lib/modalAccessibility";
+import { useMobileLayout } from "../hooks/useMobileLayout";
 
 const DeviceSettings = lazy(() => import("../features/devices/DeviceSettings").then(module => ({ default: module.DeviceSettings })));
+const DiscordSettings = lazy(() => import("../features/discord/DiscordSettings").then(module => ({ default: module.DiscordSettings })));
 
 type Props = {
   theme: Theme;
@@ -44,11 +47,12 @@ type Props = {
   onStorageReload?: () => void;
 };
 
-const SETTINGS_CENTER_TABS = IS_ANDROID_APP
-  ? SETTINGS_TABS.filter(tab => tab.id !== "party")
-  : SETTINGS_TABS;
+const SETTINGS_CENTER_TABS = SETTINGS_TABS.filter(tab =>
+  (!IS_ANDROID_APP || tab.id !== "party") && (DISCORD_FEATURE || tab.id !== "discord"));
 
 export function SettingsCenter(props: Props) {
+  const mobile = useMobileLayout();
+  const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>("watching");
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,7 +72,10 @@ export function SettingsCenter(props: Props) {
   } = googleDrive;
   const activeTabDefinition = SETTINGS_CENTER_TABS.find(tab => tab.id === activeTab);
 
-  useModalAccessibility(open, () => setOpen(false), modalRef);
+  useModalAccessibility(open, () => {
+    if (mobile && mobileCategoryOpen) setMobileCategoryOpen(false);
+    else setOpen(false);
+  }, modalRef);
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -95,11 +102,12 @@ export function SettingsCenter(props: Props) {
 
   useEffect(() => { void loadGDriveStatus(); }, [loadGDriveStatus]);
 
-  useEffect(() => listenAppEvent("open-settings", ({ tab, targetTitle }) => {
-    if (IS_ANDROID_APP && tab === "party") return;
+  useEffect(() => listenAppEvent("open-settings", ({ tab, targetTitle, overview }) => {
+    if ((IS_ANDROID_APP && tab === "party") || (!DISCORD_FEATURE && tab === "discord")) return;
     setActiveTab(tab);
     setSearchQuery("");
     setGlobalSearchTarget(targetTitle ?? "");
+    setMobileCategoryOpen(!overview);
     setOpen(true);
   }), []);
 
@@ -224,13 +232,13 @@ export function SettingsCenter(props: Props) {
         aria-label="Открыть настройки AnimeSoul"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen(current => !current)}
+        onClick={() => { setMobileCategoryOpen(false); setSearchQuery(""); setOpen(current => !current); }}
       >
         ⚙
       </button>
       {open && typeof document !== "undefined" && createPortal(
         <div
-          className="settings-modal-backdrop"
+          className={`settings-modal-backdrop${mobile ? " mobile-settings-backdrop" : ""}`}
           onPointerDown={(event) => {
             if (event.target !== event.currentTarget) return;
             event.preventDefault();
@@ -245,7 +253,7 @@ export function SettingsCenter(props: Props) {
         >
           <section
             ref={modalRef}
-            className="settings-modal"
+            className={`settings-modal${mobile ? ` mobile-settings ${mobileCategoryOpen ? "show-category" : "show-categories"}` : ""}`}
             role="dialog"
             aria-modal="true"
             aria-label="Настройки AnimeSoul"
@@ -253,19 +261,20 @@ export function SettingsCenter(props: Props) {
           >
             <header>
               <div>
+                {mobile && mobileCategoryOpen && <button type="button" className="mobile-settings-back" onClick={() => setMobileCategoryOpen(false)}>← Все настройки</button>}
                 <span>ЦЕНТР УПРАВЛЕНИЯ</span>
-                <h2>{IS_ANDROID_APP ? "Настройки" : "Настройки AnimeSoul"}</h2>
-                <p>Все параметры сохраняются в активном профиле автоматически.</p>
+                <h2>{mobile ? "Настройки" : "Настройки AnimeSoul"}</h2>
+                <p>{activeTab === "discord" ? "Настройки Discord сохраняются только на этом устройстве." : "Все параметры сохраняются в активном профиле автоматически."}</p>
               </div>
               <div className="settings-header-actions">
-                <button
+                {activeTab !== "discord" && <button
                   className="settings-reset"
                   onClick={resetSettings}
                   aria-label="Сбросить настройки"
                   title="Сбросить настройки"
                 >
                   ↺ Сбросить
-                </button>
+                </button>}
                 <button onClick={() => setOpen(false)} aria-label="Закрыть">×</button>
               </div>
             </header>
@@ -286,14 +295,14 @@ export function SettingsCenter(props: Props) {
                   )}
                 </label>
                 <div ref={tabListRef} className="settings-tab-list" role="tablist">
-                  {SETTINGS_CENTER_TABS.map(tab => (
+                  {SETTINGS_CENTER_TABS.filter(tab => !mobile || !searchQuery || matchesSettingsQuery(`${tab.label} ${tab.description} ${SETTINGS_SEARCH_TERMS[tab.id]}`, searchQuery)).map(tab => (
                     <button
                       key={tab.id}
                       type="button"
                       role="tab"
                       aria-selected={activeTab === tab.id}
                       className={activeTab === tab.id ? "active" : ""}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => { setActiveTab(tab.id); setMobileCategoryOpen(true); }}
                     >
                       <i aria-hidden="true">{tab.icon}</i>
                       <span>
@@ -347,6 +356,7 @@ export function SettingsCenter(props: Props) {
                     <OfflineSettings />
                     {activeTab === "devices" && <Suspense fallback={<p>Загрузка устройств…</p>}><DeviceSettings /></Suspense>}
                     <CloudSettings state={googleDrive} />
+                    {DISCORD_FEATURE && activeTab === "discord" && <Suspense fallback={<p>Загрузка настроек Discord…</p>}><DiscordSettings /></Suspense>}
                     {!IS_ANDROID_APP && (
                       <WatchPartySettings
                         playerPrefs={props.playerPrefs}

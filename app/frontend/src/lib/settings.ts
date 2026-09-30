@@ -44,7 +44,6 @@ export const DEFAULT_PLAYER_PREFS: PlayerPrefs = {
   playerEpisodeCarousel: true,
   episodeHoverPreview: true,
   compactEpisodeList: false,
-  desktopLibraryBeta: false,
   animeAmbient: true,
   headerGlass: true,
   toolbarIconOnly: false,

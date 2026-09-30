@@ -23,6 +23,7 @@ import httpx
 import uvicorn
 
 from backend.app.version import APP_VERSION
+from backend.app.services.discord_presence import DesktopDiscordBridge, presence as discord_presence
 
 from runtime_instance import (
     find_available_port,
@@ -304,9 +305,13 @@ def open_existing_client(port: int, mode: LaunchMode) -> None:
         width=1440,
         height=900,
         min_size=(960, 640),
+        js_api=DesktopDiscordBridge(),
     )
     install_desktop_zoom(window)
-    webview.start(private_mode=False, icon=str(bundled_asset("animesoul.ico")))
+    try:
+        webview.start(private_mode=False, icon=str(bundled_asset("animesoul.ico")))
+    finally:
+        discord_presence.close()
 
 
 def run_browser(port: int) -> None:
@@ -366,6 +371,7 @@ def run_desktop(port: int) -> None:
         width=1440,
         height=900,
         min_size=(960, 640),
+        js_api=DesktopDiscordBridge(),
     )
     install_desktop_zoom(window)
     try:

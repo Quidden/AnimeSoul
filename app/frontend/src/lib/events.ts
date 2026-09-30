@@ -25,6 +25,7 @@ export type AppEventMap = {
   "open-settings": {
     tab: SettingsTab;
     targetTitle?: string;
+    overview?: boolean;
   };
   "close-settings": undefined;
 };

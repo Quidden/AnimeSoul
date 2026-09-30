@@ -1,7 +1,6 @@
 import type { PlayerPrefs, Theme } from "../../lib/types";
 import { THEMES } from "../../lib/settings";
 import { Setting } from "./Setting";
-import { IS_ANDROID_APP } from "../../lib/platform";
 
 type AppearanceSettingsProps = {
   theme: Theme;
@@ -24,19 +23,6 @@ export function AppearanceSettings({
           <b>Оформление</b>
           <span>Готовые темы и собственные цвета</span>
         </div>
-        {!IS_ANDROID_APP && <Setting
-          title="Медиатека — бета-тема для ПК"
-          description="Компактная шапка, боковые вкладки медиатеки и облегчённые списки сезонов и серий. Работает при ширине окна от 801 px; плеер и мобильное оформление остаются прежними. Ваши цвета сохраняются."
-          searchTerms="бета beta минимализм тема пк медиатека"
-        >
-          <button
-            type="button"
-            className={`toggle${playerPrefs.desktopLibraryBeta ? " on" : ""}`}
-            aria-label="Медиатека — бета-тема для ПК"
-            aria-pressed={playerPrefs.desktopLibraryBeta === true}
-            onClick={() => updatePlayerPrefs({ desktopLibraryBeta: !playerPrefs.desktopLibraryBeta })}
-          ><i /></button>
-        </Setting>}
         <Setting
           title="Жидкое стекло шапки"
           description="Полупрозрачная шапка с размытием фона и мягкими бликами. При выключении шапка становится непрозрачной в цвете выбранной темы."

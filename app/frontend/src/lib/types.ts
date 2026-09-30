@@ -228,7 +228,6 @@ export type PlayerPrefs = {
   /** Use denser episode cards below the player without removing their actions. */
   compactEpisodeList: boolean;
   /** Experimental desktop library layout; never applied on mobile. */
-  desktopLibraryBeta: boolean;
   /** Soft poster-coloured lighting on anime detail pages. */
   animeAmbient: boolean;
   /** Translucent blurred application header. */

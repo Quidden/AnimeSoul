@@ -233,10 +233,7 @@ export function useProfileStorage({
         const prefs = { ...DEFAULT_PLAYER_PREFS, ...playerPrefs };
         root.dataset.headerGlass = prefs.headerGlass ? "on" : "off";
         root.dataset.animeAmbient = prefs.animeAmbient ? "on" : "off";
-        root.dataset.desktopLibrary = prefs.desktopLibraryBeta === true ? "beta" : "classic";
-        if (prefs.desktopLibraryBeta === true) {
-            void import("../../styles/desktop-library-beta.css");
-        }
+        root.dataset.desktopLibrary = "standard";
         root.style.setProperty("--watched-episode-color", prefs.watchedEpisodeColor);
         root.style.setProperty(
             "--interface-font-scale",

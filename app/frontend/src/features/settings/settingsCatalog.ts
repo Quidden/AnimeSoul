@@ -1,3 +1,5 @@
+import { DISCORD_FEATURE } from "../discord/config";
+
 export type SettingsTab =
   | "watching"
   | "player"
@@ -7,6 +9,7 @@ export type SettingsTab =
   | "devices"
   | "cloud"
   | "party"
+  | "discord"
   | "profiles"
   | "changelog"
   | "debug";
@@ -24,6 +27,7 @@ type SettingsSearchEntry = SettingsSearchResult & {
 };
 
 export const SETTINGS_SEARCH_TERMS: Record<SettingsTab, string> = {
+  discord: "discord дискорд дисскорд активность логотип название аниме сезон серия таймкод пауза rich presence",
   devices: "устройства сеть локальная lan wifi сейвы передача серии телефон пк пульт управление привязка",
   watching: "просмотр продолжение автозапуск предпросмотр история сохранять прогресс серия момент переход прокрутка",
   player: "плеер автоскип пропуск опенинг эндинг автосерия карусель миниатюры наведение панель таймкод расположение",
@@ -43,6 +47,7 @@ export const SETTINGS_TABS: Array<{
   label: string;
   description: string;
 }> = [
+  { id: "discord", icon: "◉", label: "Discord", description: "Активность, данные просмотра и формат отображения" },
   { id: "devices", icon: "⇄", label: "Устройства", description: "Локальный обмен, сейвы и управление плеером" },
   {
     id: "watching",
@@ -125,7 +130,6 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchEntry[] = [
   { id: "appearance-header-glass", tab: "appearance", kind: "setting", title: "Жидкое стекло шапки", description: "Полупрозрачная шапка с размытием и бликами", keywords: "liquid glass стекло шапка прозрачность размытие" },
   { id: "appearance-ambient", tab: "appearance", kind: "setting", title: "Эмбиент интерфейса", description: "Общий фон в цветах последнего просмотренного аниме и мягкое свечение", keywords: "ambient эмбиент подсветка свечение постер фон" },
   { id: "appearance-palette", tab: "appearance", kind: "setting", title: "Собственная палитра", description: "Основной и акцентный цвета интерфейса", keywords: "цвет фон акцент оформление кастомизация" },
-  { id: "appearance-desktop-beta", tab: "appearance", kind: "setting", title: "Медиатека — бета-тема для ПК", description: "Минималистичное оформление для компьютера", keywords: "бета beta минимализм тема пк медиатека" },
   { id: "appearance-themes", tab: "appearance", kind: "setting", title: "Готовые темы", description: "Предустановленные цветовые оформления", keywords: "светлая темная фиолетовая цвет схема" },
   { id: "appearance-watched", tab: "appearance", kind: "setting", title: "Цвет просмотренной серии", description: "Оформление уже просмотренных серий", keywords: "рамка фон номер отметка" },
   { id: "appearance-text", tab: "appearance", kind: "setting", title: "Размер обычного текста", description: "Масштаб подписей, кнопок и метаданных", keywords: "шрифт масштаб интерфейс крупнее мельче" },
@@ -225,6 +229,7 @@ export function searchSettings(
   const limit = Math.max(1, options.limit ?? 4);
 
   return [generalSettings, ...SETTINGS_SEARCH_ITEMS, ...sections]
+    .filter((entry) => DISCORD_FEATURE || entry.tab !== "discord")
     .filter((entry) => includeParty || entry.tab !== "party")
     .filter((entry) => matchesSettingsQuery(
       `${entry.title} ${entry.description} ${entry.keywords ?? ""}`,

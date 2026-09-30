@@ -23,6 +23,10 @@ class ReleaseUpdateTests(unittest.TestCase):
             with self.subTest(version=version):
                 self.assertEqual(self.check_payload({"tag_name": version})["state"], state)
 
+    def test_release_link_targets_the_checked_version(self):
+        result = self.check_payload({"tag_name": "v99.0.0", "html_url": "https://untrusted.example"})
+        self.assertEqual(result["releaseUrl"], "https://github.com/Quidden/AnimeSoul/releases/tag/v99.0.0")
+
     def test_invalid_and_prerelease_metadata(self):
         for payload in [[], {}, {"tag_name": "bad"}, {"tag_name": "v99.0.0", "prerelease": True}]:
             with self.subTest(payload=payload):

@@ -12,7 +12,7 @@ AnimeSoul is a local application for discovering anime, watching episodes and ma
 
 | | |
 | --- | --- |
-| Version | **0.2.9**; profile schema **3** |
+| Version | **0.3.0**; profile schema **3** |
 | Clients | Windows browser / PyWebView; Android WebView + embedded Python |
 | Interface | React 19, TypeScript 5.9, Vite 8, global CSS, hls.js |
 | Backend | FastAPI, Uvicorn, httpx; JSON persistence and SQLite caches/ratings |

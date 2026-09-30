@@ -1,7 +1,7 @@
-/* Opt-in presentation only. All mobile/Android layouts and player controls retain
+/* Standard desktop presentation. All mobile/Android layouts and player controls retain
  * their existing styles. Colors continue to come from the user's palette. */
 @media (min-width: 801px) {
-  html[data-desktop-library="beta"]:not([data-platform="android"]) {
+  html[data-desktop-library="standard"]:not([data-platform="android"]) {
     & .app { background: var(--bg) !important; }
     & .app > .app-header {
       grid-template-columns: auto minmax(180px, 1fr) auto;
@@ -134,10 +134,10 @@
   }
 }
 @media (min-width: 801px) and (max-width: 1100px) {
-  html[data-desktop-library="beta"]:not([data-platform="android"]) .all-seasons .episode-grid { grid-template-columns: minmax(0, 1fr); }
+  html[data-desktop-library="standard"]:not([data-platform="android"]) .all-seasons .episode-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (min-width: 1200px) {
-  html[data-desktop-library="beta"]:not([data-platform="android"]) {
+  html[data-desktop-library="standard"]:not([data-platform="android"]) {
     & .app > .app-header { grid-template-columns: auto auto minmax(180px, 1fr) auto; gap: 16px; }
     & .app-header > .app-navigation { display: flex; grid-column: 2; grid-row: 1; gap: 4px; }
     & .app-header > .app-navigation > .desktop-section-nav { display: flex; min-width: 0; padding: 8px; border: 0; background: transparent; font-size: 12px; }

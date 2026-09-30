@@ -45,6 +45,7 @@ def check_for_updates() -> dict[str, object]:
         result.update(
             state="available" if newer else "current",
             latestVersion=version,
+            releaseUrl=f"{RELEASES_URL}/tag/{payload['tag_name']}",
             message=f"Доступна новая версия {version}." if newer else "Установлена актуальная версия.",
         )
     except urllib.error.HTTPError as error:

@@ -1,0 +1,165 @@
+/* Phone navigation replaces the header; the home hero retains its own layout. */
+/* Native WebView receives real system-bar insets from MainActivity. */
+html[data-platform="android"] body .app:has(> .watch-shell.mobile-anime-page) { padding-top: var(--android-safe-top, 0px); }
+html:has([role="dialog"][aria-modal="true"]) .mobile-resume-bar, html:has([role="dialog"][aria-modal="true"]) .mobile-bottom-nav { display: none; }
+.app > .app-header.mobile-header-hidden { display: none !important; }
+html:has(.mobile-bottom-nav) body .app { padding-top: 0; padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+html:has(.mobile-resume-bar) body .app { padding-bottom: calc(144px + env(safe-area-inset-bottom)); }
+html:not(.animesoul-native-pip) .active-watch-layer.mobile-background-player { position: fixed !important; inset: 0 auto auto -10000px !important; width: 390px !important; height: 220px !important; overflow: hidden; visibility: hidden; pointer-events: none; }
+.mobile-bottom-nav {
+  position: fixed; z-index: 300; inset: auto 0 0; display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 7px max(6px, env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  background: var(--panel); border-top: 1px solid var(--line);
+}
+.mobile-bottom-nav > button {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-width: 0; min-height: 50px; gap: 4px; padding: 5px 2px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 10px;
+}
+.mobile-bottom-nav .nav-icon { display: block; width: 22px; height: 22px; }
+.mobile-nav-status { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 22px; padding: 0 8px 3px; color: var(--muted); font-size: 11px; line-height: 16px; }
+.mobile-nav-status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-nav-status i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.mobile-nav-status.success { color: var(--accent); }
+.mobile-nav-status.error { color: #e07887; }
+.mobile-watch-choices { display: grid; gap: 10px; margin-top: 16px; }
+.mobile-watch-choices button { display: flex; gap: 14px; align-items: center; min-height: 76px; padding: 16px; text-align: left; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; }
+.mobile-watch-choices button:disabled { opacity: .5; }
+.mobile-watch-choices .nav-icon { width: 26px; flex-shrink: 0; }
+.mobile-watch-choices b { font-size: 15px; }
+.mobile-watch-choices small { display: block; color: var(--muted); margin-top: 5px; font-size: 12px; line-height: 1.5; }
+html:has(.mobile-bottom-nav) body .app { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+html:has(.mobile-resume-bar) body .app { padding-bottom: calc(166px + env(safe-area-inset-bottom)); }
+.mobile-bottom-nav .nav-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.mobile-bottom-nav > button[aria-current], .mobile-bottom-nav > .has-current { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+.mobile-menu-icon { font-size: 22px; line-height: 22px; }
+.mobile-sheet-backdrop { position: fixed; inset: 0; z-index: 600; background: #0008; display: flex; align-items: flex-end; }
+.mobile-app-sheet { width: 100%; max-height: 85dvh; overflow-y: auto; padding: 16px 18px calc(22px + env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; background: var(--panel); color: var(--ink); }
+.mobile-sheet-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.mobile-sheet-heading h2 { font-size: 20px; margin: 0; }
+.mobile-sheet-heading button { width: 44px; height: 44px; background: transparent; border: 0; font-size: 26px; }
+.mobile-menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.mobile-menu-grid button, .mobile-search-results button { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); text-align: left; }
+.mobile-menu-grid .nav-icon, .mobile-search-form .nav-icon, .mobile-search-results .nav-icon { width: 22px; height: 22px; flex-shrink: 0; }
+.mobile-app-sheet .nav-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.mobile-search-form { display: flex; margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.mobile-search-form input { flex: 1; width: 0; min-width: 0; border: 0; padding: 12px; background: transparent; color: var(--ink); font-size: 16px; }
+.mobile-search-form button { flex: 0 0 48px; border: 0; background: transparent; }
+.mobile-sheet-link { width: 100%; min-height: 48px; color: var(--accent); background: transparent; border: 0; text-align: left; }
+.mobile-search-results { display: grid; gap: 8px; }
+.mobile-search-results img { width: 35px; height: 50px; object-fit: cover; border-radius: 5px; }
+.mobile-search-results small { display: block; color: var(--muted); }
+.mobile-resume-bar { position: fixed; z-index: 290; left: 8px; right: 8px; bottom: calc(94px + env(safe-area-inset-bottom)); min-height: 52px; display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; color: var(--ink); box-shadow: 0 6px 24px #0003; text-align: left; }
+.mobile-resume-bar > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-resume-bar small { display: block; font-size: 11px; color: var(--muted); }
+.mobile-watch-modes { display: flex; justify-content: center; gap: 8px; padding: 8px 16px; margin: 0; }
+.mobile-watch-modes button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); }
+.mobile-watch-modes button.active { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); color: var(--accent); }
+.watch-shell.mobile-anime-page { display: flex; flex-direction: column; width: 100%; max-width: none; margin: 0; gap: 0; padding: 0 16px 24px; }
+.mobile-source-options { padding: 8px 16px; background: var(--panel); color: var(--ink); }
+.mobile-source-options summary { min-height: 44px; padding: 12px 0; font-size: 13px; }
+.mobile-source-options > .player-toolbar { width: 100%; }
+html[data-platform="android"] .watch-shell.mobile-anime-page { padding: 0 16px 24px; }
+html[data-platform="android"] .mobile-section-tabs.mobile-watch-modes { margin: env(safe-area-inset-top) auto 0; }
+.mobile-anime-page > .episode-carousel { order: 0; }
+.mobile-watch-title { order: 1; font-size: 18px; line-height: 1.4; margin: 16px 0 6px; }
+.mobile-anime-tabs { display: flex; order: 2; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.mobile-anime-tabs button { flex: 1; min-height: 48px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); }
+.mobile-anime-tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.mobile-anime-page > .season-load-notice, .mobile-anime-page > .watch-dubbing-warning { order: 3; }
+.mobile-anime-page > .all-seasons { order: 4; }
+.mobile-anime-page > .mobile-anime-info { order: 3; }
+.watch-shell.mobile-anime-about > .episode-carousel, .watch-shell.mobile-anime-about > .all-seasons, .mobile-anime-about > .mobile-watch-title, .mobile-anime-about > .season-load-notice, .mobile-anime-about > .watch-dubbing-warning { display: none !important; }
+.mobile-anime-page .episode-carousel.disabled { display: block; width: calc(100% + 32px); max-width: none; margin: 0 -16px; padding: 0; min-height: 0; }
+.mobile-anime-page .video-layout { width: 100%; max-width: none; margin: 0; border-radius: 0; box-shadow: none; }
+.mobile-anime-page .player-frame { border-radius: 0; }
+.mobile-anime-summary { display: flex; gap: 14px; align-items: flex-start; }
+.mobile-anime-summary > img { width: 100px; aspect-ratio: 2/3; object-fit: cover; border-radius: 12px; }
+.mobile-anime-summary > div { flex: 1; min-width: 0; }
+.mobile-anime-summary h1 { font-size: 20px; line-height: 1.3; margin: 6px 0 12px; }
+.mobile-anime-summary small { color: var(--muted); }
+.mobile-anime-info .mobile-watch-start { width: 100%; min-height: 48px; margin: 16px 0 12px; }
+.mobile-anime-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mobile-anime-info .watch-poster-actions { margin-top: 8px; }
+.mobile-anime-info .watch-poster-actions button { min-height: 44px; }
+.mobile-anime-actions button, .mobile-franchise-link { min-height: 44px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); }
+.mobile-anime-description { margin: 16px 0; }
+.mobile-anime-description summary { padding: 12px 0; min-height: 44px; font-weight: 600; }
+.mobile-anime-description p { font-size: 14px; line-height: 1.7; color: var(--ink); }
+.mobile-anime-trailer { margin: 16px 0; }
+.mobile-anime-trailer h2 { font-size: 18px; }
+.mobile-anime-trailer:not(:has(.watch-trailer)) { display: none; }
+.mobile-anime-info .anime-facts { margin-top: 20px; }
+.mobile-season-picker { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mobile-season-picker h2 { font-size: 18px; }
+.mobile-season-picker select { width: auto; max-width: 65%; min-height: 44px; padding: 8px 10px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.mobile-season-browser .season-summary h2 { display: none; }
+.mobile-season-browser .season-panel { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.mobile-season-browser .season-summary { padding: 8px 0; }
+.watch-shell.mobile-anime-page .mobile-season-browser .episode-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.watch-shell.mobile-anime-page .mobile-season-browser .episode-entry { display: flex; align-items: center; gap: 12px; min-height: 68px; padding: 12px 48px 12px 12px; border-radius: 12px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+.mobile-season-browser .episode-entry.active { background: color-mix(in srgb, var(--accent) 15%, var(--panel)); border-color: var(--accent); }
+.watch-shell.mobile-anime-page .mobile-season-browser .episode-entry > b { display: grid; place-items: center; min-width: 34px; min-height: 34px; border-radius: 8px; }
+.watch-shell.mobile-anime-page .mobile-season-browser .episode-entry > span { display: block; font-size: 14px; min-width: 0; }
+.watch-shell.mobile-anime-page .mobile-season-browser .episode-entry small { display: block; color: var(--muted); font-size: 12px; }
+.watch-shell.mobile-anime-page .mobile-season-browser .episode-entry .episode-release-date, .watch-shell.mobile-anime-page .mobile-season-browser .episode-score-picker { display: none; }
+.mobile-season-browser .episode-watch-toggle { min-width: 44px; min-height: 44px; right: 2px; top: 12px; }
+.settings-modal-backdrop.mobile-settings-backdrop { padding: 0; }
+html[data-platform="android"] .settings-modal-backdrop.mobile-settings-backdrop { inset: 0; }
+html[data-platform="android"] .settings-modal.mobile-settings { height: 100%; max-height: 100%; padding-bottom: var(--android-safe-bottom, 0px); }
+.settings-modal.mobile-settings { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+.settings-modal.mobile-settings > header { height: auto; min-height: 88px; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; flex-shrink: 0; }
+.settings-modal.mobile-settings > header h2 { font-family: inherit; font-size: 22px; }
+.settings-modal.mobile-settings > header > div > span, .settings-modal.mobile-settings > header .settings-reset { display: none; }
+.settings-modal.mobile-settings > header p { display: block; font-size: 12px; }
+.settings-modal.mobile-settings .settings-layout { display: flex; flex-direction: column; }
+.settings-modal.mobile-settings .settings-tabs { width: 100%; flex: 1; min-height: 0; padding: 16px; overflow-y: auto; background: var(--panel); }
+.settings-modal.mobile-settings .settings-search { flex-shrink: 0; height: 48px; }
+.settings-modal.mobile-settings .settings-search input { font-size: 16px; }
+.settings-modal.mobile-settings .settings-tab-list { display: flex; flex-direction: column; gap: 4px; overflow: visible; padding: 0 0 20px; }
+.settings-modal.mobile-settings .settings-tab-list button { flex: 0 0 auto; min-height: 64px; width: 100%; padding: 12px; text-align: left; }
+.settings-modal.mobile-settings .settings-tab-list b { font-size: 14px; }
+.settings-modal.mobile-settings .settings-tab-list small { display: block; font-size: 12px; white-space: normal; }
+.settings-modal.mobile-settings.show-categories .settings-workspace, .settings-modal.mobile-settings.show-category .settings-tabs { display: none; }
+.settings-modal.mobile-settings .settings-workspace { flex: 1; min-height: 0; }
+.settings-modal.mobile-settings .settings-scroll { padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
+.settings-modal.mobile-settings .settings-panel-heading { padding: 12px 16px; }
+.settings-modal.mobile-settings .settings-panel-heading > small { display: none; }
+.settings-modal.mobile-settings .settings-item { flex-wrap: wrap; gap: 12px; padding: 14px; }
+.settings-modal.mobile-settings .settings-item > div:first-child > b { font-size: 14px; }
+.settings-modal.mobile-settings .settings-item p, .settings-modal.mobile-settings .settings-item small, .settings-modal.mobile-settings .settings-group-title span { font-size: 12px; line-height: 1.5; }
+.settings-modal.mobile-settings input:not([type="checkbox"]):not([type="range"]):not([type="color"]), .settings-modal.mobile-settings select { font-size: 16px; max-width: 100%; min-height: 44px; }
+.settings-modal.mobile-settings .mobile-settings-back { min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 14px; }
+@media (max-width: 800px) {
+  .modal.collection-overview > header { display: block; height: auto; padding: 18px 52px 16px 16px; flex-shrink: 0; }
+  .modal.collection-overview > header h2 { font-family: inherit; font-size: 24px; overflow-wrap: anywhere; }
+  .modal.collection-overview > header p { font-size: 12px; }
+  .modal.collection-overview .collection-overview-actions { grid-column: 1 / -1; display: flex; flex-direction: row; flex-wrap: wrap; min-width: 0; width: 100%; }
+  .modal.collection-overview .collection-overview-actions button { flex: 1 1 120px; width: auto; min-width: 0; min-height: 44px; padding: 10px 12px; font-size: 14px; white-space: normal; }
+  .modal.collection-overview .collection-overview-folder { grid-template-columns: minmax(0, 1fr) auto; }
+  .modal.collection-overview .collection-overview-folder > .overview-remove { grid-column: 1 / -1; min-height: 44px; }
+  .modal.folder-view .folder-view-head { display: block; padding-right: 32px; }
+  .modal.folder-view .folder-view-head h2 { overflow-wrap: anywhere; }
+  .modal.folder-view .folder-anime-list article { grid-template-columns: 60px minmax(0, 1fr); gap: 12px; }
+  .modal.folder-view .folder-anime-list .drag { display: none; }
+  .modal.folder-view .folder-anime-list article > div { min-width: 0; grid-column: 2; }
+  .modal.folder-view .folder-anime-list article:not(:has(> img)) > div { grid-column: 1 / -1; }
+  .modal.folder-view .folder-anime-list aside { grid-column: 1 / -1; }
+  .modal.folder-view .folder-anime-list .primary { min-height: 44px; width: 100%; font-size: 14px; }
+  .modal.folder-view .folder-anime-list textarea { font-size: 16px; }
+  html[data-platform="android"] .modal-backdrop:has(> .collection-overview), html[data-platform="android"] .modal-backdrop:has(> .folder-view) { padding: calc(var(--android-safe-top, 0px) + 8px) 8px calc(var(--android-safe-bottom, 0px) + 8px); }
+  html[data-platform="android"] .modal.collection-overview, html[data-platform="android"] .modal.folder-view { max-height: calc(100dvh - var(--android-safe-top, 0px) - var(--android-safe-bottom, 0px) - 16px); }
+  html body .app { padding-top: 0; padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+  body:has(.mobile-resume-bar) .app { padding-bottom: calc(144px + env(safe-area-inset-bottom)); }
+  html:not(.animesoul-native-pip) .active-watch-layer.is-mini { position: fixed !important; inset: 0 auto auto -10000px !important; width: 390px !important; height: 220px !important; overflow: hidden; visibility: hidden; pointer-events: none; }
+  .lan-watch-panel { padding: 16px; }
+  .lan-watch-panel .lan-remote { background: var(--panel); border-color: var(--line); }
+  .lan-remote h2, .lan-remote p { margin: 0; }
+  .lan-remote .device-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .lan-remote .device-actions button { min-height: 48px; padding: 8px; font-size: 13px; }
+  .lan-remote .device-actions button:first-child, .lan-remote .device-actions button:last-child { grid-row: 2; }
+  .lan-remote .device-actions button:last-child { grid-column: 3; }
+  .lan-remote input[type="range"], .lan-remote select { min-height: 44px; }
+  .app-status-toast { bottom: calc(144px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
+}

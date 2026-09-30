@@ -306,10 +306,12 @@ class LauncherApi:
         }
 
     def check_updates(self) -> dict[str, object]:
-        return check_for_updates()
+        result = check_for_updates()
+        self._release_url = str(result.get("releaseUrl", RELEASES_URL))
+        return result
 
     def open_releases(self) -> None:
-        webbrowser.open(RELEASES_URL)
+        webbrowser.open(getattr(self, "_release_url", RELEASES_URL))
 
     def open_documentation(self) -> None:
         webbrowser.open(API_DOCUMENTATION_URL)
@@ -545,6 +547,8 @@ LAUNCHER_HTML = r"""
     button.action:hover { transform: translateY(-1px); background: #a582ff; }
     button.action:disabled, .docs:disabled, .reveal:disabled { opacity: .55; cursor: wait; transform: none; }
     .save { grid-column: 1 / -1; background: #211c2b !important; border-color: #514360 !important; }
+    .update-notice { margin: 12px 0; padding: 14px; border: 1px solid #6de3a5; border-radius: 12px; background: #123326; color: #bcf4d5; }
+    .update-notice[hidden] { display: none; }
     .path { margin: 14px 0 0; font-size: 11px; overflow-wrap: anywhere; }
     @media (max-width: 560px) { body { padding: 12px; } .card { padding: 20px; } .actions { grid-template-columns: 1fr; }
       .save { grid-column: auto; } .subtitle { margin-left: 0; } }
@@ -557,6 +561,7 @@ LAUNCHER_HTML = r"""
     <section aria-label="Версия и обновления" style="margin-bottom: 20px">
       <strong id="version">Версия __APP_VERSION__</strong>
       <div class="help" id="updateStatus" role="status">Проверяем обновления на GitHub…</div>
+      <div class="update-notice" id="updateNotice" role="alert" hidden></div>
       <button class="docs" id="checkUpdates" type="button">Проверить обновления</button>
       <button class="docs" id="openReleases" type="button">Релизы на GitHub ↗</button>
     </section>
@@ -602,26 +607,34 @@ LAUNCHER_HTML = r"""
     const setBusy = value => buttons.forEach(button => button.disabled = value);
     const showStatus = (message, kind = '') => { status.textContent = message; status.className = `status ${kind}`; };
 
-    let checkingUpdates = false;
-    const refreshUpdates = async () => {
-      if (checkingUpdates || !window.pywebview?.api) return;
-      checkingUpdates = true;
-      const button = document.querySelector('#checkUpdates');
-      const message = document.querySelector('#updateStatus');
-      button.disabled = true;
-      message.textContent = 'Проверяем обновления на GitHub…';
-      try {
-        const result = await window.pywebview.api.check_updates();
-        message.textContent = result.message;
-        message.style.color = result.state === 'available' ? '#6de3a5' : '';
-        document.querySelector('#openReleases').textContent = result.state === 'available'
-          ? `Скачать версию ${result.latestVersion} ↗` : 'Релизы на GitHub ↗';
-      } catch {
-        message.textContent = 'Не удалось проверить обновления. Повтори позже.';
-      } finally {
-        checkingUpdates = false;
-        button.disabled = false;
-      }
+    let updatePromise = null;
+    let updateAvailable = false;
+    const refreshUpdates = () => {
+      if (updatePromise) return updatePromise;
+      if (!window.pywebview?.api) return Promise.resolve();
+      updatePromise = (async () => {
+        const button = document.querySelector('#checkUpdates');
+        const message = document.querySelector('#updateStatus');
+        button.disabled = true;
+        message.textContent = 'Проверяем обновления на GitHub…';
+        try {
+          const result = await window.pywebview.api.check_updates();
+          message.textContent = result.message;
+          updateAvailable = result.state === 'available';
+          const notice = document.querySelector('#updateNotice');
+          notice.hidden = !updateAvailable;
+          notice.textContent = updateAvailable
+            ? `Вышла новая версия AnimeSoul ${result.latestVersion}. У вас ${result.currentVersion}. Нажмите «Скачать версию ${result.latestVersion}», чтобы открыть обновление.` : '';
+          message.style.color = result.state === 'available' ? '#6de3a5' : '';
+          document.querySelector('#openReleases').textContent = result.state === 'available'
+            ? `Скачать версию ${result.latestVersion} ↗` : 'Релизы на GitHub ↗';
+        } catch {
+          message.textContent = 'Не удалось проверить обновления. Повтори позже.';
+        } finally {
+          button.disabled = false;
+        }
+      })().finally(() => { updatePromise = null; });
+      return updatePromise;
     };
     document.querySelector('#checkUpdates').addEventListener('click', refreshUpdates);
     document.querySelector('#openReleases').addEventListener('click', () => window.pywebview.api.open_releases());
@@ -648,17 +661,22 @@ LAUNCHER_HTML = r"""
       renderServerStatus(result);
     };
 
-    window.addEventListener('pywebviewready', async () => {
+    let initialized = false;
+    const initialize = async () => {
+      if (initialized || !window.pywebview?.api) return;
+      initialized = true;
+      void refreshUpdates();
       const settings = await window.pywebview.api.get_settings();
       port.value = settings.port || 3001;
       token.value = settings.token || '';
       path.textContent = `Данные сохраняются в ${settings.configPath}`;
       showStatus('Готово к запуску');
       document.querySelector('#version').textContent = `Версия ${settings.version}`;
-      void refreshUpdates();
       await refreshServerStatus();
       serverTimer = window.setInterval(refreshServerStatus, 2500);
-    });
+    };
+    window.addEventListener('pywebviewready', initialize);
+    void initialize();
 
     port.addEventListener('input', () => {
       window.clearTimeout(portTimer);
@@ -689,11 +707,13 @@ LAUNCHER_HTML = r"""
       else await refreshServerStatus();
     });
     document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', async () => {
-      setBusy(true); showStatus('Проверяем порт и ключ API…');
+      setBusy(true); showStatus('Проверяем обновления, порт и ключ API…');
+      await (updatePromise || refreshUpdates());
+      setBusy(true);
       const result = await window.pywebview.api.launch(port.value, token.value, button.dataset.mode);
       showStatus(result.message, result.ok ? 'success' : 'error');
       if (result.status) renderServerStatus(result.status);
-      if (result.ok && result.close) {
+      if (result.ok && result.close && !updateAvailable) {
         window.setTimeout(() => window.pywebview.api.close(), 180);
         return;
       }

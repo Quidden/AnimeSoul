@@ -28,6 +28,8 @@ from .api.kodik import close_kodik_services, router as kodik_router
 from .api.yummy import close_yummy_services, router as yummy_router
 from .config import settings
 from .version import APP_VERSION
+from .services.discord_presence import presence as discord_presence
+from .api.discord_presence import router as discord_router
 
 
 @asynccontextmanager
@@ -40,6 +42,7 @@ async def lifespan(_application: FastAPI):
         # A busy LAN port must not prevent local playback and save access.
         pass
     yield
+    await asyncio.to_thread(discord_presence.close)
     await lan.stop()
     await asyncio.gather(
         close_yummy_services(),
@@ -90,6 +93,7 @@ app.include_router(kodik_router)
 app.include_router(downloads_router)
 app.include_router(episode_dates_router)
 app.include_router(storage_router)
+app.include_router(discord_router)
 app.include_router(lan_router)
 # The standalone Android product intentionally has no Watch Party surface.
 if os.getenv("ANIMESOUL_MOBILE", "").casefold() != "android":

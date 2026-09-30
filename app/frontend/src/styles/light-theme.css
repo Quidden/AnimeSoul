@@ -1,0 +1,100 @@
+/* Theme-aware surfaces outside the intentionally dark video canvas. */
+html[data-color-scheme="light"] {
+  & .app-header .header-search input,
+  & .app-header .header-menu-trigger { color: var(--ink); }
+  & input::placeholder { color: var(--muted); opacity: 1; }
+  & .app-status-toast { box-shadow: 0 8px 28px #28232d26; }
+  & .app-status-toast.success { color: #167244; }
+  & .app-status-toast.loading { color: #225c9e; }
+  & .app-status-toast.error { color: #b12840; }
+  & .season-load-notice, & .watch-faq details {
+    background: var(--panel);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  & .season-load-notice button {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+  }
+  & .watch-dubbing-warning { color: #78520a; background: #fff4d8; }
+  & .settings-tab-list > button, & .settings-tab-list > button small,
+  & .settings-item small, & .settings-group-title > span { color: var(--muted); }
+  & .settings-tab-list > button:hover,
+  & .settings-tab-list > button.active {
+    color: var(--ink);
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  }
+  & .settings-tab-list > button > i,
+  & .settings-tab-list > button.active > i {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  }
+  & .settings-header-actions button, & .settings-themes button,
+  & .settings-panel-heading > div > span, & .settings-colors input,
+  & .settings-color-value input {
+    background: var(--panel);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  & .settings-themes button.active { border-color: var(--accent); background: var(--accent-soft); }
+  & .settings-panel-heading p, & .settings-panel-heading > small { color: var(--muted); }
+  & .danger { color: #ac2440 !important; border-color: #ac2440 !important; }
+  & .anime-information-ratings .rating-board.compact .rating-chip b { color: #805508; }
+  & .anime-information-ratings .rating-board.compact .rating-chip.community b { color: #087084; }
+  & .tracking-calendar-day button small,
+  & .tracking-calendar-day .tracking-calendar-events button small { color: #167244; }
+}
+
+/* External playback controls follow the theme in every toolbar position. */
+html[data-color-scheme="light"] .video-layout > .player-toolbar {
+  background: var(--panel);
+  color: var(--ink);
+  & .toolbar-select { color: var(--muted); }
+  & .toolbar-select select,
+  & .toolbar-dubbing-action,
+  & .toolbar-skip,
+  & .player-settings-trigger,
+  & .offline-download-menu summary,
+  &.is-icon-only .toolbar-select {
+    background: var(--bg);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  &.is-icon-only .toolbar-select::before { color: var(--ink); }
+  & button:hover, & .offline-download-menu summary:hover {
+    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+    color: var(--ink);
+    border-color: var(--accent);
+  }
+  & .toolbar-dubbing-action.active {
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+    color: #805508;
+    border-color: var(--accent);
+  }
+  & .toolbar-dubbing-action.title-default.active { color: #a52757; }
+}
+
+html[data-color-scheme="light"] .player-settings-dialog {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--line);
+  & .player-settings-header, & .player-settings-dubbing-actions {
+    background: var(--bg);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  & .player-settings-header button,
+  & .player-settings-dubbing-actions button,
+  & .player-settings-content > label select {
+    background: var(--panel);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  & .player-settings-content > label,
+  & .player-settings-dubbing-actions > span { color: var(--muted); }
+  & .player-settings-content > .toggle-row > span,
+  & .player-settings-dubbing-actions > span b { color: var(--ink); }
+  & .player-settings-dubbing-actions button.active { color: #805508; border-color: #805508; }
+  & .player-settings-dubbing-actions button.active.title { color: #a52757; border-color: #a52757; }
+}

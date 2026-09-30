@@ -1,4 +1,5 @@
 import { AmbientBackdrop } from "./components/AmbientBackdrop";
+import { useDiscordPresence } from "./features/discord/presence";
 import {
     lazy,
     Suspense,
@@ -59,6 +60,7 @@ import { CastSessionBar } from "./features/player/CastSessionBar";
 import { useLanPeers } from "./features/devices/useLanPeers";
 const LanRemotePanel = lazy(() => import("./features/devices/LanRemotePanel").then(m => ({ default: m.LanRemotePanel })));
 import { useLanControl } from "./features/devices/useLanControl";
+import { isMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
 
 const CollectionOverview = lazy(() => import("./components/CollectionOverview").then(module => ({
     default: module.CollectionOverview,
@@ -74,6 +76,8 @@ const StatisticsPage = lazy(() => import("./pages/StatisticsPage").then(module =
 })));
 
 export default function Home() {
+    const mobileLayout = useMobileLayout();
+    useDiscordPresence();
     const [routeLoading, setRouteLoading] = useState(false);
     const [routeError, setRouteError] = useState("");
     const lanPeers = useLanPeers();
@@ -216,7 +220,8 @@ export default function Home() {
                 return;
             }
             setRouteLoading(false);
-            setActive(null);
+            if (isMobileLayout()) setWatchForeground(false);
+            else setActive(null);
             setView(route);
             if (route === "catalog") {
                 const params = new URLSearchParams(window.location.search);
@@ -243,7 +248,7 @@ export default function Home() {
         };
     }, [setActive, setCatalog, setDubbingFilter, setFormatFilter, setStatusFilter, setGenre, setGroupFilter, setQuery, setRatingFrom, setRatingSource, setSort, setView, setYearFrom, setYearTo]);
     useEffect(() => {
-        if (view !== "catalog" || active || routeLoading || window.location.pathname !== "/catalog") return;
+        if (view !== "catalog" || routeLoading || window.location.pathname !== "/catalog") return;
         const params = new URLSearchParams();
         const values: [string, string, string][] = [
             ["q", query, ""], ["genre", genre, "Все"], ["sort", sort, "rating-desc"],
@@ -257,7 +262,7 @@ export default function Home() {
         if (currentPage && Number(currentPage) > 1) params.set("page", currentPage);
         const search = params.toString();
         navigateTo(`/catalog${search ? `?${search}` : ""}`);
-    }, [view, active, routeLoading, query, genre, sort, yearFrom, yearTo, groupFilter, formatFilter, statusFilter, dubbingFilter, ratingSource, ratingFrom]);
+    }, [view, routeLoading, query, genre, sort, yearFrom, yearTo, groupFilter, formatFilter, statusFilter, dubbingFilter, ratingSource, ratingFrom]);
     const communityAnimeIds = useMemo(
         () => [...new Set([
             ...catalog.map(anime => anime.anime_id),
@@ -448,7 +453,7 @@ export default function Home() {
         showRatings,
     } = useAppNavigation({
         active,
-        keepActiveOnNavigation: IS_ANDROID_APP,
+        keepActiveOnNavigation: mobileLayout,
         watchForeground,
         view,
         setActive,
@@ -492,15 +497,16 @@ export default function Home() {
         const nextRead = [...new Set([...readNotificationIds, ...notifications.map(item => item.id)])];
         setReadNotificationIds(nextRead);
         write(NOTIFICATION_READ_KEY, nextRead);
-        setActive(null); setView("tracking"); navigateTo("/tracking"); window.scrollTo({top: 0});
+        if (mobileLayout) setWatchForeground(false); else setActive(null);
+        setView("tracking"); navigateTo("/tracking"); window.scrollTo({top: 0});
     };
-    const showCollections = () => { setActive(null); setView("library"); navigateTo("/library"); window.scrollTo({top: 0}); };
-    const showHistory = () => { setActive(null); setView("history"); navigateTo("/history"); window.scrollTo({top: 0}); };
+    const showCollections = () => { if (mobileLayout) setWatchForeground(false); else setActive(null); setView("library"); navigateTo("/library"); window.scrollTo({top: 0}); };
+    const showHistory = () => { if (mobileLayout) setWatchForeground(false); else setActive(null); setView("history"); navigateTo("/history"); window.scrollTo({top: 0}); };
     const sharedHeaderProps = {
         query,
         setQuery,
         activeView: view === "remote" ? "watch" as const : active && watchForeground
-            ? (IS_ANDROID_APP ? "watch" as const : "catalog" as const)
+            ? (mobileLayout ? "watch" as const : "catalog" as const)
             : view,
         onHome: goHome,
         onLibrary: showMobileStatisticsSection,
@@ -511,10 +517,13 @@ export default function Home() {
         onHistory: showHistory,
         hasNewEpisodes: notifications.some(item => !item.read),
         onCurrent: () => {
-            if (IS_ANDROID_APP && (watchMode === "remote" || !active)) { setWatchMode("remote"); setView("remote"); setWatchForeground(false); }
+            if (mobileLayout && (watchMode === "remote" || !active)) { setWatchMode("remote"); setView("remote"); setWatchForeground(false); navigateTo("/remote"); }
             else showCurrent();
         },
-        hasCurrent: Boolean(active) || (IS_ANDROID_APP && lanPeers.length > 0),
+        hasCurrent: Boolean(active) || (mobileLayout && lanPeers.length > 0),
+        currentTitle: active?.title,
+        onPhone: active ? () => { setWatchMode("phone"); showCurrent(); } : undefined,
+        onRemote: () => { setWatchMode("remote"); setWatchForeground(false); setView("remote"); navigateTo("/remote"); },
         theme,
         setTheme,
         playerPrefs,
@@ -531,10 +540,6 @@ export default function Home() {
         onStorageReload: reloadStorage,
     };
     useEffect(() => { if (watchForeground && active) setWatchMode("phone"); }, [watchForeground, active]);
-    const watchModes = IS_ANDROID_APP && <nav className="mobile-section-tabs" aria-label="Режим просмотра">
-        <button className={watchMode === "phone" ? "active" : undefined} aria-pressed={watchMode === "phone"} onClick={() => { setWatchMode("phone"); if (active) showCurrent(); }}>Смотрю на телефоне</button>
-        <button className={watchMode === "remote" ? "active" : undefined} aria-pressed={watchMode === "remote"} onClick={() => { setWatchMode("remote"); setWatchForeground(false); setView("remote"); }}>Пульт</button>
-    </nav>;
     let activeWatch: ReactNode = null;
     if (active) {
         const activeTracker = tracked.find(tracker => (
@@ -546,7 +551,7 @@ export default function Home() {
                 {...sharedHeaderProps}
                 onSearch={searchCatalog}
                 onCatalog={IS_ANDROID_APP ? showMobileCatalogSection : showCatalog}
-            />{watchModes}</>
+            /></>
         );
         const activeWatchActions = createActiveWatchActions({
             anime: active,
@@ -572,7 +577,7 @@ export default function Home() {
 
         activeWatch = (
             <div
-                className={`active-watch-layer${watchForeground ? " is-foreground" : " is-mini"}`}
+                className={`active-watch-layer${watchForeground ? " is-foreground" : " is-mini"}${mobileLayout && !watchForeground ? " mobile-background-player" : ""}`}
                 style={!watchForeground && miniPlayerPosition ? {
                     left: `${miniPlayerPosition.left}px`,
                     top: `${miniPlayerPosition.top}px`,
@@ -583,7 +588,7 @@ export default function Home() {
               <Suspense fallback={<main className="app">{watchForeground && watchHeader}<p className="loading">Загружаем плеер…</p></main>}>
                 {IS_ANDROID_APP && watchForeground && <CastSessionBar />}
                 <Watch
-                    header={watchHeader}
+                    header={watchForeground ? watchHeader : null}
                     anime={active}
                     resumeRequested={resumeRequested}
                     newEpisodeRequested={newEpisodeRequested}
@@ -654,7 +659,7 @@ export default function Home() {
             </div>
         );
     }
-    if (active && !IS_ANDROID_APP) return activeWatch;
+    if (active && !mobileLayout) return activeWatch;
     const homePageModel: HomePageModel = {
         party: {
             session: partyPresence.session,
@@ -775,6 +780,7 @@ export default function Home() {
     return (
       <>
         {activeWatch}
+        {mobileLayout && active && !watchForeground && <button type="button" className="mobile-resume-bar" onClick={showCurrent} aria-label={`Продолжить просмотр: ${active.title}`}><span aria-hidden="true">▶</span><span>{active.title}<small>Вернуться к просмотру на телефоне</small></span></button>}
         {(!active || !watchForeground) && <main className="app ambient-page">
             <AmbientBackdrop
                 anime={heroPreviewAnime ?? lastAnime}
@@ -788,7 +794,7 @@ export default function Home() {
                 onCatalog={IS_ANDROID_APP ? showMobileCatalogSection : showCatalog}
             />
 
-            {IS_ANDROID_APP && view === "remote" && <>{watchModes}{watchMode === "remote" ? <Suspense fallback={<p>Загрузка пульта…</p>}><LanRemotePanel peers={lanPeers} /></Suspense> : <p>Откройте аниме из каталога для просмотра на телефоне.</p>}</>}
+            {view === "remote" && <Suspense fallback={<p>Загрузка пульта…</p>}><LanRemotePanel peers={lanPeers} /></Suspense>}
             {IS_ANDROID_APP && (view === "catalog" || view === "downloads") && (
                 <nav className="mobile-section-tabs" aria-label="Каталог и скачанное">
                     <button
