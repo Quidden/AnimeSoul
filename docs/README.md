@@ -1,14 +1,41 @@
 [English](README.md) | [Русский](README.ru.md)
 
-# Documentation
+# AnimeSoul documentation
 
-| Document                                         | Purpose                                       |
-| ------------------------------------------------ | --------------------------------------------- |
-| [Foundation](architecture/FOUNDATION.md)         | Source boundaries, configuration, API and SEO |
-| [Migration status](migration/STATUS.md)          | Evidence, remaining gates and recovery        |
-| [Security](security/BASELINE.md)                 | Current controls and production requirements  |
-| [Roadmap](architecture/WEB_STACK_PLAN.md)        | Complete phased migration plan                |
-| [Design reference](design/minimal-concepts.html) | Preserved visual exploration                  |
+Updated against `main` on 2026-10-06. This repository contains the new website stack;
+Android lives separately and desktop development is discontinued. Legacy source/data is preserved
+outside this workspace; feature migration remains incomplete.
 
-Documentation for the previous stack is available in the archive Git branch.
-Android documentation belongs to the independent AnimeSoulMobile repository.
+## Start here
+
+1. [Project map](architecture/PROJECT_MAP.md): source placement, ownership and where to make a change.
+2. [Local development](operations/LOCAL_DEVELOPMENT.md): launch, configuration, database and checks.
+3. [Site map](architecture/SITE_MAP.md): implemented pages, navigation, APIs and future sections.
+4. [Data model](architecture/DATA_MODEL.md): relationships, DTOs and server privacy.
+
+## All guides
+
+| Document                                             | Purpose                                                                                |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [Project map](architecture/PROJECT_MAP.md)           | Actual tree, workspaces/branches, dependencies, entry points and change locations      |
+| [Site and API map](architecture/SITE_MAP.md)         | URLs, filter parameters, profile anchors, endpoints, SEO and proposed future addresses |
+| [Data model](architecture/DATA_MODEL.md)             | Prisma relations, JSON blocks, public contracts and import boundaries                  |
+| [Architecture decisions](architecture/FOUNDATION.md) | Web/API/Admin boundaries, SSR, configuration and ownership                             |
+| [Local development](operations/LOCAL_DEVELOPMENT.md) | Setup, dev, PostgreSQL, CI, checks and environment consumers                           |
+| [Security](security/BASELINE.md)                     | Implemented protections, source locations and remaining requirements                   |
+| [Migration and recovery](migration/STATUS.md)        | Work completed, evidence, limitations and preserved archive                            |
+| [Migration roadmap](architecture/WEB_STACK_PLAN.md)  | Target architecture, gates, security, providers and sandbox billing                    |
+| [Presentation](design/README.md)                     | Current CSS/components and the retained prototype's limits                             |
+| [Profile media](../apps/web/public/ASSETS.md)        | Preset files and future GIF picker status                                              |
+| [Worker](../apps/worker/README.md)                   | Reserved jobs; no running service yet                                                  |
+
+## Status vocabulary
+
+Implemented means existing source with the stated verification. Schema-only means tables/contracts
+without a completed workflow. Planned means no current route or service.
+The fixture profile is not authentication; a 200 admin information page grants no administrative access.
+Source and checks take precedence over illustrations and target architecture.
+
+Update both language versions when routes, DTOs, tables, configuration or commands change.
+`pnpm docs:check` validates local links; `pnpm format:check` validates formatting.
+Old-stack documentation stays in the archive; Android guides belong to `AnimeSoulMobile`.

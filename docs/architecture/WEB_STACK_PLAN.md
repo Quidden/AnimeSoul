@@ -4,7 +4,7 @@
 
 **2026-10-06. Status: implementation started; archive and foundation prepared. [Progress](../migration/STATUS.md).**
 
-User decisions: discontinue desktop development, separate the mobile application, make the website discoverable by anime titles and public usernames, protect administration, expand statistics, and prepare payments. The merchant is based in Ukraine and the audience is international. This replaces the initial stack assessment. Preparing this plan does not change branches, the running website, or payment accounts.
+User decisions: discontinue desktop development, separate the mobile application, make the website discoverable by anime titles and public usernames, protect administration, expand statistics, and prepare payments. The merchant is based in Ukraine and the audience is international. This is the target roadmap; implemented source/dependencies are in the [project map](PROJECT_MAP.md), routes in the [site map](SITE_MAP.md). Migration remains incomplete; production and payment accounts have not been switched.
 
 ## 1. Target architecture
 
@@ -26,7 +26,12 @@ Start search with PostgreSQL full-text/trigram indexes for Russian, original and
 
 ## 2. Code organization and readability
 
-Proposed new `main` layout:
+Target layout for subsequent stages, not the current filesystem:
+
+Current API directories are `src/catalog`, `src/admin`, `src/health`; `src/modules`, `packages/ui`,
+OpenAPI and an SDK are not implemented. Shared TypeScript/ESLint/Prettier settings are in `packages/config`;
+utilities are grouped under `scripts/workspace`, `scripts/quality`, `scripts/windows`.
+See the [current data model](DATA_MODEL.md) for existing tables and limits.
 
 ```text
 apps/
@@ -71,19 +76,19 @@ Security and SEO requirements start in stage 1. Cloudflare is a late infrastruct
 
 ## 4. Git and preservation
 
-The current branch is `master`. Significant modified and untracked files include website work and relocated documentation. A branch pointing only to current HEAD would not preserve these changes.
+The primary local `Documents/AnimeSoul` workspace is already on the new-stack `main`.
 
-1. Review source inventory and commit a snapshot of the complete working version, including required untracked files. Check for secrets and user data before committing.
-2. Preserve the snapshot as `codex/archive-current-2026-10-06`, tagged `archive-current-2026-10-06`. Include current website, desktop, Android and historical implementation with launch instructions.
-3. Back up the database, media and Android keystore separately in protected storage; do not put them in Git.
-4. Start `codex/new-web-stack` from the archive commit. Remove old source through ordinary commits after preservation, without rewriting history. New `main` contains the new stack, its documentation and maintained utilities.
-5. Make `main` the default after the new foundation and CI work. Deployment remains pinned to the archive release until the new website is ready. Use small stage branches, PRs and mandatory checks.
+1. Previous source snapshot: `cd54517`, branch `codex/archive-current-2026-10-06`, tag `archive-current-2026-10-06`.
+2. Previous local source, databases, settings, dependencies and releases are preserved in `Documents/AnimeSoulArchive`, branch `codex/legacy-local-2026-10-06`. This is the preserved old `master` workspace, distinct from the committed migration snapshot.
+3. Private backup: `AnimeSoulArchive/artifacts/migration-backup/2026-10-06`; credentials, SQLite/JSON and Android signing material remain outside Git.
+4. Website work uses `main`; Android lives in independent `AnimeSoulMobile`. Neither adjacent directory is a website build dependency.
+5. Remote default branch and production are unchanged. Public cutover follows the stage gates; CI is configured, while local PostgreSQL migration/restore remains an open foundation gate.
 
 The archive supports recovery and comparison. Reuse verified contracts, data and useful components; do not copy the complete old backend into the new stack.
 
 ## 5. Independent mobile application
 
-Move Android source, guides, release history and self-contained build scripts into `AnimeSoulMobile`. Stop reading desktop configuration and parent-repository source during builds. First preserve the current Android implementation as a reproducible independent baseline, avoiding simultaneous rewrites of the website and mobile player.
+Android source and a self-contained baseline have already moved to `AnimeSoulMobile`; its builds and guides belong to that repository. New-API networking, device and release verification are still pending. Preserve the reproducible mobile baseline before rewriting networking and the mobile player.
 
 The new network mode uses versioned API contracts and server authentication. Catalog/payment secrets remain on the server. Any temporarily retained local runtime belongs exclusively to the mobile repository. Android owns offline files, PiP, MediaSession, Cast and system downloads; the shared API owns accounts, libraries, entitlements and progress. Generate an SDK from OpenAPI rather than copying backend internals.
 

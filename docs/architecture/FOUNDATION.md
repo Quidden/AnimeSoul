@@ -2,6 +2,9 @@
 
 # Foundation decision — 2026-10-06
 
+[Source and dependencies](PROJECT_MAP.md) · [Pages/API](SITE_MAP.md) ·
+[Data model](DATA_MODEL.md) · [Launch/configuration](../operations/LOCAL_DEVELOPMENT.md).
+
 The website is a modular monolith. One server owns business rules and database access.
 Next.js server pages consume validated public API responses; they do not reproduce authorization rules.
 
@@ -23,6 +26,12 @@ Dependencies point from applications to shared packages. Database access stays s
 Controller inputs are validated before a bounded ORM query; raw SQL interpolation is prohibited.
 The only raw query currently present is the constant readiness probe SELECT 1.
 
+Next.js calls the API through `apps/web/lib/api.ts`: five-second timeout, no-store and Zod validation.
+Client `SiteHeader` and `ProfileHeader` own menu/scroll behavior, not access or persistence rules.
+Admin currently makes no API requests. Redis is present in compose; worker is documentation only.
+Background jobs and shared caching are pending. TypeScript, ESLint and Prettier configuration
+belongs to `packages/config`; utilities are split into `scripts/workspace`, `scripts/quality`, `scripts/windows`.
+
 ## Configuration
 
 The root .env is private. Setup creates random local PostgreSQL credentials once and never overwrites existing settings.
@@ -30,6 +39,9 @@ Development services bind to loopback on 8020–8022. Database and Redis bind to
 DEMO_CATALOG is opt-in and rejected by the API in production.
 PUBLIC_INDEXING=true requires a public HTTPS SITE_URL and forbids the development catalog.
 SITE_URL is the canonical public origin; API_URL is a server-only service origin.
+`ALLOW_YUMMY`, `PAYMENTS_ENABLED` and the Redis URL are reserved without runtime integration.
+Changing them does not activate missing providers or billing. See the
+[configuration-consumer table](../operations/LOCAL_DEVELOPMENT.md#configuration-consumers).
 
 ## Public API
 
@@ -64,3 +76,12 @@ No live provider is called by this milestone. Yummy's policy contract and defaul
 but the adapter, audited admin switch and cache invalidation follow in stage 3.
 Payments have foundational order/payment/webhook/entitlement tables, with no charge endpoint or premium activation.
 Library normalization, translations, pagination, media processing, sessions, MFA and metrics follow the roadmap.
+
+## Presentation and maintenance
+
+The established dark website style is preserved. CSS is split into `base`, `header`, `home`,
+`catalog`, `anime`, `profile` under `apps/web/styles`, imported by `app/globals.css`.
+The [presentation guide](../design/README.md) identifies related components.
+API source uses controller/service, shared DTOs and a server database package; `src/modules`
+and `packages/ui` remain target layout rather than implemented directories.
+Route, schema, environment and launch changes require corresponding maps and verification updates.

@@ -2,6 +2,9 @@
 
 # Migration milestone — 2026-10-06
 
+[Project map](../architecture/PROJECT_MAP.md) · [Site/API map](../architecture/SITE_MAP.md) ·
+[Data](../architecture/DATA_MODEL.md) · [Launch](../operations/LOCAL_DEVELOPMENT.md).
+
 ## Preserved baseline
 
 - Website/source snapshot: commit cd54517, branch codex/archive-current-2026-10-06, annotated tag archive-current-2026-10-06.
@@ -18,6 +21,10 @@ Old code/history lives in the archive branch rather than a legacy directory insi
 
 The primary workspace was switched from master to main. The Windows `Start AnimeSoul.bat`
 launcher now starts the TypeScript workspace there; services from the secondary working copy were stopped.
+The launcher lives at `scripts/windows/Start AnimeSoul.bat`; workspace scripts are in `scripts/workspace`,
+document checks in `scripts/quality`, shared configuration in `packages/config`.
+Root commands use these paths. Source/site/data maps and operations guides are indexed by `docs/README.md`;
+obsolete Python-media descriptions and references to master as the active workspace were corrected.
 Five critical archived configuration/signing files were checked against the protected backup again using SHA256.
 
 ## Implemented foundation

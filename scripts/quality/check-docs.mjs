@@ -2,10 +2,20 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 function walk(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)],
+    ["node_modules", ".next", "dist", "generated"].includes(entry.name)
+      ? []
+      : entry.isDirectory()
+        ? walk(path.join(dir, entry.name))
+        : [path.join(dir, entry.name)],
   );
 }
-const files = ["README.md", "README.ru.md", ...walk("docs").filter((f) => f.endsWith(".md"))];
+const files = [
+  "README.md",
+  "README.ru.md",
+  ...["docs", "apps", "packages", "scripts", "infra", "tests"]
+    .flatMap(walk)
+    .filter((f) => f.endsWith(".md")),
+];
 let count = 0;
 for (const file of files) {
   const text = readFileSync(file, "utf8").replace(/```[\s\S]*?```/g, "");

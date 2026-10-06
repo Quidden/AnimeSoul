@@ -2,6 +2,9 @@
 
 # Ход миграции — 6 октября 2026 года
 
+[Карта проекта](../architecture/PROJECT_MAP.ru.md) · [Карта сайта/API](../architecture/SITE_MAP.ru.md) ·
+[Данные](../architecture/DATA_MODEL.ru.md) · [Запуск](../operations/LOCAL_DEVELOPMENT.ru.md).
+
 ## Сохранённая версия
 
 - Исходники сайта: коммит cd54517, ветка codex/archive-current-2026-10-06, аннотированный тег archive-current-2026-10-06.
@@ -18,6 +21,10 @@
 
 Основная папка переключена с master на main. Windows-запуск `Start AnimeSoul.bat`
 теперь поднимает TypeScript-проект из этой папки; сервисы старой рабочей копии остановлены.
+Launcher расположен в `scripts/windows/Start AnimeSoul.bat`; рабочие скрипты — в `scripts/workspace`,
+проверки документов — в `scripts/quality`, общие конфигурации — в `packages/config`.
+Корневые файлы обновлены под эти пути; карта сайта, зависимостей, данных и инструкции доступны
+через `docs/README.ru.md`. Старые ссылки на Python-медиа и устаревший master как активную ветку исправлены.
 Пять критичных файлов настроек и подписи в архиве повторно сверены с защищённой копией по SHA256.
 
 ## Реализованная основа
