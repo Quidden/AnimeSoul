@@ -2,23 +2,23 @@
 
 # AnimeSoul migration plan
 
-**2026-10-06. Status: plan; implementation has not started.**
+**2026-10-06. Status: implementation started; archive and foundation prepared. [Progress](../migration/STATUS.md).**
 
 User decisions: discontinue desktop development, separate the mobile application, make the website discoverable by anime titles and public usernames, protect administration, expand statistics, and prepare payments. The merchant is based in Ukraine and the audience is international. This replaces the initial stack assessment. Preparing this plan does not change branches, the running website, or payment accounts.
 
 ## 1. Target architecture
 
-| Area | Decision |
-| --- | --- |
-| Public website | Next.js App Router + React + TypeScript. Server HTML for anime, catalog and eligible public profiles; interactive player/editors on the client |
-| API | Current Node.js LTS + NestJS/Fastify. Modular monolith; the API owns business rules |
-| Persistence | PostgreSQL + Prisma, versioned migrations, constraints and transactions; preserve existing user UUIDs |
-| Administration | Separate Next.js application on an admin subdomain, independent session and API authorization |
-| Background work | Worker in the same repository for catalog imports, email, media processing, payment events and analytics |
-| Redis | Shared rate counters, short-lived cache and job queue. Payments and entitlements remain durable in PostgreSQL |
-| Files | S3-compatible object storage with distinct public and private areas |
-| Deployment | Docker, development/staging/production, reverse proxy, HTTPS, monitoring and backups |
-| Mobile | Separate `AnimeSoulMobile` repository, versions, CI, signing and secrets; shared documented website API |
+| Area            | Decision                                                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public website  | Next.js App Router + React + TypeScript. Server HTML for anime, catalog and eligible public profiles; interactive player/editors on the client |
+| API             | Current Node.js LTS + NestJS/Fastify. Modular monolith; the API owns business rules                                                            |
+| Persistence     | PostgreSQL + Prisma, versioned migrations, constraints and transactions; preserve existing user UUIDs                                          |
+| Administration  | Separate Next.js application on an admin subdomain, independent session and API authorization                                                  |
+| Background work | Worker in the same repository for catalog imports, email, media processing, payment events and analytics                                       |
+| Redis           | Shared rate counters, short-lived cache and job queue. Payments and entitlements remain durable in PostgreSQL                                  |
+| Files           | S3-compatible object storage with distinct public and private areas                                                                            |
+| Deployment      | Docker, development/staging/production, reverse proxy, HTTPS, monitoring and backups                                                           |
+| Mobile          | Separate `AnimeSoulMobile` repository, versions, CI, signing and secrets; shared documented website API                                        |
 
 Next.js renders pages and calls the API. Do not duplicate authentication, role, payment or profile rules in Server Actions. Proxy public `/api` requests to the backend on the same origin. The admin origin has separately constrained routing and cookies. Pin dependency versions when establishing the foundation. [Next.js server/client boundaries](https://nextjs.org/docs/app/getting-started/server-and-client-components), [NestJS/Fastify](https://docs.nestjs.com/techniques/performance).
 
@@ -55,17 +55,17 @@ Require strict TypeScript, runtime input validation, descriptive names, consiste
 
 ## 3. Stages and completion gates
 
-| Stage | Work | Completion gate |
-| --- | --- | --- |
-| 0. Snapshot | Archive commit/branch/tag; separate database, media and Android signing backups; feature inventory | Current version is reproducible, restore is verified and required untracked source is included |
-| 1. Foundation | Workspace, applications, local infrastructure, CI, module boundaries and threat model | Clean checkout starts; types, builds and migrations pass |
-| 2. Data/authentication | Users, sessions, roles, administrator MFA, profiles, privacy and data transfer | IDs/libraries preserved; account isolation, session revocation and migration of a database copy verified |
-| 3. Catalog/providers | Internal anime identity, imports, search, cache and provider controls | Catalog works with YummyAnime disabled; saved references do not depend on the active provider |
-| 4. Website/player/SEO | Next.js pages, useful React components, sitemap, metadata and redirects | Content is in HTML without JS; privacy holds; playback and profile features work |
-| 5. Administration | Management, metrics, moderation, events and reports | Role behavior is verified; numbers have definitions; changes are audited |
-| 6. Payment preparation | Plans, orders, entitlements, adapter, sandbox, callbacks and reconciliation | Success, duplicate, failure, delay, cancellation and refund produce correct rights; live payments remain disabled |
-| 7. Infrastructure | Cloudflare, origin/admin protection, anti-bot, backups and load checks | Application/perimeter defenses verified; search bots and payment callbacks work |
-| 8. Cutover | Final migration, DNS/deployment, Search Console, observation and rollback | New website on the domain, sitemap accepted, metrics/alerts available and recovery rehearsed |
+| Stage                  | Work                                                                                               | Completion gate                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 0. Snapshot            | Archive commit/branch/tag; separate database, media and Android signing backups; feature inventory | Current version is reproducible, restore is verified and required untracked source is included                    |
+| 1. Foundation          | Workspace, applications, local infrastructure, CI, module boundaries and threat model              | Clean checkout starts; types, builds and migrations pass                                                          |
+| 2. Data/authentication | Users, sessions, roles, administrator MFA, profiles, privacy and data transfer                     | IDs/libraries preserved; account isolation, session revocation and migration of a database copy verified          |
+| 3. Catalog/providers   | Internal anime identity, imports, search, cache and provider controls                              | Catalog works with YummyAnime disabled; saved references do not depend on the active provider                     |
+| 4. Website/player/SEO  | Next.js pages, useful React components, sitemap, metadata and redirects                            | Content is in HTML without JS; privacy holds; playback and profile features work                                  |
+| 5. Administration      | Management, metrics, moderation, events and reports                                                | Role behavior is verified; numbers have definitions; changes are audited                                          |
+| 6. Payment preparation | Plans, orders, entitlements, adapter, sandbox, callbacks and reconciliation                        | Success, duplicate, failure, delay, cancellation and refund produce correct rights; live payments remain disabled |
+| 7. Infrastructure      | Cloudflare, origin/admin protection, anti-bot, backups and load checks                             | Application/perimeter defenses verified; search bots and payment callbacks work                                   |
+| 8. Cutover             | Final migration, DNS/deployment, Search Console, observation and rollback                          | New website on the domain, sitemap accepted, metrics/alerts available and recovery rehearsed                      |
 
 Security and SEO requirements start in stage 1. Cloudflare is a late infrastructure stage. Mobile API-client work follows stable contracts from stages 2–4 and does not block the website launch.
 
@@ -131,18 +131,18 @@ Acceptance: inspect anime/username HTML without JS and automatically verify meta
 
 Threat modeling covers accounts, profiles, providers, media, administration and billing. Track applicable OWASP ASVS level 2 controls, results and justified exclusions. [OWASP ASVS](https://owasp.org/projects/asvs).
 
-| Area | Requirement |
-| --- | --- |
-| SQL injection | Parameterized queries, allow-listed sorting fields, DTO validation and least-privilege database access; prohibit input concatenation and unsafe raw SQL. ORM usage alone is insufficient. [OWASP SQLi](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html), [Prisma raw queries](https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/raw-queries) |
-| Authorization | Check ownership/permission on every request; reject role escalation through payloads and apply privacy on the server. [OWASP authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html) |
-| Passwords/sessions | Argon2id for new passwords, random sessions hashed in the database, Secure/HttpOnly/SameSite cookies, revocation and single-use reset tokens. [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) |
-| CSRF/OAuth | Mutation protection, Origin checks, exact redirect URIs, state/PKCE for the applicable OAuth flow, constrained CORS. [OWASP CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html) |
-| XSS | Encode text, sanitize allowed rich content, serialize JSON-LD safely and test CSP with player/GIF sources. [OWASP XSS](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html) |
-| Files | Verify actual type, size, frames/dimensions; isolated worker, random names and safe serving; reject active SVG/HTML. [OWASP uploads](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) |
-| SSRF | Allowed schemes/domains, block private/service IPs, validate DNS/redirects and bound downloads. [OWASP SSRF](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) |
-| Abuse | Account/IP/operation-cost limits, search/upload quotas and timeouts; trust client IP only from known proxies |
-| Secrets/errors | Server storage, log redaction, restricted monitoring and error responses without stack traces or tokens |
-| Delivery | CI checks dependencies, secrets, types and builds; unprivileged runtime, private database, isolated environment secrets and updates |
+| Area               | Requirement                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SQL injection      | Parameterized queries, allow-listed sorting fields, DTO validation and least-privilege database access; prohibit input concatenation and unsafe raw SQL. ORM usage alone is insufficient. [OWASP SQLi](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html), [Prisma raw queries](https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/raw-queries) |
+| Authorization      | Check ownership/permission on every request; reject role escalation through payloads and apply privacy on the server. [OWASP authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)                                                                                                                                                                     |
+| Passwords/sessions | Argon2id for new passwords, random sessions hashed in the database, Secure/HttpOnly/SameSite cookies, revocation and single-use reset tokens. [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)                                                                                                                                       |
+| CSRF/OAuth         | Mutation protection, Origin checks, exact redirect URIs, state/PKCE for the applicable OAuth flow, constrained CORS. [OWASP CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)                                                                                                                                                       |
+| XSS                | Encode text, sanitize allowed rich content, serialize JSON-LD safely and test CSP with player/GIF sources. [OWASP XSS](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)                                                                                                                                                                        |
+| Files              | Verify actual type, size, frames/dimensions; isolated worker, random names and safe serving; reject active SVG/HTML. [OWASP uploads](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)                                                                                                                                                                              |
+| SSRF               | Allowed schemes/domains, block private/service IPs, validate DNS/redirects and bound downloads. [OWASP SSRF](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)                                                                                                                                                                           |
+| Abuse              | Account/IP/operation-cost limits, search/upload quotas and timeouts; trust client IP only from known proxies                                                                                                                                                                                                                                                                                   |
+| Secrets/errors     | Server storage, log redaction, restricted monitoring and error responses without stack traces or tokens                                                                                                                                                                                                                                                                                        |
+| Delivery           | CI checks dependencies, secrets, types and builds; unprivileged runtime, private database, isolated environment secrets and updates                                                                                                                                                                                                                                                            |
 
 Test SQLi, XSS, CSRF, cross-account object access, role escalation, premium bypass, forged sessions, malicious files/URLs and payment replay directly against the API. Do not release with unresolved critical/high vulnerabilities.
 
@@ -152,17 +152,17 @@ Prioritize tables, search, filters, date ranges, authorized exports and clear fe
 
 Use an independent admin origin and host-only cookie, mandatory MFA/passkey, reauthentication for sensitive actions, session revocation and functional permissions. Separate owner, administrator, moderator, analyst and financial access. Only the owner grants administrative privileges; registration order never creates an owner. Audit role/provider/price/manual-premium changes with actor, time and reason. Cloudflare Access is an additional verified-token layer; application sessions and authorization remain mandatory.
 
-| Area | Functions and metrics |
-| --- | --- |
-| Users | Registrations, verification, DAU/WAU/MAU, bans, roles, sessions and permissions |
-| Catalog | Published titles, data completeness, import/mapping failures, zero-result searches, editing/redirects |
-| Providers | Toggles, health, requests, errors, p95 latency, quotas and cache age; masked credentials |
-| Playback | Starts/errors, active viewing, popular titles/dubs; no secret stream URLs |
-| Profiles/media | Reports, preset avatars/banners, quotas, processing errors, custom badges/decoration |
-| Payments | Orders, success/failure, refunds, entitlements, renewals and unreconciled transactions; totals separated by currency |
-| Security | Authentication failures, limits, anti-bot, MFA/session events and admin audit |
-| System | 5xx, API p95, queue, database/storage, backups and last verified restore |
-| SEO | Sitemap, redirects, page errors and Search Console links; its metrics need a separate integration |
+| Area           | Functions and metrics                                                                                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Users          | Registrations, verification, DAU/WAU/MAU, bans, roles, sessions and permissions                                      |
+| Catalog        | Published titles, data completeness, import/mapping failures, zero-result searches, editing/redirects                |
+| Providers      | Toggles, health, requests, errors, p95 latency, quotas and cache age; masked credentials                             |
+| Playback       | Starts/errors, active viewing, popular titles/dubs; no secret stream URLs                                            |
+| Profiles/media | Reports, preset avatars/banners, quotas, processing errors, custom badges/decoration                                 |
+| Payments       | Orders, success/failure, refunds, entitlements, renewals and unreconciled transactions; totals separated by currency |
+| Security       | Authentication failures, limits, anti-bot, MFA/session events and admin audit                                        |
+| System         | 5xx, API p95, queue, database/storage, backups and last verified restore                                             |
+| SEO            | Sitemap, redirects, page errors and Search Console links; its metrics need a separate integration                    |
 
 Define source, interval, timezone and formula for every metric. Public presence respects the selected status; activity-based DAU/viewing is separate. Filter bots from product metrics according to available classification. Audit is append-only under application permissions; financial/personal-data exports have separate permissions. Define event/log retention before production.
 

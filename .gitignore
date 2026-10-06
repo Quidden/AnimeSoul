@@ -1,90 +1,13 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/app/frontend/node_modules
-/archive/legacy-old-stack/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/archive/legacy-old-stack/.next/
-/archive/legacy-old-stack/.vinext/
-/archive/legacy-old-stack/out/
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-.dev-*.log
-/archive/legacy-old-stack/.npm-cache/
-.local-dev.log
-/archive/legacy-old-stack/release-work/
-/artifacts/
-/app/build/
-/app/dist/
-
-# env files (can opt-in for committing if needed)
+node_modules/
+.next/
+dist/
+coverage/
+artifacts/
 .env*
 !.env.example
-!.env.local.example
-/archive/legacy-old-stack/animesoul.config.json
-/app/animesoul.python.json
-/animesoul.config.json
-
-# vercel
-.vercel
-
-# typescript
 next-env.d.ts
-/archive/legacy-old-stack/dist/
-/archive/legacy-old-stack/build/
-/archive/legacy-old-stack/.wrangler/
-/archive/legacy-old-stack/outputs/
-/archive/legacy-old-stack/work/
-/archive/legacy-old-stack/desktop-dist/
-/archive/legacy-old-stack/desktop-dist-carousel/
-/archive/legacy-old-stack/desktop-release/
-/archive/legacy-old-stack/desktop-stage*/
-/archive/legacy-old-stack/release-*/
-/archive/legacy-old-stack/data/animesoul-storage.json
-/archive/legacy-old-stack/data/animesoul-storage.tmp.json
-/app/frontend/dist/
-/app/frontend/dist-android/
-/app/mobile/.toolchains/
-/app/mobile/android/.gradle/
-/app/mobile/android/build/
-/app/mobile/android/local.properties
-/app/mobile/android/app/build/
-/app/mobile/releases/
-/app/mobile/android/signing/
-/app/mobile/android/keystore.properties
-/app/.venv/
-/app/data/
-/app/.website-local/
-/app/__pycache__/
-/app/**/*.pyc
-/.idea/
-/app/launcher.spec
-
-# Generated checks and local design references
-__pycache__/
-.ruff_cache/
+*.tsbuildinfo
+packages/database/generated/
 *.log
-/app/frontend/.player-check/
-/docs/design/references/
-/_ui_edit_render/
-/_ui_reference_images/
+.idea/
+.DS_Store

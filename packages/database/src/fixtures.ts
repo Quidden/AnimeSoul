@@ -1,0 +1,76 @@
+import type { Anime, ProfileRecord } from "@animesoul/contracts";
+export const developmentAnime: Anime[] = [
+  {
+    id: "00000000-0000-4000-8000-000000000001",
+    slug: "attack-on-titan",
+    title: "Атака титанов",
+    originalTitle: "Shingeki no Kyojin",
+    aliases: ["Attack on Titan", "進撃の巨人"],
+    description:
+      "За высокими стенами люди ищут защиту от титанов. Эрен и его друзья пытаются понять, какой мир скрывается по другую сторону.",
+    year: 2013,
+    genres: ["Драма", "Фэнтези", "Экшен"],
+    poster: null,
+    indexable: false,
+    status: "released",
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000002",
+    slug: "frieren",
+    title: "Провожающая в последний путь Фрирен",
+    originalTitle: "Sousou no Frieren",
+    aliases: ["Frieren: Beyond Journey’s End", "葬送のフリーレン"],
+    description:
+      "После завершения великого похода эльфийская волшебница отправляется в новое путешествие, чтобы лучше понять людей и ценность коротких встреч.",
+    year: 2023,
+    genres: ["Приключения", "Фэнтези"],
+    poster: null,
+    indexable: false,
+    status: "released",
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000003",
+    slug: "violet-evergarden",
+    title: "Вайолет Эвергарден",
+    originalTitle: "Violet Evergarden",
+    aliases: ["ヴァイオレット・エヴァーガーデン"],
+    description:
+      "Бывшая солдатка учится жить после войны. Помогая людям писать письма, она постепенно находит слова для собственных чувств.",
+    year: 2018,
+    genres: ["Драма", "Повседневность"],
+    poster: null,
+    indexable: false,
+    status: "released",
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000004",
+    slug: "your-name",
+    title: "Твоё имя",
+    originalTitle: "Kimi no Na wa.",
+    aliases: ["Your Name", "君の名は。"],
+    description:
+      "Двое подростков из разных городов неожиданно меняются местами. Их поиски друг друга превращаются в историю о памяти, времени и встрече.",
+    year: 2016,
+    genres: ["Романтика", "Фэнтези"],
+    poster: null,
+    indexable: false,
+    status: "released",
+  },
+];
+export const developmentProfile: ProfileRecord = {
+  id: "00000000-0000-4000-8000-000000000010",
+  username: "soul",
+  indexable: false,
+  avatar: "/profile-presets/avatar-moon.svg",
+  banner: "/profile-presets/banner-night.svg",
+  badge: null,
+  presence: "invisible",
+  about: "Люблю тихие истории, красивые миры и аниме, к которым хочется возвращаться.",
+  favoriteIds: [developmentAnime[1]!.id, developmentAnime[2]!.id],
+  folders: [
+    { name: "На тихий вечер", animeIds: [developmentAnime[2]!.id, developmentAnime[3]!.id] },
+  ],
+  ratings: [{ animeId: developmentAnime[1]!.id, score: 10 }],
+  statistics: { watched: 24, minutes: 8640 },
+  visibility: { about: true, favorites: true, folders: false, ratings: false, statistics: true },
+};

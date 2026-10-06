@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client"
+  output = "../generated"
+  moduleFormat = "esm"
+  importFileExtension = "js"
+}
+datasource db {
+  provider = "postgresql"
+}
+enum Presence {
+  online
+  offline
+  dnd
+  invisible
+}
+enum OrderStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  passwordHash String?
+  createdAt DateTime @default(now())
+  disabledAt DateTime?
+  profile UserProfile?
+  sessions Session[]
+  roles UserRole[]
+  orders Order[]
+  entitlements Entitlement[]
+}
+model UserProfile {
+  userId String @id @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username String
+  usernameKey String @unique
+  isPublic Boolean @default(false)
+  indexable Boolean @default(false)
+  avatar String?
+  banner String?
+  badge String?
+  presence Presence @default(offline)
+  about String @default("")
+  visibility Json
+  // Baseline payload; normalization and legacy import follow in stage 2.
+  content Json
+  updatedAt DateTime @updatedAt
+  @@index([isPublic, indexable])
+}
+model Session {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  mfaVerifiedAt DateTime?
+  @@index([userId, expiresAt])
+}
+model UserRole {
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role String
+  @@id([userId, role])
+}
+model Anime {
+  id String @id @default(uuid()) @db.Uuid
+  slug String @unique
+  title String
+  originalTitle String
+  aliases String[]
+  description String
+  year Int
+  genres String[]
+  poster String?
+  status String
+  published Boolean @default(false)
+  isDevelopment Boolean @default(false)
+  updatedAt DateTime @updatedAt
+  providers AnimeProvider[]
+  @@index([published, title])
+}
+model AnimeProvider {
+  animeId String @db.Uuid
+  anime Anime @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  provider String
+  externalId String
+  @@id([provider, externalId])
+  @@unique([animeId, provider])
+}
+model ProviderSetting {
+  key String @id
+  enabled Boolean @default(false)
+  updatedAt DateTime @updatedAt
+}
+model AuditEvent {
+  id String @id @default(uuid()) @db.Uuid
+  actorId String? @db.Uuid
+  action String
+  objectId String?
+  reason String?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+// Payment boundary only. No payment endpoint is enabled.
+model Order {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  amountMinor Int
+  currency String @db.Char(3)
+  product String
+  status OrderStatus @default(pending)
+  createdAt DateTime @default(now())
+  payments Payment[]
+}
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  provider String
+  externalId String
+  createdAt DateTime @default(now())
+  @@unique([provider, externalId])
+}
+model WebhookEvent {
+  id String @id @default(uuid()) @db.Uuid
+  provider String
+  externalId String
+  payloadHash String
+  receivedAt DateTime @default(now())
+  processedAt DateTime?
+  @@unique([provider, externalId])
+}
+model Entitlement {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+  source String
+  expiresAt DateTime
+  revokedAt DateTime?
+  @@index([userId, permission, expiresAt])
+}

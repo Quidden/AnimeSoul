@@ -1,120 +1,49 @@
 [English](README.md) | [Русский](README.ru.md)
 
-# AnimeSoul [Full AI]
+# AnimeSoul web
 
-**Your anime library, playback and watch history — on your own device.**
+New website foundation: TypeScript, Next.js/React, NestJS/Fastify and PostgreSQL/Prisma.
+Android lives in an independent repository; desktop development is discontinued.
 
-AnimeSoul is a local application for discovering anime, watching episodes and managing a personal library. It runs a React + TypeScript interface with a Python/FastAPI backend in a browser, a Windows desktop window, or a standalone Android app.
+## Run locally
 
-[Download releases](https://github.com/Quidden/AnimeSoul/releases) · [Getting started](docs/DEVELOPMENT.md) · [Technical documentation](docs/README.md) · [HTTP API](docs/api/API_REFERENCE.md)
+Install Node.js 24 and pnpm 11.25.0, then:
 
-## At a glance
-
-| | |
-| --- | --- |
-| Version | **0.3.0**; profile schema **3** |
-| Clients | Windows browser / PyWebView; Android WebView + embedded Python |
-| Interface | React 19, TypeScript 5.9, Vite 8, global CSS, hls.js |
-| Backend | FastAPI, Uvicorn, httpx; JSON persistence and SQLite caches/ratings |
-| Website mode | Accounts, sessions, roles and profiles with PostgreSQL; [deployment guide](docs/deployment/WEBSITE.md) |
-| Integrations | YummyAnime, Kodik, Jikan episode dates, Google Drive, experimental Android Google Cast |
-| Documentation | English (primary) and Russian; the current application UI is predominantly Russian |
-
-## What you can do
-
-- **Discover:** search with keyboard-layout correction, transliteration and aliases; filter and group franchises.
-- **Watch:** choose seasons, episodes, dubs and providers; resume playback; use the built-in HLS player with quality, subtitles, speed, timeline previews, opening/ending skips and Picture-in-Picture when supported.
-- **Organize:** favorites, custom folders, notes, multiple profiles, history, statistics, manual watched marks and rewatches.
-- **Track releases:** follow new episodes across a franchise and selected dubs, with source-aware episode identity and release dates when available.
-- **Keep episodes offline:** queue downloads, select seasons/ranges, inspect storage and play downloaded media. Android publishes completed MP4 files to MediaStore.
-- **Back up and sync:** export/import profiles or synchronize with Google Drive using explicit merge and restore rules.
-- **Local devices:** explicit pairing, automatic save sync alongside Google Drive, downloaded MP4 transfer, and remote playback with permissions and priorities. [Setup and limitations](docs/guides/LAN_DEVICES.md).
-- **Rate:** personal anime/season/episode scores plus anonymous aggregates on the connected AnimeSoul server.
-- **Watch together:** desktop/browser Watch Party rooms with host/shared control. Android intentionally omits Watch Party.
-- **Cast on Android:** experimental Google Cast for direct online HTTPS HLS/MP4 streams; the TV receives the stream URL from the phone.
-
-## Screenshots
-
-### Windows library
-
-<img width="2500" height="1314" alt="AnimeSoul Windows library" src="https://github.com/user-attachments/assets/68aa5d34-ccf9-4c0d-8cca-c6f6d47eea1b" />
-
-### Playback settings and appearance
-
-![Playback and resume settings](docs/screenshots/desktop-settings.png)
-
-![Theme and interface size settings](docs/screenshots/desktop-appearance.png)
-
-### Android
-
-<p align="center">
-  <img src="docs/screenshots/android-home.png" alt="Android home and library" width="320">
-  <img src="docs/screenshots/android-mini-player.png" alt="Android floating mini-player" width="320">
-</p>
-
-[Screenshot gallery and capture notes](docs/screenshots/SCREENSHOTS.md). Images show the Russian UI; documentation language does not change the application language.
-
-## Get started
-
-For packaged Windows and Android builds, use [GitHub Releases](https://github.com/Quidden/AnimeSoul/releases). For Windows source startup, run [Start AnimeSoul.bat](Start%20AnimeSoul.bat). It prepares missing dependencies, builds the frontend when needed and starts the saved launch mode.
-
-Source requirements: **Python 3.11+ and Node.js 22+**. CI uses Python 3.12. Configure your YummyAnime **Public token** for its catalogue. Kodik direct playback and downloads require your Kodik Public/Private key pair. YummyAnime's private token is not used. Google Drive is optional and requires your own OAuth client configuration.
-
-See [installation, development and checks](docs/DEVELOPMENT.md), [Windows/Android build details](docs/platforms/PLATFORMS.md), and [Android update signing](docs/platforms/ANDROID_UPDATE_SIGNING.md).
-
-## How it fits together
-
-```mermaid
-flowchart LR
-    Client["React: browser / PyWebView / Android WebView"] -->|"local HTTP JSON"| API["FastAPI routes"]
-    API --> Services["Python services"]
-    Services --> Providers["YummyAnime / Kodik / Jikan"]
-    Services --> Data["Profiles JSON / SQLite / offline files"]
-    Services --> Cloud["Google OAuth / Drive"]
-    Services --> Party["In-memory Watch Party; desktop only"]
-    Client -->|"direct media / iframe"| Media["Provider CDN / player"]
-    Client -->|"Android bridge"| Native["PiP / MediaSession / MediaStore / Cast"]
+```sh
+pnpm install --frozen-lockfile
+pnpm run setup
+pnpm dev
 ```
 
-The backend owns catalogue requests, credentials, local files and sync. Video streams, posters and embedded provider players can load directly in the client. Community ratings belong to the current backend instance; they are not a global AnimeSoul rating service. Watch Party and the download queue live in process memory and do not survive a process restart.
+Website: http://localhost:8021 · API: http://127.0.0.1:8020 · administration: http://localhost:8022.
+The initial preview explicitly uses development fixtures. It contains no migrated account and is not indexed.
+Stop the development command with Ctrl+C; it terminates only its own services.
 
-## Documentation
+For PostgreSQL and Redis, start Docker Desktop and run:
 
-[The website, separate Android client, SEO, security and payment migration plan](docs/architecture/WEB_STACK_PLAN.md) describes the next development phase; the running implementation still uses the current stack.
-
-| Area | English | Русский |
-| --- | --- | --- |
-| Documentation index | [Index](docs/README.md) | [Оглавление](docs/README.ru.md) |
-| Architecture and boundaries | [Architecture](docs/architecture/ARCHITECTURE.md) | [Архитектура](docs/architecture/ARCHITECTURE.ru.md) |
-| UI components, state and events | [Frontend](docs/frontend/UI.md) | [Интерфейс](docs/frontend/UI.ru.md) |
-| Services, lifecycle and persistence | [Backend](docs/architecture/BACKEND.md) | [Бэкенд](docs/architecture/BACKEND.ru.md) |
-| HTTP, WebSocket, requests and errors | [API](docs/api/API_REFERENCE.md) | [API](docs/api/API_REFERENCE.ru.md) |
-| Function calls and component relationships | [Flows](docs/architecture/ENTRY_POINTS_AND_FLOWS.md) | [Цепочки вызовов](docs/architecture/ENTRY_POINTS_AND_FLOWS.ru.md) |
-| Data and sync | [Data](docs/architecture/DATA_MODEL.md) · [Drive](docs/guides/GDRIVE_SYNC.md) | [Данные](docs/architecture/DATA_MODEL.ru.md) · [Drive](docs/guides/GDRIVE_SYNC.ru.md) |
-| Code map, styling and platform builds | [Map](docs/architecture/PROJECT_MAP.md) · [CSS](docs/frontend/STYLES.md) · [Platforms](docs/platforms/PLATFORMS.md) | [Карта](docs/architecture/PROJECT_MAP.ru.md) · [CSS](docs/frontend/STYLES.ru.md) · [Платформы](docs/platforms/PLATFORMS.ru.md) |
-
-## Repository layout
-
-| Directory | Role |
-| --- | --- |
-| [`app/`](app) | Maintained Python/FastAPI + React implementation, Windows packaging and Android client |
-| [`archive/legacy-old-stack/`](archive/legacy-old-stack) | Archived Vinext/Electron implementation; migration/reference only |
-| [`docs/`](docs/README.md) | Guides, architecture, API, platform notes, release history and design references |
-| `artifacts/` | Git-ignored release packages, intermediate builds and UI captures |
-| [`.github/workflows/`](.github/workflows) | Windows CI: Ruff, backend unittest and frontend checks |
-
-New product work belongs in `app/`. Legacy documentation describes the archived implementation. Release notes record historical versions and are not the current API contract.
-
-## Save portability
-
-Use Settings → Profiles to export/import a single profile. To copy the complete document between source and legacy directories, close both runtimes and run from `app/`:
-
-```powershell
-.\.venv\Scripts\python.exe -m tools.transfer_saves to-main
-# Reverse direction:
-.\.venv\Scripts\python.exe -m tools.transfer_saves to-legacy
+```sh
+pnpm infra:up
+pnpm db:migrate
+pnpm build
+pnpm db:seed
 ```
 
-The tool validates the document, backs up an existing destination and replaces it atomically. Credentials and downloaded videos are separate from portable profiles. [Save compatibility](docs/guides/SAVE_COMPATIBILITY.md) explains custom/installed data paths and recovery.
+Set DEMO_CATALOG=false in the private .env to read PostgreSQL instead of fixtures.
+The development seed is forbidden in production and never creates an administrator.
+The API readiness endpoint returns 503 until a real database responds.
 
-Thanks to the YummyAnime developers for the API that made AnimeSoul possible. Media availability, dubs, subtitles, preview frames and playback quality depend on external providers.
+## Check
+
+```sh
+pnpm check
+pnpm format:check
+pnpm audit --audit-level high
+```
+
+The HTTP website tests start isolated compiled services on ports 18020–18022.
+Documentation, source and migrations belong in [docs](docs/README.md), apps, packages and infra respectively.
+Generated files, databases, private environment files and media uploads do not belong in Git.
+
+See [current milestone](docs/migration/STATUS.md), [architecture](docs/architecture/FOUNDATION.md)
+and the [full roadmap](docs/architecture/WEB_STACK_PLAN.md).
+The archive branch codex/archive-current-2026-10-06 and tag archive-current-2026-10-06 preserve the previous application.
