@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { SiteHeader } from "../components/SiteHeader";
+import { SiteFooter } from "../components/SiteFooter";
 import { siteConfiguration } from "../lib/site";
 import "./globals.css";
+
 const site = siteConfiguration();
 export const metadata: Metadata = {
   metadataBase: site.url,
@@ -10,23 +12,15 @@ export const metadata: Metadata = {
   robots: { index: site.indexable, follow: site.indexable },
 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const preview = process.env.DEMO_CATALOG === "true";
   return (
     <html lang="ru">
       <body>
-        <header className="site-header">
-          <nav aria-label="Основная навигация">
-            <Link className="brand" href="/">
-              <img src="/animesoul-icon.png" alt="" width="30" height="30" />
-              Anime<span>Soul</span>
-            </Link>
-            <Link href="/catalog">Каталог</Link>
-            {process.env.DEMO_CATALOG === "true" && <Link href="/users/soul">Профиль</Link>}
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          AnimeSoul <span>Истории, которые остаются с вами</span>
-        </footer>
+        <div className="app">
+          <SiteHeader preview={preview} />
+          <main id="main-content">{children}</main>
+          <SiteFooter preview={preview} />
+        </div>
       </body>
     </html>
   );

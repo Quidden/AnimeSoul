@@ -1,0 +1,124 @@
+/* Archived home composition: cinematic banner followed by the library. */
+.home-cinema-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 380px;
+  margin: 30px 2.4vw 0;
+  border: 1px solid #ffffff08;
+  border-radius: 12px;
+  background: #07070b;
+}
+.home-cinema-media,
+.home-cinema-vignette {
+  position: absolute;
+  inset: 0;
+}
+.home-cinema-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #ffffff14;
+  font: 800 clamp(72px, 12vw, 190px)/1 sans-serif;
+  letter-spacing: -0.08em;
+}
+.home-cinema-vignette {
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, #05040999 0%, #0504094d 36%, #0504090a 72%),
+    linear-gradient(180deg, #05040905 35%, #05040924 70%, #05040942 100%);
+}
+.home-cinema-copy {
+  position: relative;
+  z-index: 2;
+  width: min(730px, 80%);
+  padding: 90px clamp(26px, 8.3vw, 114px);
+  padding-right: 0;
+}
+.home-cinema-copy .hero-resume-label {
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  padding: 0;
+  margin: 0;
+}
+.home-cinema-copy h1 {
+  margin: 14px 0 10px;
+  color: white;
+  font-size: clamp(32px, 3.2vw, 48px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+.home-cinema-copy h1 i {
+  color: #b697ff;
+  font-style: normal;
+  font-weight: inherit;
+}
+.home-cinema-copy > p:not(.eyebrow) {
+  max-width: 560px;
+  margin: 0 0 16px;
+  color: #ffffffc7;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.home-cinema-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid #bda2ff70;
+  border-radius: 13px;
+  background: #9170e8;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 14px 46px #9a78ff40;
+}
+.home-cinema-cta:hover {
+  background: #a282f1;
+}
+.home-library-workspace {
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  padding: 36px clamp(20px, 4vw, 64px) 72px;
+}
+.home-library-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-bottom: 24px;
+}
+.home-library-heading h2 {
+  margin: 0;
+  font-size: clamp(24px, 2.5vw, 32px);
+  font-weight: 680;
+  letter-spacing: -0.035em;
+}
+.home-watching {
+  margin-bottom: 42px;
+}
+.home-watching .empty-state {
+  padding: 8px 0;
+  font-size: 13px;
+}
+@media (max-width: 720px) {
+  .home-cinema-hero {
+    min-height: 340px;
+    margin: 18px 16px 0;
+  }
+  .home-cinema-copy {
+    width: 100%;
+    padding: 65px 25px;
+  }
+  .home-cinema-copy h1 {
+    font-size: 36px;
+  }
+  .home-cinema-copy > p:not(.eyebrow) {
+    max-width: 400px;
+  }
+}

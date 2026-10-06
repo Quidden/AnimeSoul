@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCatalog, getProfile } from "../../../lib/api";
 import { safeJsonLd, siteConfiguration } from "../../../lib/site";
 import { ProfileHeader } from "../../../components/ProfileHeader";
 import { AnimeCard } from "../../../components/AnimeCard";
+import { Icon } from "../../../components/Icon";
+
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ username: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -26,72 +29,105 @@ export default async function ProfilePage({ params }: Props) {
   if (!profile) notFound();
   const catalog = await getCatalog();
   return (
-    <>
-      <ProfileHeader profile={profile} />
-      <div className="content profile-content">
-        {process.env.DEMO_CATALOG === "true" && (
-          <p className="preview-note">
-            Пример публичного профиля · папки и оценки скрыты владельцем
-          </p>
-        )}
+    <div className="user-profile-page">
+      <div className="profile-main">
+        <ProfileHeader profile={profile} />
+        <div className="profile-subnav">
+          <nav aria-label="Разделы профиля">
+            {profile.favoriteIds && <Link href="#profile-favorites">Любимое аниме</Link>}
+            {profile.folders && <Link href="#profile-collections">Подборки</Link>}
+            {profile.ratings && <Link href="#profile-ratings">Личный рейтинг</Link>}
+            {profile.statistics && <Link href="#profile-statistics">Статистика</Link>}
+          </nav>
+        </div>
         {profile.favoriteIds && (
-          <section>
-            <div className="section-heading">
-              <h2>Любимое аниме</h2>
-              <span>{profile.favoriteIds.length} истории</span>
+          <section className="profile-section" id="profile-favorites">
+            <div className="profile-section-heading">
+              <h2>
+                Любимое аниме <span>{profile.favoriteIds.length}</span>
+              </h2>
             </div>
-            <div className="anime-grid">
+            <div className="profile-anime-grid">
               {catalog.items
-                .filter((a) => profile.favoriteIds?.includes(a.id))
-                .map((anime, i) => (
-                  <AnimeCard key={anime.id} anime={anime} index={i} />
+                .filter((anime) => profile.favoriteIds?.includes(anime.id))
+                .map((anime) => (
+                  <AnimeCard key={anime.id} anime={anime} compact />
                 ))}
             </div>
+            {!profile.favoriteIds.length && (
+              <p className="profile-empty">Здесь пока нет любимых аниме.</p>
+            )}
           </section>
         )}
         {profile.folders && (
-          <section>
-            <h2>Подборки</h2>
-            <div className="folder-list">
+          <section className="profile-section" id="profile-collections">
+            <div className="profile-section-heading">
+              <h2>
+                Личные подборки <span>{profile.folders.length}</span>
+              </h2>
+            </div>
+            <div className="profile-collections">
               {profile.folders.map((folder) => (
-                <div key={folder.name}>
-                  <h3>{folder.name}</h3>
-                  <p>{folder.animeIds.length} аниме</p>
+                <div className="profile-collection" key={folder.name}>
+                  <span className="profile-collection-art">
+                    <Icon name="folder" />
+                  </span>
+                  <span className="profile-collection-info">
+                    <strong>{folder.name}</strong>
+                    <span>{folder.animeIds.length} аниме</span>
+                  </span>
                 </div>
               ))}
             </div>
           </section>
         )}
-        {profile.ratings && (
-          <section>
-            <h2>Личные оценки</h2>
-            <ul className="ratings-list">
-              {profile.ratings.map((rating) => (
-                <li key={rating.animeId}>
-                  <span>
-                    {catalog.items.find((a) => a.id === rating.animeId)?.title ?? "Аниме"}
-                  </span>
-                  <strong>{rating.score} / 10</strong>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        {profile.statistics && (
-          <section>
-            <h2>В историях и цифрах</h2>
-            <dl className="statistics">
-              <div>
-                <dd>{profile.statistics.watched}</dd>
-                <dt>Аниме просмотрено</dt>
+        <div className="profile-bottom-grid">
+          {profile.ratings && (
+            <section className="profile-section" id="profile-ratings">
+              <div className="profile-section-heading">
+                <h2>Личный рейтинг</h2>
               </div>
-              <div>
-                <dd>{Math.round(profile.statistics.minutes / 60)}</dd>
-                <dt>Часов в других мирах</dt>
+              <div className="profile-rating-list">
+                {profile.ratings.map((rating, index) => {
+                  const anime = catalog.items.find((item) => item.id === rating.animeId);
+                  return (
+                    <div className="profile-rating-row" key={rating.animeId}>
+                      <span className="profile-rating-position">{index + 1}</span>
+                      <span className="profile-rating-info">
+                        {anime ? (
+                          <Link href={`/anime/${anime.slug}`}>{anime.title}</Link>
+                        ) : (
+                          <strong>Аниме</strong>
+                        )}
+                      </span>
+                      <span className="profile-rating-score">★ {rating.score} / 10</span>
+                    </div>
+                  );
+                })}
               </div>
-            </dl>
-          </section>
-        )}
+            </section>
+          )}
+          {profile.statistics && (
+            <section className="profile-section" id="profile-statistics">
+              <div className="profile-section-heading">
+                <h2>Статистика</h2>
+              </div>
+              <p className="profile-stat-intro">Время, проведённое в любимых историях.</p>
+              <dl className="profile-stats">
+                <div>
+                  <dd>{profile.statistics.watched}</dd>
+                  <dt>Аниме просмотрено</dt>
+                </div>
+                <div>
+                  <dd>
+                    {Math.round(profile.statistics.minutes / 60)} <small>ч.</small>
+                  </dd>
+                  <dt>Время просмотра</dt>
+                </div>
+              </dl>
+            </section>
+          )}
+        </div>
         {profile.indexable && siteConfiguration().indexable && (
           <script
             type="application/ld+json"
@@ -109,6 +145,6 @@ export default async function ProfilePage({ params }: Props) {
           />
         )}
       </div>
-    </>
+    </div>
   );
 }

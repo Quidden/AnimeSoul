@@ -23,6 +23,8 @@ Public SSR catalog, anime pages and profile, search, canonical metadata, safe JS
 indexing controls, sitemap selection and full-width collapsing profile header work on development fixtures.
 Admin routes deny access. Order/payment/webhook/entitlement schema prepares future sandbox integration.
 
+The archived website presentation has been restored: original palette and typography, glass header with centered search, home banner, compact catalog with filters, open anime information layout, and full-width fading profile cover. CSS is organized by page under apps/web/styles. The new stack, SSR, SEO and server-side privacy remain in place.
+
 ## Verification and limits
 
 Website/API builds, strict type checks, lint, document links, formatting and npm dependency audit are checked locally.
