@@ -13,35 +13,39 @@ import {
     type OfflineAnime,
 } from "../../lib/downloads";
 import type {Anime, Video} from "../../lib/types";
+import { useAccount } from "../account/context";
 
 const ACTIVE_DOWNLOAD_STATUSES = new Set(["queued", "downloading", "paused"]);
 
 /** Owns local-library discovery, active-download polling and offline video mapping. */
 export function useOfflinePlayback(anime: Anime) {
+    const { config: accountConfig, user } = useAccount();
     const [offlineAnime, setOfflineAnime] = useState<OfflineAnime | null>(() => (
         peekOfflineAnime(anime.anime_id)
     ));
     const [offlineLookupReady, setOfflineLookupReady] = useState(() => (
-        hasOfflineAnimeLookup(anime.anime_id)
+        accountConfig.website || hasOfflineAnimeLookup(anime.anime_id)
     ));
     const [localPlaybackReady, setLocalPlaybackReady] = useState(false);
     const [kodikAccessReady, setKodikAccessReady] = useState(false);
     const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
 
-    const initialLookupStatus = peekOfflineAnime(anime.anime_id)
+    const initialLookupStatus = accountConfig.website || peekOfflineAnime(anime.anime_id)
         ? ""
         : hasOfflineAnimeLookup(anime.anime_id)
             ? "Загружаем серии…"
             : "Проверяем скачанные серии…";
 
     useEffect(() => {
+        if (accountConfig.website) return;
         setOfflineAnime(peekOfflineAnime(anime.anime_id));
         setOfflineLookupReady(hasOfflineAnimeLookup(anime.anime_id));
         setLocalPlaybackReady(false);
         setDownloadJobs([]);
-    }, [anime.anime_id]);
+    }, [anime.anime_id, accountConfig.website]);
 
     useEffect(() => {
+        if (accountConfig.website) return;
         let stopped = false;
         fetchDownloadJobs()
             .then(jobs => {
@@ -61,7 +65,7 @@ export function useOfflinePlayback(anime: Anime) {
         return () => {
             stopped = true;
         };
-    }, [anime.anime_id]);
+    }, [anime.anime_id, accountConfig.website]);
 
     const activeDownloadKey = useMemo(() => downloadJobs
         .filter(job => ACTIVE_DOWNLOAD_STATUSES.has(job.status))
@@ -88,6 +92,7 @@ export function useOfflinePlayback(anime: Anime) {
     }, [activeDownloadKey, anime.anime_id]);
 
     useEffect(() => {
+        if (accountConfig.website) return;
         let stopped = false;
         const refreshAccess = () => {
             fetchOfflineSettings()
@@ -106,7 +111,7 @@ export function useOfflinePlayback(anime: Anime) {
             window.removeEventListener(KODIK_ACCESS_CHANGED_EVENT, refreshAccess);
             window.clearInterval(timer);
         };
-    }, []);
+    }, [accountConfig.website]);
 
     const offlineVideosBySeason = useMemo(() => {
         const grouped: Record<number, Video[]> = {};
@@ -170,7 +175,7 @@ export function useOfflinePlayback(anime: Anime) {
     return {
         downloadJobs,
         initialLookupStatus,
-        kodikAccessReady,
+        kodikAccessReady: accountConfig.website ? Boolean(user?.emailVerified && user.permissions.includes("player.use")) : kodikAccessReady,
         localPlaybackReady,
         mergeOfflineVideos,
         offlineAnime,

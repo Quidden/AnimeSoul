@@ -25,6 +25,8 @@ type DownloadPickerProps = {
   jobs: DownloadJob[];
   busy: boolean;
   notice: string;
+  website?: boolean;
+  onAbort?: () => void;
   onClose: () => void;
   onDubbingChange: (value: string) => void;
   onQualityChange: (value: number) => void;
@@ -56,6 +58,8 @@ export function DownloadPicker({
   jobs,
   busy,
   notice,
+  website = false,
+  onAbort,
   onClose,
   onDubbingChange,
   onQualityChange,
@@ -284,12 +288,12 @@ export function DownloadPicker({
           <div>
             <strong>{selected.size} сер.</strong>
             <span className={notice ? "has-notice" : undefined} role="status" aria-live="polite">
-              {notice || "Можно сразу добавить ещё один сезон — он встанет следующим в очередь."}
+              {notice || (website ? "Серии будут сохранены на ваше устройство." : "Можно сразу добавить ещё один сезон — он встанет следующим в очередь.")}
             </span>
           </div>
-          <button type="button" disabled={!selected.size || busy} onClick={() => void submit()}>
-            {busy ? "Проверяем…" : `Добавить в очередь${selected.size ? ` (${selected.size})` : ""}`}
-          </button>
+          {website && busy && onAbort ? <button type="button" onClick={onAbort}>Остановить скачивание</button> : <button type="button" disabled={!selected.size || busy} onClick={() => void submit()}>
+            {busy ? (website ? "Скачиваем…" : "Проверяем…") : `${website ? "Скачать" : "Добавить в очередь"}${selected.size ? ` (${selected.size})` : ""}`}
+          </button>}
         </footer>
       </section>
     </div>,

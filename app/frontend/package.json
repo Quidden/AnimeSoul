@@ -12,7 +12,7 @@
     "lint": "eslint src tests vite.config.ts --max-warnings 48",
     "typecheck:strict": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/critical-logic.test.ts",
+    "test": "tsx --test tests/critical-logic.test.ts tests/account-logic.test.ts tests/profile-media.test.ts",
     "check": "npm run lint && npm run typecheck:strict && npm run audit:css && npm test && npm run build && npm run audit:bundle"
   },
   "dependencies": {

@@ -8,6 +8,9 @@ import {
     useState,
 } from "react";
 
+import { useAccount } from "../account/context";
+import { downloadWebsiteEpisodes } from "../../lib/websiteDownloads";
+
 import {episodePreviewImages} from "../../components/EpisodeSlideshow";
 import {type DownloadCandidate} from "../downloads/DownloadPicker";
 import {
@@ -72,6 +75,9 @@ export function useDownloadManager({
     setDownloadJobs,
     setDownloadQuality,
 }: UseDownloadManagerOptions) {
+    const { config: accountConfig, user: accountUser } = useAccount();
+    const websiteController = useRef<AbortController | null>(null);
+    useEffect(() => () => websiteController.current?.abort(), []);
     const [downloadPickerOpen, setDownloadPickerOpen] = useState(false);
     const [downloadDubbing, setDownloadDubbing] = useState(initialDubbing);
     const [isSubmittingDownload, setIsSubmittingDownload] = useState(false);
@@ -200,7 +206,11 @@ export function useDownloadManager({
     const queueDownloadVideos = async (
         selectedVideos: (Video & {__season: number})[],
     ): Promise<boolean> => {
-        if (!kodikAccessReady) {
+        if (accountConfig.website && !(accountUser?.emailVerified && accountUser.permissions.includes("downloads.use"))) {
+            setDownloadNotice(accountUser ? "Для скачивания нужен доступ от администратора и подтверждённая почта." : "Войдите в аккаунт для скачивания.");
+            return false;
+        }
+        if (!accountConfig.website && !kodikAccessReady) {
             setDownloadNotice("Добавьте публичный и секретный ключи Kodik в настройках офлайн-библиотеки.");
             return false;
         }
@@ -252,6 +262,15 @@ export function useDownloadManager({
                 quality: downloadQuality,
                 episodes,
             };
+            if (accountConfig.website) {
+                const controller = new AbortController();
+                websiteController.current = controller;
+                try {
+                    const completed = await downloadWebsiteEpisodes(request, controller.signal, setDownloadNotice);
+                    setDownloadNotice(`Скачано файлов: ${completed}. Они сохранены на вашем устройстве.`);
+                    return true;
+                } finally { websiteController.current = null; }
+            }
             const availability = await checkDownloadAvailability(request);
             if (!availability.available) {
                 setDownloadNotice([
@@ -266,7 +285,7 @@ export function useDownloadManager({
             setDownloadNotice(`Добавлено в очередь: ${job.total} сер. Можно выбрать следующий сезон.`);
             return true;
         } catch (error) {
-            setDownloadNotice(error instanceof Error
+            setDownloadNotice(error instanceof DOMException && error.name === "AbortError" ? "Скачивание остановлено." : error instanceof Error
                 ? error.message
                 : "Не удалось добавить загрузку в очередь.");
             return false;
@@ -328,13 +347,14 @@ export function useDownloadManager({
         changeDownloadQuality,
         downloadCandidates,
         downloadDubbings,
-        downloadIsActive: activeDownloadJobs.length > 0,
+        downloadIsActive: activeDownloadJobs.length > 0 || (accountConfig.website && isSubmittingDownload),
         downloadNotice,
         downloadPickerOpen,
         downloadQualityOptions,
         effectiveDownloadDubbing,
         isSubmittingDownload,
         requestSelectedDownloads,
+        stopWebsiteDownload: () => websiteController.current?.abort(),
         setDownloadDubbing,
         setDownloadPickerOpen,
         visibleDownloadNotice: downloadNotice

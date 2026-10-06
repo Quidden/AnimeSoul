@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { StorageDocument } from "../../lib/types";
+import { isWebsiteRuntime } from "../../lib/accountRuntime";
 
 /** Merge into live React state; the normal autosave path remains the only writer. */
 export function useLanSaveSync(options: {
@@ -10,6 +11,7 @@ export function useLanSaveSync(options: {
   const latest = useRef(options);
   latest.current = options;
   useEffect(() => {
+    if (isWebsiteRuntime()) return;
     const controller = new AbortController();
     let busy = false;
     const tick = async () => {

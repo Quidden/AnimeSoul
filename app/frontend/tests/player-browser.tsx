@@ -109,7 +109,7 @@ const menu: PlayerMenu = {
   autoSkipOpening: false, onAutoSkipOpeningChange: noop,
   autoSkipEnding: false, onAutoSkipEndingChange: noop,
   autoNext: false, onAutoNextChange: noop,
-  externalToolbarVisible: false, onExternalToolbarVisibleChange: noop,
+
 };
 const request: KodikStreamRequest = {
   videoId: 1, season: 1, episode: "1", dubbing: "Test", iframeUrl: "",

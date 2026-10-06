@@ -16,6 +16,7 @@ import { useAndroidCast, type CastProgress } from "./useAndroidCast";
 import { CastIcon, CastRemotePanel } from "./CastRemotePanel";
 import {
   fetchKodikStream,
+  UnavailableKodikSourceError,
   hlsLevelForQuality,
   isSameEpisodeDubbingSwitch,
   kodikStreamEpisodeKey,
@@ -56,6 +57,7 @@ type AnimeSoulPlayerProps = {
   onEnded?: (duration: number) => void;
   onStreamInfo?: (info: KodikStreamInfo) => void;
   onFallback?: () => void;
+  onSourceUnavailable?: (request: KodikStreamRequest) => void;
 };
 
 type AndroidPlaybackBridge = {
@@ -121,6 +123,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
   onEnded,
   onStreamInfo,
   onFallback,
+  onSourceUnavailable,
 }, forwardedRef) {
   const [subtitleVersion, setSubtitleVersion] = useState<{ base: string; request: KodikStreamRequest; value: string } | null>(null);
   const baseKey = kodikStreamRequestKey(baseRequest);
@@ -664,7 +667,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     // Keep the old media mounted until resolution succeeds, allowing recovery on failure.
     setLoading(true);
     setError("");
-    void fetchKodikStream(request, controller.signal).then(info => {
+    void fetchKodikStream(request, controller.signal, streamReloadToken > 0).then(info => {
       if (controller.signal.aborted || requestToken !== streamRequestToken.current) return;
       const storedQuality = Number(localStorage.getItem("animesoul:stream-quality") || 0);
       const nextQuality = info.sources.some(source => source.quality === storedQuality)
@@ -687,6 +690,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
     }).catch(reason => {
       if (controller.signal.aborted || requestToken !== streamRequestToken.current) return;
       setLoading(false);
+      if (reason instanceof UnavailableKodikSourceError && !activeSubtitleVersion) onSourceUnavailable?.(request);
       if (previousStream && sameEpisode) {
         setStream(previousStream);
         resolvedStreamRequestKey.current = previousResolvedKey;
@@ -856,7 +860,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
             networkRecoveries += 1;
             if (recoveryTimer) clearTimeout(recoveryTimer);
             recoveryTimer = setTimeout(() => {
-              if (!disposed && hlsRef.current === hls) hls.startLoad();
+              if (!disposed && hlsRef.current === hls) hls.startLoad(video.currentTime);
             }, networkRecoveries * 500);
           } else if (data.type === HlsRuntime.ErrorTypes.MEDIA_ERROR && mediaRecoveries < 2) {
             mediaRecoveries += 1;
@@ -1410,6 +1414,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         }}
         onWaiting={() => {
           if (castProgress.current.active) return;
+          if (activeMediaRequestKey.current !== requestKey) return;
           if (!localPlayback) {
             setLoading(true);
             return;
@@ -1418,6 +1423,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
           localWaitingTimer.current = setTimeout(() => setLoading(true), 450);
         }}
         onPlaying={() => {
+          if (activeMediaRequestKey.current !== requestKey) return;
           if (localWaitingTimer.current) clearTimeout(localWaitingTimer.current);
           localWaitingTimer.current = null;
           setLoading(false);
@@ -1436,10 +1442,12 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         }}
         onSeeking={() => { syncBurnedSubtitle(true); syncActiveAudio(true); }}
         onDurationChange={() => {
+          if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (video) setDuration(Number.isFinite(video.duration) ? video.duration : 0);
         }}
         onProgress={() => {
+          if (activeMediaRequestKey.current !== requestKey) return;
           const video = videoRef.current;
           if (!video?.buffered.length) { setBuffered(0); return; }
           setBuffered(video.buffered.end(video.buffered.length - 1));
@@ -1466,6 +1474,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         }}
         onError={() => {
           if (castProgress.current.active) return;
+          if (activeMediaRequestKey.current !== requestKey) return;
           if (hlsRef.current) return;
           if (rollbackVersion()) return;
           setLoading(false);
@@ -1536,7 +1545,7 @@ export const AnimeSoulPlayer = forwardRef<HTMLVideoElement, AnimeSoulPlayerProps
         seasonLabel={seasonLabel}
         title={title}
       />
-      {loading && !error && <div className={`animesoul-player-loader${stream && !localPlayback ? " compact" : ""}`} aria-label="Буферизация"><i /><span>{localPlayback ? "Читаем локальный файл…" : stream ? "Буферизация без сброса таймкода" : "Подготавливаем поток"}</span></div>}
+      {loading && !error && <div className={`animesoul-player-loader${stream && !localPlayback ? " compact" : ""}`} aria-label="Загрузка видео"><i /><span>{localPlayback ? "Читаем локальный файл…" : resolvedStreamRequestKey.current !== requestKey ? "Получаем ссылку на выбранную серию и озвучку от Kodik…" : "Буферизация видео…"}</span></div>}
       {(audioSwitching || audioSwitchError) && (
         <div className={`animesoul-player-audio-status${audioSwitchError ? " error" : ""}`} role="status">
           {audioSwitchError || "Подключаем озвучку без смены кадра…"}

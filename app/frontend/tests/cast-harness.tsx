@@ -46,7 +46,7 @@ function Harness() {
     episodes: ["1", "2", "3", "4"].map(value => ({ value, label: `Серия ${value}` })), episode, onEpisodeChange: setEpisode,
     sources: [{ value: "AnimeSoul", label: "AnimeSoul" }], source: "AnimeSoul", onSourceChange: noop, subtitles: [],
     autoSkipOpening: false, onAutoSkipOpeningChange: noop, autoSkipEnding: false, onAutoSkipEndingChange: noop,
-    autoNext: true, onAutoNextChange: noop, externalToolbarVisible: false, onExternalToolbarVisibleChange: noop,
+    autoNext: true, onAutoNextChange: noop,
   };
   return <main style={{ maxWidth: 900, margin: "24px auto", padding: 12 }}>
     <h1>Проверка Google Cast</h1>

@@ -670,6 +670,37 @@ class OfflineLibraryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             asyncio.run(scenario(Path(directory)))
 
+    def test_playback_cache_isolates_selection_expires_and_allows_refresh(self) -> None:
+        async def scenario(root: Path) -> None:
+            service = OfflineLibraryService(root)
+            credentials = mock.AsyncMock(return_value=("public", "private"))
+            service._kodik_private_credentials = credentials
+            resolve = mock.AsyncMock(side_effect=lambda *_args, **_kwargs: {
+                "sources": [{"quality": 720, "src": "https://cdn.example/video.m3u8", "type": "hls"}],
+            })
+            service.resolver.resolve_playback_api = resolve
+            episode = request_for()["episodes"][0]
+            first = await service.playback_source(episode)
+            first["sources"].clear()
+            self.assertTrue((await service.playback_source(episode))["sources"])
+            self.assertEqual(resolve.await_count, 1)
+            await service.playback_source({**episode, "episode": "2", "originEpisode": "2"})
+            await service.playback_source({**episode, "dubbing": "Other"})
+            self.assertEqual(resolve.await_count, 3)
+            await service.playback_source({**episode, "refresh": True})
+            self.assertEqual(resolve.await_count, 4)
+            credentials.return_value = ("new-public", "new-private")
+            await service.playback_source(episode)
+            self.assertEqual(resolve.await_count, 5)
+            service._playback_cache = {
+                key: (0, value[1]) for key, value in service._playback_cache.items()
+            }
+            await service.playback_source(episode)
+            self.assertEqual(resolve.await_count, 6)
+
+        with tempfile.TemporaryDirectory() as directory:
+            asyncio.run(scenario(Path(directory)))
+
     def test_cancelling_active_transfer_cleans_partial_file(self) -> None:
         async def scenario(root: Path) -> None:
             service = OfflineLibraryService(root / "data")

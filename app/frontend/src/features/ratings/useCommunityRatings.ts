@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isWebsiteRuntime } from "../../lib/accountRuntime";
 
 import { readLocal, writeLocal } from "../../lib/storage";
 import type { AnimeUserRatings, CommunityRatings, UserRatings } from "../../lib/types";
@@ -41,6 +42,7 @@ export function useCommunityRatings({
     animeId: number,
     rating: AnimeUserRatings,
   ) => {
+    if (isWebsiteRuntime()) return undefined;
     const aggregate = await publishCommunityRating(animeId, rating);
     setCommunityRatings(current => {
       const next = { ...current };
@@ -72,6 +74,7 @@ export function useCommunityRatings({
   }, [refresh, retryRevision]);
 
   useEffect(() => {
+    if (isWebsiteRuntime()) return;
     const published = readLocal<Record<number, number>>(PUBLISHED_RATINGS_KEY, {});
     const removals = readLocal<Record<number, AnimeUserRatings>>(RATING_REMOVALS_KEY, {});
     let removalsChanged = false;

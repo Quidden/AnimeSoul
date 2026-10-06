@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { lanRequest, type Device, type DeviceStatus } from "./api";
+import { isWebsiteRuntime } from "../../lib/accountRuntime";
 export function useLanPeers() {
   const [peers, setPeers] = useState<Device[]>([]);
   useEffect(() => {
+    if (isWebsiteRuntime()) return;
     const controller = new AbortController();
     let busy = false;
     const refresh = async () => {

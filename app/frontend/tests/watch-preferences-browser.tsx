@@ -48,8 +48,12 @@ window.fetch = async input => {
 function expect(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
+function findSelect(label: string) {
+  return document.querySelector<HTMLSelectElement>(`#fixture select[aria-label="${label}"]`)
+    ?? [...document.querySelectorAll("#fixture label")].find(element => element.querySelector("span")?.textContent === label)?.querySelector("select");
+}
 function select(label: string) {
-  const element = document.querySelector<HTMLSelectElement>(`#fixture select[aria-label="${label}"]`);
+  const element = findSelect(label);
   expect(element, `Missing select: ${label}`);
   return element;
 }
@@ -89,7 +93,13 @@ async function mount(id: number, newEpisodeRequested = false, titlePlayer = "Ani
 }
 async function grantAccess() {
   await act(async () => { accessReady = true; releaseAccess(); });
-  await until(() => Boolean(document.querySelector('select[aria-label="Источник"] option[value="AnimeSoul"]')), "Access did not become ready");
+  // AnimeSoul owns its controls after access becomes available. Its source
+  // selector is inside settings, while Kodik uses the external toolbar.
+  await until(() => Boolean(document.querySelector('.animesoul-player') || findSelect("Источник")?.querySelector('option[value="AnimeSoul"]')), "Player access did not become ready");
+  if (document.querySelector('.animesoul-player')) {
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Настройки плеера"]')?.click());
+  }
+  await until(() => Boolean(findSelect("Источник")?.querySelector('option[value="AnimeSoul"]')), "Access did not become ready");
 }
 const prefs = () => JSON.parse(localStorage.getItem(K.playerPrefs)!) as PlayerPrefs;
 

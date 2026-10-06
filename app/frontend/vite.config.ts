@@ -27,7 +27,7 @@ export default defineConfig(() => {
       chunkSizeWarningLimit: 580,
       // The local debug journal resolves production stack frames back to the
       // original TS/TSX function, file and line. Maps remain on localhost.
-      sourcemap: true,
+      sourcemap: process.env.VITE_ANIMESOUL_WEBSITE !== "1",
       rollupOptions: {
         output: {
           // Keep the framework cacheable across AnimeSoul releases and avoid

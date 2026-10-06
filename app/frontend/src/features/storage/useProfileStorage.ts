@@ -38,6 +38,7 @@ import {
 } from "./profileDocument";
 import {useProfileAutosave} from "./useProfileAutosave";
 import {useLanSaveSync} from "../devices/useLanSaveSync";
+import { currentAccountId, isWebsiteRuntime, observeSaveRevision, scopedStorageKey } from "../../lib/accountRuntime";
 
 type ProfileStorageOptions = {
     getCatalog: () => Anime[];
@@ -112,7 +113,7 @@ export function useProfileStorage({
         const loadedToolbar = read<ToolbarPosition>(K.toolbar, "bottom");
         const loadedHistoryClearedAt = read<number>(K.historyClearedAt, 0);
         const loadedHistoryEnabled = read<boolean>(K.historyEnabled, true);
-        const active = localStorage.getItem(K.activeProfile) ?? "default";
+        const active = localStorage.getItem(scopedStorageKey(K.activeProfile)) ?? "default";
         let loadedProfiles = read<ConfigProfile[]>(K.profiles, []);
 
         if (
@@ -157,6 +158,13 @@ export function useProfileStorage({
     }, []);
 
     useEffect(() => {
+        if (isWebsiteRuntime() && !currentAccountId()) {
+            // Guests browse without account API calls. Their browser cache is
+            // isolated and is never imported into a newly signed-in account.
+            setStorageReady(true);
+            setSaveStatus({ state: "saved", at: Date.now() });
+            return;
+        }
         let cancelled = false;
         let retryTimer: number | undefined;
 
@@ -170,6 +178,7 @@ export function useProfileStorage({
                         throw new Error("Storage server returned an invalid document");
                     }
                     const resolved = resolveActiveProfileDocument(payload);
+                    observeSaveRevision(payload.serverRevision);
                     if (!cancelled) {
                         applyStorageProfileRef.current(
                             resolved.document,
@@ -179,6 +188,7 @@ export function useProfileStorage({
                         );
                     }
                 } else if (response.status === 404) {
+                    if (isWebsiteRuntime()) throw new Error("Account save unavailable");
                     const document = createDocumentFromBrowserBackup();
                     storageEnvelopeRef.current = document;
                     const saved = await saveStorageDocument(document);
@@ -311,7 +321,7 @@ export function useProfileStorage({
             ...profile,
             snapshot: migrateSnapshot(profile.snapshot, profile.name),
         }));
-        const active = localStorage.getItem(K.activeProfile) ?? "default";
+        const active = localStorage.getItem(scopedStorageKey(K.activeProfile)) ?? "default";
 
         return migrateDocument({
             activeProfile: active,
@@ -439,7 +449,7 @@ export function useProfileStorage({
         setProfiles(document.profiles);
         setActiveProfile(profile.id);
         write(K.profiles, document.profiles);
-        localStorage.setItem(K.activeProfile, profile.id);
+        localStorage.setItem(scopedStorageKey(K.activeProfile), profile.id);
     }
     applyStorageProfileRef.current = applyStorageProfile;
 
@@ -449,6 +459,7 @@ export function useProfileStorage({
             if (!response.ok) return;
             const payload: unknown = await response.json();
             if (!isStorageDocument(payload)) throw new Error("Invalid storage document");
+            observeSaveRevision(payload.serverRevision);
             const resolved = resolveActiveProfileDocument(payload);
             applyStorageProfile(
                 resolved.document,
@@ -509,7 +520,7 @@ export function useProfileStorage({
         );
         const document = makeDocument(nextProfiles, id);
         write(K.profiles, nextProfiles);
-        localStorage.setItem(K.activeProfile, id);
+        localStorage.setItem(scopedStorageKey(K.activeProfile), id);
         applySnapshot(migratedTarget.snapshot, true);
         await saveStorageDocument(document);
         location.reload();
@@ -559,7 +570,7 @@ export function useProfileStorage({
             await saveStorageDocument(makeDocument(next, nextActive));
 
             if (shouldSwitch) {
-                localStorage.setItem(K.activeProfile, profile.id);
+                localStorage.setItem(scopedStorageKey(K.activeProfile), profile.id);
                 applySnapshot(profile.snapshot, true);
                 location.reload();
             }

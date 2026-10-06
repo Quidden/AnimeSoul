@@ -30,7 +30,7 @@ export function fetchAnimeMetadata(id: number): Promise<AnimeMetadata> {
   if (!Number.isInteger(id) || id <= 0) return Promise.resolve({});
   const cached = metadataCache.get(id);
   if (cached && cached.expires > Date.now()) return cached.request;
-  const request = requestJson<{ metadata: AnimeMetadata }>(`/api/yummy?mode=shikimori&id=${id}`)
+  const request = requestJson<{ metadata: AnimeMetadata }>(`/api/yummy?mode=shikimori&id=${id}`, { signal: AbortSignal.timeout(15_000) })
     .then(({ metadata }) => metadata)
     .catch(error => { metadataCache.delete(id); throw error; });
   if (metadataCache.size >= 256) metadataCache.delete(metadataCache.keys().next().value!);

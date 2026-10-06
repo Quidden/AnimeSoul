@@ -4,6 +4,7 @@ import {
   backfillFieldRevisions,
   isStorageDocumentShape,
 } from "./storageSafety";
+import { accountFetch, accountSaveRevision, currentAccountId, hasSaveConflict, isWebsiteRuntime, markSaveConflict, observeSaveRevision, scopedStorageKey } from "./accountRuntime";
 
 export { SYNCED_SNAPSHOT_FIELDS } from "./storageSafety";
 
@@ -22,7 +23,7 @@ export function isStorageDocument(value: unknown): value is StorageDocument {
 export function readLocal<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
-    return JSON.parse(localStorage.getItem(key) ?? "") as T;
+    return JSON.parse(localStorage.getItem(scopedStorageKey(key)) ?? "") as T;
   } catch {
     return fallback;
   }
@@ -31,7 +32,7 @@ export function readLocal<T>(key: string, fallback: T): T {
 export function writeLocal<T>(key: string, value: T): boolean {
   if (typeof window === "undefined") return false;
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(scopedStorageKey(key), JSON.stringify(value));
     return true;
   } catch (error) {
     console.warn(`Не удалось сохранить браузерную копию «${key}»`, error);
@@ -225,11 +226,34 @@ export function migrateDocument(input: Partial<StorageDocument> | null | undefin
 // proxies this same-origin endpoint, so packaged and development builds use
 // exactly the same storage contract.
 export const STORAGE_URL = "/api/storage";
+let accountSaveQueue: Promise<unknown> = Promise.resolve();
 
-export function saveStorageDocument(
+export async function saveStorageDocument(
   document: StorageDocument,
   signal?: AbortSignal,
 ) {
+  if (isWebsiteRuntime()) {
+    const capturedAccount = currentAccountId();
+    if (!capturedAccount) return Response.json({ saved: true, browserOnly: true });
+    const save = accountSaveQueue.catch(() => undefined).then(async () => {
+      if (capturedAccount !== currentAccountId()) return new Response(null, { status: 409 });
+      if (signal?.aborted) throw new DOMException("Save cancelled", "AbortError");
+      if (hasSaveConflict()) return new Response(null, { status: 409 });
+      // Once submitted, finish reading the revision even if the UI changes.
+      // Aborting HTTP cannot undo a transaction already committed by the server.
+      const response = await accountFetch(STORAGE_URL, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...document, serverRevision: accountSaveRevision() }),
+      });
+      if (capturedAccount === currentAccountId()) {
+        if (response.status === 409) markSaveConflict();
+        if (response.ok) observeSaveRevision((await response.clone().json()).serverRevision);
+      }
+      return response;
+    });
+    accountSaveQueue = save;
+    return save;
+  }
   const mode = readLocal("animesoul:gdrive-auto-sync-mode", "instant");
   const initialChoiceDone = readLocal("animesoul:gdrive-initial-choice-done", false);
   const hasCloudFile = readLocal("animesoul:gdrive-has-cloud-file", false);

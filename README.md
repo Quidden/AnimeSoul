@@ -6,7 +6,7 @@
 
 AnimeSoul is a local application for discovering anime, watching episodes and managing a personal library. It runs a React + TypeScript interface with a Python/FastAPI backend in a browser, a Windows desktop window, or a standalone Android app.
 
-[Download releases](https://github.com/Quidden/AnimeSoul/releases) · [Getting started](app/README.md) · [Technical documentation](app/docs/README.md) · [HTTP API](app/docs/API_REFERENCE.md)
+[Download releases](https://github.com/Quidden/AnimeSoul/releases) · [Getting started](docs/DEVELOPMENT.md) · [Technical documentation](docs/README.md) · [HTTP API](docs/api/API_REFERENCE.md)
 
 ## At a glance
 
@@ -16,6 +16,7 @@ AnimeSoul is a local application for discovering anime, watching episodes and ma
 | Clients | Windows browser / PyWebView; Android WebView + embedded Python |
 | Interface | React 19, TypeScript 5.9, Vite 8, global CSS, hls.js |
 | Backend | FastAPI, Uvicorn, httpx; JSON persistence and SQLite caches/ratings |
+| Website mode | Accounts, sessions, roles and profiles with PostgreSQL; [deployment guide](docs/deployment/WEBSITE.md) |
 | Integrations | YummyAnime, Kodik, Jikan episode dates, Google Drive, experimental Android Google Cast |
 | Documentation | English (primary) and Russian; the current application UI is predominantly Russian |
 
@@ -27,7 +28,7 @@ AnimeSoul is a local application for discovering anime, watching episodes and ma
 - **Track releases:** follow new episodes across a franchise and selected dubs, with source-aware episode identity and release dates when available.
 - **Keep episodes offline:** queue downloads, select seasons/ranges, inspect storage and play downloaded media. Android publishes completed MP4 files to MediaStore.
 - **Back up and sync:** export/import profiles or synchronize with Google Drive using explicit merge and restore rules.
-- **Local devices:** explicit pairing, automatic save sync alongside Google Drive, downloaded MP4 transfer, and remote playback with permissions and priorities. [Setup and limitations](app/docs/LAN_DEVICES.md).
+- **Local devices:** explicit pairing, automatic save sync alongside Google Drive, downloaded MP4 transfer, and remote playback with permissions and priorities. [Setup and limitations](docs/guides/LAN_DEVICES.md).
 - **Rate:** personal anime/season/episode scores plus anonymous aggregates on the connected AnimeSoul server.
 - **Watch together:** desktop/browser Watch Party rooms with host/shared control. Android intentionally omits Watch Party.
 - **Cast on Android:** experimental Google Cast for direct online HTTPS HLS/MP4 streams; the TV receives the stream URL from the phone.
@@ -40,18 +41,18 @@ AnimeSoul is a local application for discovering anime, watching episodes and ma
 
 ### Playback settings and appearance
 
-![Playback and resume settings](app/docs/screenshots/desktop-settings.png)
+![Playback and resume settings](docs/screenshots/desktop-settings.png)
 
-![Theme and interface size settings](app/docs/screenshots/desktop-appearance.png)
+![Theme and interface size settings](docs/screenshots/desktop-appearance.png)
 
 ### Android
 
 <p align="center">
-  <img src="app/docs/screenshots/android-home.png" alt="Android home and library" width="320">
-  <img src="app/docs/screenshots/android-mini-player.png" alt="Android floating mini-player" width="320">
+  <img src="docs/screenshots/android-home.png" alt="Android home and library" width="320">
+  <img src="docs/screenshots/android-mini-player.png" alt="Android floating mini-player" width="320">
 </p>
 
-[Screenshot gallery and capture notes](app/docs/SCREENSHOTS.md). Images show the Russian UI; documentation language does not change the application language.
+[Screenshot gallery and capture notes](docs/screenshots/SCREENSHOTS.md). Images show the Russian UI; documentation language does not change the application language.
 
 ## Get started
 
@@ -59,7 +60,7 @@ For packaged Windows and Android builds, use [GitHub Releases](https://github.co
 
 Source requirements: **Python 3.11+ and Node.js 22+**. CI uses Python 3.12. Configure your YummyAnime **Public token** for its catalogue. Kodik direct playback and downloads require your Kodik Public/Private key pair. YummyAnime's private token is not used. Google Drive is optional and requires your own OAuth client configuration.
 
-See [installation, development and checks](app/README.md), [Windows/Android build details](app/docs/PLATFORMS.md), and [Android update signing](app/mobile/UPDATE_SIGNING.md).
+See [installation, development and checks](docs/DEVELOPMENT.md), [Windows/Android build details](docs/platforms/PLATFORMS.md), and [Android update signing](docs/platforms/ANDROID_UPDATE_SIGNING.md).
 
 ## How it fits together
 
@@ -79,24 +80,28 @@ The backend owns catalogue requests, credentials, local files and sync. Video st
 
 ## Documentation
 
+[The website, separate Android client, SEO, security and payment migration plan](docs/architecture/WEB_STACK_PLAN.md) describes the next development phase; the running implementation still uses the current stack.
+
 | Area | English | Русский |
 | --- | --- | --- |
-| Documentation index | [Index](app/docs/README.md) | [Оглавление](app/docs/README.ru.md) |
-| Architecture and boundaries | [Architecture](app/ARCHITECTURE.md) | [Архитектура](app/ARCHITECTURE.ru.md) |
-| UI components, state and events | [Frontend](app/docs/UI.md) | [Интерфейс](app/docs/UI.ru.md) |
-| Services, lifecycle and persistence | [Backend](app/docs/BACKEND.md) | [Бэкенд](app/docs/BACKEND.ru.md) |
-| HTTP, WebSocket, requests and errors | [API](app/docs/API_REFERENCE.md) | [API](app/docs/API_REFERENCE.ru.md) |
-| Function calls and component relationships | [Flows](app/docs/ENTRY_POINTS_AND_FLOWS.md) | [Цепочки вызовов](app/docs/ENTRY_POINTS_AND_FLOWS.ru.md) |
-| Data and sync | [Data](app/docs/DATA_MODEL.md) · [Drive](app/docs/GDRIVE_SYNC.md) | [Данные](app/docs/DATA_MODEL.ru.md) · [Drive](app/docs/GDRIVE_SYNC.ru.md) |
-| Code map, styling and platform builds | [Map](app/docs/PROJECT_MAP.md) · [CSS](app/docs/STYLES.md) · [Platforms](app/docs/PLATFORMS.md) | [Карта](app/docs/PROJECT_MAP.ru.md) · [CSS](app/docs/STYLES.ru.md) · [Платформы](app/docs/PLATFORMS.ru.md) |
+| Documentation index | [Index](docs/README.md) | [Оглавление](docs/README.ru.md) |
+| Architecture and boundaries | [Architecture](docs/architecture/ARCHITECTURE.md) | [Архитектура](docs/architecture/ARCHITECTURE.ru.md) |
+| UI components, state and events | [Frontend](docs/frontend/UI.md) | [Интерфейс](docs/frontend/UI.ru.md) |
+| Services, lifecycle and persistence | [Backend](docs/architecture/BACKEND.md) | [Бэкенд](docs/architecture/BACKEND.ru.md) |
+| HTTP, WebSocket, requests and errors | [API](docs/api/API_REFERENCE.md) | [API](docs/api/API_REFERENCE.ru.md) |
+| Function calls and component relationships | [Flows](docs/architecture/ENTRY_POINTS_AND_FLOWS.md) | [Цепочки вызовов](docs/architecture/ENTRY_POINTS_AND_FLOWS.ru.md) |
+| Data and sync | [Data](docs/architecture/DATA_MODEL.md) · [Drive](docs/guides/GDRIVE_SYNC.md) | [Данные](docs/architecture/DATA_MODEL.ru.md) · [Drive](docs/guides/GDRIVE_SYNC.ru.md) |
+| Code map, styling and platform builds | [Map](docs/architecture/PROJECT_MAP.md) · [CSS](docs/frontend/STYLES.md) · [Platforms](docs/platforms/PLATFORMS.md) | [Карта](docs/architecture/PROJECT_MAP.ru.md) · [CSS](docs/frontend/STYLES.ru.md) · [Платформы](docs/platforms/PLATFORMS.ru.md) |
 
 ## Repository layout
 
 | Directory | Role |
 | --- | --- |
-| [`app/`](app/) | Maintained Python/FastAPI + React implementation, Windows packaging and Android client |
-| [`legacy-old-stack/`](legacy-old-stack/) | Archived Vinext/Electron implementation; migration/reference only |
-| [`.github/workflows/`](.github/workflows/) | Windows CI: Ruff, backend unittest and frontend checks |
+| [`app/`](app) | Maintained Python/FastAPI + React implementation, Windows packaging and Android client |
+| [`archive/legacy-old-stack/`](archive/legacy-old-stack) | Archived Vinext/Electron implementation; migration/reference only |
+| [`docs/`](docs/README.md) | Guides, architecture, API, platform notes, release history and design references |
+| `artifacts/` | Git-ignored release packages, intermediate builds and UI captures |
+| [`.github/workflows/`](.github/workflows) | Windows CI: Ruff, backend unittest and frontend checks |
 
 New product work belongs in `app/`. Legacy documentation describes the archived implementation. Release notes record historical versions and are not the current API contract.
 
@@ -110,6 +115,6 @@ Use Settings → Profiles to export/import a single profile. To copy the complet
 .\.venv\Scripts\python.exe -m tools.transfer_saves to-legacy
 ```
 
-The tool validates the document, backs up an existing destination and replaces it atomically. Credentials and downloaded videos are separate from portable profiles. [Save compatibility](app/SAVE_COMPATIBILITY.md) explains custom/installed data paths and recovery.
+The tool validates the document, backs up an existing destination and replaces it atomically. Credentials and downloaded videos are separate from portable profiles. [Save compatibility](docs/guides/SAVE_COMPATIBILITY.md) explains custom/installed data paths and recovery.
 
 Thanks to the YummyAnime developers for the API that made AnimeSoul possible. Media availability, dubs, subtitles, preview frames and playback quality depend on external providers.

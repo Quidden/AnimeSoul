@@ -18,7 +18,7 @@ from typing import Any
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MAIN_SAVE = REPOSITORY_ROOT / "app" / "data" / "animesoul-storage.json"
 LEGACY_SAVE = (
-    REPOSITORY_ROOT / "legacy-old-stack" / "data" / "animesoul-storage.json"
+    REPOSITORY_ROOT / "archive" / "legacy-old-stack" / "data" / "animesoul-storage.json"
 )
 
 

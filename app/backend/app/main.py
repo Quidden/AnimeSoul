@@ -31,16 +31,22 @@ from .version import APP_VERSION
 from .services.discord_presence import presence as discord_presence
 from .api.discord_presence import router as discord_router
 
+WEBSITE_MODE = os.getenv("ANIMESOUL_RUNTIME", "local") == "website"
+
 
 @asynccontextmanager
 async def lifespan(_application: FastAPI):
     """Keep upstream pools alive for the process and close them predictably."""
 
-    try:
-        await lan.start()
-    except OSError:
-        # A busy LAN port must not prevent local playback and save access.
-        pass
+    if WEBSITE_MODE:
+        from .website.runtime import start_website
+        await asyncio.to_thread(start_website, _application)
+    else:
+        try:
+            await lan.start()
+        except OSError:
+            # A busy LAN port must not prevent local playback and save access.
+            pass
     yield
     await asyncio.to_thread(discord_presence.close)
     await lan.stop()
@@ -50,12 +56,17 @@ async def lifespan(_application: FastAPI):
         episode_dates_gateway.close(),
         return_exceptions=True,
     )
+    if WEBSITE_MODE:
+        _application.state.website_database.engine.dispose()
 
 app = FastAPI(
     title="AnimeSoul API",
     version=APP_VERSION,
     description="FastAPI backend for the AnimeSoul desktop and web client.",
     lifespan=lifespan,
+    docs_url=None if WEBSITE_MODE else "/docs",
+    redoc_url=None if WEBSITE_MODE else "/redoc",
+    openapi_url=None if WEBSITE_MODE else "/openapi.json",
 )
 
 
@@ -76,7 +87,7 @@ async def response_performance_headers(request, call_next):
 # Enable CORS for local Vite dev server (port 5173). Production uses same-origin.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=[] if WEBSITE_MODE else ["http://127.0.0.1:5173", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,13 +103,22 @@ app.include_router(yummy_router)
 app.include_router(kodik_router)
 app.include_router(downloads_router)
 app.include_router(episode_dates_router)
-app.include_router(storage_router)
-app.include_router(discord_router)
-app.include_router(lan_router)
+if WEBSITE_MODE:
+    from .website.runtime import install_website
+    install_website(app)
+else:
+    app.include_router(storage_router)
+    app.include_router(discord_router)
+    app.include_router(lan_router)
 # The standalone Android product intentionally has no Watch Party surface.
-if os.getenv("ANIMESOUL_MOBILE", "").casefold() != "android":
+if not WEBSITE_MODE and os.getenv("ANIMESOUL_MOBILE", "").casefold() != "android":
     app.include_router(party_router)
-app.include_router(gdrive_router)
+if not WEBSITE_MODE:
+    app.include_router(gdrive_router)
+
+    @app.get("/api/auth/config", tags=["System"])
+    async def local_account_configuration():
+        return {"website": False, "google": False, "email": False}
 app.include_router(community_ratings_router)
 
 
@@ -126,7 +146,13 @@ if settings.frontend_dist.exists():
     @app.get("/{path:path}", include_in_schema=False)
     async def react_application(path: str) -> FileResponse:
         """Serve client-side single page application routes."""
-        candidate = settings.frontend_dist / path
+        candidate = (settings.frontend_dist / path).resolve()
+        if not candidate.is_relative_to(settings.frontend_dist.resolve()):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Not found")
+        if path.startswith("api/"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Unknown API route")
         if candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(settings.frontend_dist / "index.html")

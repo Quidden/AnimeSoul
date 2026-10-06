@@ -16,6 +16,8 @@ import { IS_ANDROID_APP } from "../lib/platform";
 import { useHeaderCloudSync } from "../features/header/useHeaderCloudSync";
 import { useMobileLayout } from "../hooks/useMobileLayout";
 import { useModalAccessibility } from "../lib/modalAccessibility";
+import { AccountButton } from "../features/account/AccountButton";
+import { useAccount } from "../features/account/context";
 
 type HeaderProps = {
   query: string;
@@ -120,6 +122,7 @@ export function Header({
   onStorageReload,
   activeView,
 }: HeaderProps) {
+  const { config: accountConfig, user: accountUser } = useAccount();
   const mobile = useMobileLayout();
   const [mobilePanel, setMobilePanel] = useState<"search" | "menu" | "watch" | null>(null);
   const mobilePanelRef = useRef<HTMLElement>(null);
@@ -238,9 +241,9 @@ export function Header({
     const diskListener = (next: SaveStatus) => {
       setDiskStatus(next);
       recordDebugEvent(next.state === "error" ? "error" : next.state === "saved" ? "success" : "info", "Сохранение", next.state, next.state === "error" ? "Локальное сохранение завершилось с ошибкой" : `Статус локального сохранения: ${next.state}`, undefined, { functionName: "diskListener", file: "src/components/Header.tsx" });
-      if (next.state === "saving") showStatusNotice({ tone: "loading", text: "Сохраняем на ПК…" });
-      if (next.state === "saved") showStatusNotice({ tone: "success", text: "Сохранено на ПК" });
-      if (next.state === "error") showStatusNotice({ tone: "error", text: "Не удалось сохранить на ПК" });
+      if (next.state === "saving") showStatusNotice({ tone: "loading", text: accountConfig.website ? "Сохраняем в аккаунте…" : "Сохраняем на ПК…" });
+      if (next.state === "saved") showStatusNotice({ tone: "success", text: accountConfig.website ? "Сохранено в аккаунте" : "Сохранено на ПК" });
+      if (next.state === "error") showStatusNotice({ tone: "error", text: accountConfig.website ? "Ошибка сейва. Перезагрузите страницу." : "Не удалось сохранить на ПК" });
     };
     const apiListener = (next: ApiStatus) => {
       setApiStatus(current => ({ ...current, ...next }));
@@ -268,7 +271,7 @@ export function Header({
       stopPartyPing();
       if (statusNoticeTimerRef.current) window.clearTimeout(statusNoticeTimerRef.current);
     };
-  }, []);
+  }, [accountConfig.website]);
   useEffect(() => {
     let cancelled = false;
     const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection;
@@ -293,6 +296,7 @@ export function Header({
       }
     };
     const measureKodik = async () => {
+      if (accountConfig.website && !(accountUser?.emailVerified && accountUser.permissions.includes("player.use"))) return;
       const startedAt = performance.now();
       try {
         const response = await fetch("/api/kodik?mode=ping&silent=1", { cache: "no-store" });
@@ -320,7 +324,7 @@ export function Header({
       window.clearInterval(timer);
       connection?.removeEventListener?.("change", updateDownlink);
     };
-  }, []);
+  }, [accountConfig.website, accountUser]);
   const {
     gdriveStatus,
     cloudSyncing,
@@ -396,7 +400,7 @@ export function Header({
       >
         <NavIcon name="stats" /><span className="nav-label" data-mobile-label="Статистика" aria-hidden="true">Статистика</span>
       </button>
-      {sectionNavigation.map(item => <button
+      {sectionNavigation.filter(item => !accountConfig.website || item.view !== "downloads").map(item => <button
         key={item.view}
         type="button"
         className={`desktop-section-nav${activeView === item.view ? " is-active" : ""}`}
@@ -457,12 +461,13 @@ export function Header({
       })}</div>}
     </div>}
     <div className="header-actions">
+      <AccountButton />
       <div className="header-statuses">
         {partyPing.state !== "idle" && <div className={`save-indicator party-${partyPing.state}`} title={partyPing.state === "connected" ? `Задержка обмена с комнатой ${partyPing.roomId ?? ""}` : "Нет связи с сервером совместного просмотра"}><i />{partyPing.state === "connected" ? `Комната · ${partyPing.ms ?? "—"} мс` : "Комната недоступна"}</div>}
         <div className={`save-indicator ${apiStatus.state}`} title={`${apiText}. Пинг измеряется лёгким запросом раз в 30 секунд. Скорость — пассивная оценка браузера без отдельного speed-test.`}><i />Yummy · {apiDiagnostics}</div>
         <div className={`save-indicator ${kodikApiStatus.state}`} title={`${kodikApiText}. Пинг измеряется отдельным лёгким запросом раз в 30 секунд.`}><i />Kodik · {kodikApiDiagnostics}</div>
-        <div className={`save-indicator ${diskStatus.state}`} title={diskStatus.state === "error" ? "Запусти AnimeSoul через батник, чтобы сохранять данные на диск" : "Автоматическое сохранение активного профиля на ПК"}><i />{statusText}</div>
-        <button
+        <div className={`save-indicator ${diskStatus.state}`} title={accountConfig.website ? "Сохранение в вашем аккаунте. При конфликте вкладок перезагрузите страницу." : diskStatus.state === "error" ? "Запусти AnimeSoul через батник, чтобы сохранять данные на диск" : "Автоматическое сохранение активного профиля на ПК"}><i />{accountConfig.website ? diskStatus.state === "saved" ? "В аккаунте" : diskStatus.state === "error" ? "Ошибка сейва · обновите страницу" : "Сохранение…" : statusText}</div>
+        {!accountConfig.website && <button
           type="button"
           className={`save-indicator ${cloudIndicatorState}`}
           onClick={handleGDriveClick}
@@ -482,7 +487,7 @@ export function Header({
         >
           <i />
           {cloudLabel}
-        </button>
+        </button>}
       </div>
       <div className="header-menu" ref={navigationRef}
         onBlur={event => {
@@ -553,7 +558,8 @@ export function Header({
             {settingsSuggestions.map(setting => <button type="button" key={setting.id} onClick={() => { setMobilePanel(null); openSettingsSuggestion(setting); }}><NavIcon name="settings" /><span>{setting.title}<small>Настройка</small></span></button>)}
           </div>
         </> : <div className="mobile-menu-grid">
-          {sectionNavigation.filter(item => item.view !== "home").map(item => <button type="button" key={item.view} onClick={() => { setMobilePanel(null); navigateFromBottomBar(item.navigate); }}><NavIcon name={item.icon} /><span>{item.label}</span></button>)}
+          <AccountButton onNavigate={() => setMobilePanel(null)} />
+          {sectionNavigation.filter(item => item.view !== "home" && (!accountConfig.website || item.view !== "downloads")).map(item => <button type="button" key={item.view} onClick={() => { setMobilePanel(null); navigateFromBottomBar(item.navigate); }}><NavIcon name={item.icon} /><span>{item.label}</span></button>)}
           {settingsAvailable && <button type="button" onClick={() => { setMobilePanel(null); emitAppEvent("open-settings", { tab: "appearance", overview: true }); }}><NavIcon name="settings" /><span>Настройки</span></button>}
         </div>}
       </section>

@@ -13,7 +13,7 @@ from urllib.parse import unquote
 
 APP = Path(__file__).resolve().parents[1]
 ROOT = APP.parent
-DOCS = APP / "docs"
+DOCS = ROOT / "docs"
 METHODS = {"get", "put", "post", "delete", "patch", "websocket"}
 
 
@@ -32,7 +32,7 @@ def api_inventory(russian: bool = False) -> str:
             if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
                 if isinstance(node.value.func, ast.Name) and node.value.func.id == "APIRouter":
                     prefix = next((ast.literal_eval(k.value) for k in node.value.keywords if k.arg == "prefix"), "")
-        source = "../" + path.relative_to(APP).as_posix()
+        source = "../../" + path.relative_to(ROOT).as_posix()
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 for decorator in node.decorator_list:
@@ -82,7 +82,7 @@ def api_inventory(russian: bool = False) -> str:
 
 def guides() -> list[Path]:
     return [ROOT / "README.md", ROOT / "README.ru.md", *sorted(APP.glob("*.md")),
-            *sorted(DOCS.glob("*.md")), *sorted((APP / "mobile").glob("*.md"))]
+            *sorted(DOCS.rglob("*.md")), *sorted((APP / "mobile").glob("*.md"))]
 
 
 def check() -> list[str]:
@@ -105,7 +105,7 @@ def check() -> list[str]:
             if target and not (path.parent / target).exists():
                 errors.append(f"Broken link in {path.relative_to(ROOT)}: {target}")
     for russian in (False, True):
-        path = DOCS / ("API_SCHEMA.ru.md" if russian else "API_SCHEMA.md")
+        path = DOCS / "api" / ("API_SCHEMA.ru.md" if russian else "API_SCHEMA.md")
         if not path.exists() or path.read_text(encoding="utf-8") != api_inventory(russian):
             errors.append(f"Stale API inventory: {path.relative_to(ROOT)}; run --write-api")
     return errors
@@ -117,7 +117,7 @@ def main() -> int:
     options = parser.parse_args()
     if options.write_api:
         for russian in (False, True):
-            path = DOCS / ("API_SCHEMA.ru.md" if russian else "API_SCHEMA.md")
+            path = DOCS / "api" / ("API_SCHEMA.ru.md" if russian else "API_SCHEMA.md")
             path.write_text(api_inventory(russian), encoding="utf-8")
     errors = check()
     for error in errors:

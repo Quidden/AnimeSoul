@@ -1,4 +1,5 @@
 import type { Anime, AnimeProgress, EpisodeState, Video } from "./types";
+import { fetchAnimeDetails } from "../features/catalog/api";
 
 const ENGLISH_KEYBOARD = "`qwertyuiop[]asdfghjkl;'zxcvbnm,.";
 const RUSSIAN_KEYBOARD = "ёйцукенгшщзхъфывапролджэячсмитьбю";
@@ -387,19 +388,15 @@ function waitForFamily(request: Promise<Anime[]>, signal?: AbortSignal) {
 
 async function loadFamily(anime: Anime, root: string) {
   try {
-    const response = await fetch(`/api/yummy?mode=details&ids=${anime.anime_id}`);
-    const payload = await response.json();
-    if (response.ok) {
-      const detail = (payload.anime?.[0] ?? anime) as Anime;
-      if (detail.viewing_order?.length) {
-        return [...new Map(detail.viewing_order.map((item) => [item.anime_id, item])).values()];
-      }
+    const detail = (await fetchAnimeDetails([anime.anime_id]))[0] ?? anime;
+    if (detail.viewing_order?.length) {
+      return [...new Map(detail.viewing_order.map((item) => [item.anime_id, item])).values()];
     }
   } catch {
     // The catalogue lookup below is the independent family reserve.
   }
   try {
-    const response = await fetch(`/api/yummy?mode=catalog&limit=48&q=${encodeURIComponent(root)}`);
+    const response = await fetch(`/api/yummy?mode=catalog&limit=48&q=${encodeURIComponent(root)}`, { signal: AbortSignal.timeout(15_000) });
     const payload = await response.json();
     if (response.ok) {
       const rootKey = franchiseKey(root);

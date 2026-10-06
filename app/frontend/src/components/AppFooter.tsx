@@ -3,9 +3,12 @@ import { APP_VERSION } from "../version";
 import { IS_ANDROID_APP } from "../lib/platform";
 import type { ApplicationView } from "../features/catalog/useCatalogController";
 import { emitAppEvent } from "../lib/events";
+import { useAccount } from "../features/account/context";
+import { navigateTo } from "../features/navigation/routes";
 
 /** Shared footer used by every top-level application view. */
 export function AppFooter({activeView, onNavigate}: {activeView?: ApplicationView; onNavigate?: (view: ApplicationView) => void}) {
+    const { config } = useAccount();
     const groups: {title: string; links: {label: string; path: string; view: ApplicationView}[]}[] = [
         {title: "Основное", links: [
             {label: "Главная", path: "/", view: "home"},
@@ -23,13 +26,14 @@ export function AppFooter({activeView, onNavigate}: {activeView?: ApplicationVie
             <nav className="footer-sitemap" aria-label="Карта сайта">
                 {groups.map(group => <div className="footer-sitemap-group" key={group.title}>
                     <h2>{group.title}</h2>
-                    {group.links.map(link => <a key={link.path} href={link.path} aria-current={activeView === link.view ? "page" : undefined}
+                    {group.links.filter(link => !config.website || link.view !== "downloads").map(link => <a key={link.path} href={link.path} aria-current={activeView === link.view ? "page" : undefined}
                         onClick={event => {
                             if (!onNavigate || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
                             event.preventDefault();
                             onNavigate(link.view);
                         }}>{link.label}</a>)}
                     {group.title === "Навигация и аккаунт" && <button type="button" onClick={() => emitAppEvent("open-settings", {tab: "watching"})}>Настройки</button>}
+                    {config.website && group.title === "Навигация и аккаунт" && <button type="button" onClick={() => navigateTo("/account")}>Мой профиль</button>}
                 </div>)}
                 <div className="footer-sitemap-group"><h2>Внешние ссылки</h2>
                     <a href="https://shikimori.one" target="_blank" rel="noopener noreferrer">Shikimori ↗</a>
@@ -41,7 +45,7 @@ export function AppFooter({activeView, onNavigate}: {activeView?: ApplicationVie
                 только благодаря им был создан AnimeSoul.
             </span>
             <span>
-                Прогресс и настройки сохраняются {IS_ANDROID_APP ? "на этом устройстве" : "на этом ПК"}
+                Прогресс и настройки сохраняются {config.website ? "в вашем аккаунте" : IS_ANDROID_APP ? "на этом устройстве" : "на этом ПК"}
             </span>
             <span className="app-version">Версия {APP_VERSION}</span>
             <span className="anime4k-credit">

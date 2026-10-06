@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import ipaddress
 import json
+import logging
 import time
 from typing import Any
 
@@ -31,6 +32,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeSoul/0.2"
 KODIK_VIDEO_LINKS_ENDPOINT = "https://kodikres.com/api/video-links"
 KODIK_SEARCH_ENDPOINT = "https://kodik-api.com/search"
 PUBLIC_IP_ENDPOINT = "https://api.ipify.org"
+logger = logging.getLogger(__name__)
 
 
 class KodikSourceResolver:
@@ -240,7 +242,9 @@ class KodikSourceResolver:
             raw_link = _private_player_link(embed_url)
         except OfflineLibraryError:
             raw_link = None
+        ip_started = time.perf_counter()
         ip = await self._current_public_ipv4()
+        logger.info("Kodik public IP lookup: %s ms", round((time.perf_counter() - ip_started) * 1000))
         deadline = (datetime.now(UTC) + timedelta(hours=6)).strftime("%Y%m%d%H")
         response: httpx.Response | None = None
         try:
@@ -252,6 +256,7 @@ class KodikSourceResolver:
                 # A serial/season embed is meant for an iframe and may be
                 # rejected by /api/video-links.  Kodik's documented catalogue
                 # endpoint can return the exact /seria link for this selection.
+                catalogue_started = time.perf_counter()
                 official_link = await self._official_episode_link(
                     client,
                     public_key,
@@ -264,6 +269,7 @@ class KodikSourceResolver:
                     source_title,
                     source_original_title,
                 )
+                logger.info("Kodik episode catalogue lookup: %s ms", round((time.perf_counter() - catalogue_started) * 1000))
                 candidate_links = _kodik_player_candidates(raw_link, official_link)
                 if not candidate_links:
                     raise OfflineLibraryError(
@@ -279,7 +285,9 @@ class KodikSourceResolver:
                         "auto_proxy": "true",
                         "skip_segments": "true",
                     }
+                    link_started = time.perf_counter()
                     response = await client.get(KODIK_VIDEO_LINKS_ENDPOINT, params=params)
+                    logger.info("Kodik direct link response: %s ms, HTTP %s", round((time.perf_counter() - link_started) * 1000), response.status_code)
                     if response.is_success:
                         break
                     # A second candidate is allowed only when it is another

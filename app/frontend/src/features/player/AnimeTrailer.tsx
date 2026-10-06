@@ -12,7 +12,11 @@ export function AnimeTrailer({ animeId, videos, seasons = [], details = {} }: {
   const groups = seasons.length ? seasons : [{ number: 1, label: "Этот сезон", entries: [{ anime_id: animeId, title: "" }] }];
   const descriptor = JSON.stringify(groups.map(group => ({
     key: group.entries.map(entry => entry.anime_id).join(":"),
-    entries: group.entries.map(entry => ({ ...entry, ...details[entry.anime_id] })),
+    entries: group.entries.map(entry => ({
+      anime_id: entry.anime_id,
+      title: entry.title,
+      remote_ids: { shikimori_id: details[entry.anime_id]?.remote_ids?.shikimori_id ?? entry.remote_ids?.shikimori_id },
+    })),
   })));
   const [loaded, setLoaded] = useState<{ descriptor: string; titles: Record<number, HeroTrailer[]> }>();
   const [selection, setSelection] = useState<{ group: string; url?: string }>();
@@ -20,19 +24,21 @@ export function AnimeTrailer({ animeId, videos, seasons = [], details = {} }: {
     let cancelled = false;
     const requested = JSON.parse(descriptor) as { entries: Anime[] }[];
     const entries = [...new Map(requested.flatMap(group => group.entries).map(entry => [entry.anime_id, entry])).values()];
+    const current = entries.find(entry => entry.anime_id === animeId);
+    const remaining = entries.filter(entry => entry !== current);
     const titles: Record<number, HeroTrailer[]> = {};
-    let cursor = 0;
-    const worker = async () => {
-      while (!cancelled && cursor < entries.length) {
-        const entry = entries[cursor++];
+    const load = async () => {
+      // Publish each result immediately; sibling trailers are supplementary
+      // requests and must not delay the current title or compete in a burst.
+      for (const entry of current ? [current, ...remaining] : remaining) {
+        if (cancelled) return;
         titles[entry.anime_id] = await fetchTitleTrailers(entry).catch(() => []);
+        if (!cancelled) setLoaded({ descriptor, titles: { ...titles } });
       }
     };
-    void Promise.all(Array.from({ length: Math.min(3, entries.length) }, worker)).then(() => {
-      if (!cancelled) setLoaded({ descriptor, titles });
-    });
+    void load();
     return () => { cancelled = true; };
-  }, [descriptor]);
+  }, [descriptor, animeId]);
   const titles = loaded?.descriptor === descriptor ? loaded.titles : {};
   const currentIndex = Math.max(0, groups.findIndex(group => group.entries.some(entry => entry.anime_id === animeId)));
   const options = groups.map((group, index) => ({

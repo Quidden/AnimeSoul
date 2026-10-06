@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { PlayerPrefs } from "../../lib/types";
 export type PlayerMenuOption = {
     value: string;
     label: string;
@@ -38,8 +39,9 @@ export type PlayerMenu = {
     onAutoSkipEndingChange: (value: boolean) => void;
     autoNext: boolean;
     onAutoNextChange: (value: boolean) => void;
-    externalToolbarVisible: boolean;
-    onExternalToolbarVisibleChange: (value: boolean) => void;
+    preferences?: PlayerPrefs;
+    mobile?: boolean;
+    onPreferencesChange?: (patch: Partial<PlayerPrefs>) => void;
 };
 
 type PlayerSettingsPanelProps = {
@@ -84,7 +86,7 @@ export function PlayerSettingsPanel({
                 <button type="button" aria-label="Закрыть настройки" onClick={onClose}>×</button>
             </header>
             <div className="animesoul-player-settings-content">
-                {upscaleSettings}
+                <h3>Серия и озвучка</h3>
                 <label>
                     <span>Озвучка</span>
                     <select value={menu.dubbing} onChange={event => menu.onDubbingChange(event.target.value)}>
@@ -132,6 +134,8 @@ export function PlayerSettingsPanel({
                     options={menu.sources}
                     onChange={menu.onSourceChange}
                 />
+                <h3>Изображение</h3>
+                {upscaleSettings}
                 <label className="animesoul-player-fit-control">
                     <span>Отображение видео</span>
                     <select
@@ -168,14 +172,33 @@ export function PlayerSettingsPanel({
                         onChange={menu.onAutoNextChange}
                     />
                 </div>
-                <label className="animesoul-player-toolbar-toggle">
-                    <input
-                        type="checkbox"
-                        checked={menu.externalToolbarVisible}
-                        onChange={event => menu.onExternalToolbarVisibleChange(event.target.checked)}
-                    />
-                    <span>Показывать внешнюю панель</span>
-                </label>
+                {menu.preferences && menu.onPreferencesChange && <>
+                    <h3>Просмотр и навигация</h3>
+                    {([
+                        ["autoPlayResume", "Автоматически продолжать просмотр"],
+                        ["autoScrollPlayer", "Переходить к плееру"],
+                        ...(!menu.mobile ? [["playerEpisodeCarousel", "Карусель серий"], ["episodeHoverPreview", "Предпросмотр при наведении"]] : []),
+                    ] as [keyof PlayerPrefs, string][]).map(([key, label]) => <PlayerSettingToggle
+                        key={key} label={label} checked={Boolean(menu.preferences?.[key])}
+                        onChange={value => menu.onPreferencesChange?.({ [key]: value })}
+                    />)}
+                    {!menu.mobile && <>
+                        <h3>Совместный просмотр</h3>
+                        <PlayerSettingToggle label="Включить совместный просмотр" checked={menu.preferences.watchPartyEnabled}
+                            onChange={watchPartyEnabled => menu.onPreferencesChange?.({ watchPartyEnabled })} />
+                        {menu.preferences.watchPartyEnabled && <>
+                            <MenuSelect label="Мой режим" value={menu.preferences.watchPartyMode}
+                                options={[{value: "follow", label: "Синхронизация с комнатой"}, {value: "free", label: "Свободный просмотр"}]}
+                                onChange={value => menu.onPreferencesChange?.({watchPartyMode: value as PlayerPrefs["watchPartyMode"]})} />
+                            <MenuSelect label="Озвучка в комнате" value={menu.preferences.watchPartyDubMode}
+                                options={[{value: "own", label: "Своя озвучка"}, {value: "suggest", label: "Предлагать озвучку хоста"}, {value: "follow", label: "Следовать за хостом"}]}
+                                onChange={value => menu.onPreferencesChange?.({watchPartyDubMode: value as PlayerPrefs["watchPartyDubMode"]})} />
+                            <MenuSelect label="Участники" value={menu.preferences.watchPartyPanelPosition}
+                                options={[{value: "top", label: "Сверху"}, {value: "bottom", label: "Снизу"}, {value: "overlay", label: "Поверх плеера"}]}
+                                onChange={value => menu.onPreferencesChange?.({watchPartyPanelPosition: value as PlayerPrefs["watchPartyPanelPosition"]})} />
+                        </>}
+                    </>}
+                </>}
                 {onFallback && (
                     <button
                         type="button"

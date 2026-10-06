@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { IS_ANDROID_APP } from "../../lib/platform";
 import { useMobileLayout } from "../../hooks/useMobileLayout";
 import { EpisodeHoverPreview } from "../../components/EpisodeHoverPreview";
@@ -8,7 +8,6 @@ import { animeMyAnimeListId, episodeAddedDate, episodeAirDate, formatAirDate } f
 import { useEpisodeAirDates } from "./useEpisodeAirDates";
 import { formatRating } from "../../lib/ratings";
 import {
-  episodeDuration,
   formatCalendarDate,
   formatDuration,
   formatTime,
@@ -86,13 +85,22 @@ export function SeasonList({
   const visibleSeason = seasons.find(group => group.number === requestedSeason)?.number ?? seasons[0]?.number;
   const hiddenSeasons = beta || mobile ? seasons.filter(group => group.number !== visibleSeason).map(group => group.number) : collapsedSeasons;
   const airDates = useEpisodeAirDates(seasons, seasonVideos, previewAnimeById, hiddenSeasons);
+  const indexedSeasons = useMemo(() => Object.fromEntries(Object.entries(seasonVideos).map(([season, videos]) => {
+    const episodes = new Map<string, { video: Video; duration: number }>();
+    for (const video of videos) {
+      const existing = episodes.get(video.number);
+      if (!existing) episodes.set(video.number, { video, duration: video.duration ?? 0 });
+      else if (!existing.duration && video.duration) existing.duration = video.duration;
+    }
+    return [season, { episodes, numbers: [...episodes.keys()].sort((left, right) => Number(left) - Number(right)) }];
+  })), [seasonVideos]);
   return (
     <div className={`all-seasons${compactEpisodeList ? " compact-episodes" : ""}${beta ? " beta-season-browser" : ""}${mobile ? " mobile-season-browser" : ""}`}>
       {mobile && <div className="mobile-season-picker"><h2>Серии</h2><select aria-label="Сезон" value={visibleSeason} onChange={event => setBrowsed({ playback: selectedSeason, season: Number(event.target.value) })}>{seasons.map(group => <option key={group.number} value={group.number}>{group.label ?? `Сезон ${group.number}`}</option>)}</select></div>}
       {beta && <nav className="beta-season-nav" aria-label="Сезоны и выпуски">
         <h2>Сезоны и серии</h2>
         {seasons.map(group => {
-          const numbers = [...new Set((seasonVideos[group.number] ?? []).map(video => video.number))];
+          const numbers = indexedSeasons[group.number]?.numbers ?? [];
           const watched = numbers.filter(number => isEpisodeWatched(saved?.episodes[`${group.number}:${number}`])).length;
           return <button type="button" key={group.number}
             aria-current={visibleSeason === group.number ? "true" : undefined}
@@ -104,9 +112,8 @@ export function SeasonList({
       </nav>}
       {seasons.filter(group => (!beta && !mobile) || group.number === visibleSeason).map((group) => {
         const videos = seasonVideos[group.number] ?? [];
-        const episodeNumbers = Array.from(new Set(videos.map((video) => video.number))).sort(
-          (left, right) => Number(left) - Number(right),
-        );
+        const episodeIndex = indexedSeasons[group.number];
+        const episodeNumbers = episodeIndex?.numbers ?? [];
         const watchedCount = episodeNumbers.filter((number) =>
           isEpisodeWatched(saved?.episodes[`${group.number}:${number}`]),
         ).length;
@@ -168,7 +175,7 @@ export function SeasonList({
             </div>
 
             <div className="season-content">
-              <div>
+              {!collapsed && <div>
                 {!episodeNumbers.length && (
                   <div className={`release-empty ${status.kind === "planned" ? "planned" : status.kind === "airing" ? "airing" : ""}`}>
                     <i />
@@ -182,8 +189,8 @@ export function SeasonList({
                     const watched = isEpisodeWatched(progress);
                     const active = group.number === selectedSeason && number === selectedEpisode;
                     const isNew = newEpisodeKeys.has(key) && !watched;
-                    const duration = episodeDuration(videos, number);
-                    const video = videos.find((item) => item.number === number);
+                    const duration = episodeIndex.episodes.get(number)!.duration;
+                    const video = episodeIndex.episodes.get(number)!.video;
                     const originEntry = group.entries.find((item) => item.anime_id === video?.originAnimeId) ?? entry;
                     const previewAnime = previewAnimeById[originEntry.anime_id] ?? originEntry;
                     const malId = animeMyAnimeListId(previewAnime) ?? animeMyAnimeListId(originEntry);
@@ -260,7 +267,7 @@ export function SeasonList({
                     );
                   })}
                 </div>
-              </div>
+              </div>}
             </div>
           </section>
         );

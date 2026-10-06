@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -327,6 +328,11 @@ class KodikAnimeGateway:
         )
 
     async def public_key(self) -> str:
+        if os.getenv("ANIMESOUL_RUNTIME", "local") == "website":
+            key = os.getenv("ANIMESOUL_KODIK_PUBLIC_KEY", "").strip()
+            if not key:
+                raise KodikNotConfiguredError("Администратор ещё не настроил публичный ключ Kodik")
+            return key
         try:
             text = await asyncio.to_thread(self.settings_file.read_text, encoding="utf-8")
             payload = json.loads(text)

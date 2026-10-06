@@ -46,8 +46,10 @@ const largestJavaScript = javaScriptFiles
   .sort((left, right) => right.raw - left.raw)[0];
 
 const budgets = {
-  entryJavaScript: 305 * 1024,
-  entryStyles: 315 * 1024,
+  // 0.3.0 adds the mobile layout, light-theme fixes and desktop presence UI.
+  // Release baseline: ~352 KiB JS / ~400 KiB CSS; retain a small growth margin.
+  entryJavaScript: 360 * 1024,
+  entryStyles: 410 * 1024,
   largestJavaScript: 580 * 1024,
   anime4k: 4 * 1024 * 1024,
 };

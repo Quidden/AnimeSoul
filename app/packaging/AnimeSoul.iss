@@ -16,7 +16,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
-OutputDir=..\..\release-work
+OutputDir=..\..\artifacts\releases
 OutputBaseFilename=AnimeSoul-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
@@ -33,7 +33,7 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Ярлыки:"; Flags: checkedonce
 
 [Files]
-Source: "..\..\release-work\AnimeSoul-{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\artifacts\releases\AnimeSoul-{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\AnimeSoul"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#AppExeName}"

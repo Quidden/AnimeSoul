@@ -49,6 +49,7 @@ export class CatalogVideoRequestError extends Error {
 
 const videoCache = new Map<number, { expiresAt: number; request: Promise<AnimeVideoResult> }>();
 const detailsCache = new Map<number, { expiresAt: number; request: Promise<Anime | undefined> }>();
+let scheduleCache: { expiresAt: number; request: Promise<ScheduleEntry[]> } | undefined;
 
 /** Load one catalog page. Filtering and franchise grouping stay in selectors/UI code. */
 export async function fetchCatalogPage({limit, offset, query, status}: CatalogPageOptions): Promise<Anime[]> {
@@ -133,7 +134,7 @@ export async function fetchAnimeDetails(
                 ids: batchIds.join(","),
             });
             if (options.refresh) params.set("refresh", "true");
-            const batch = requestJson<AnimePayload>(`/api/yummy?${params.toString()}`)
+            const batch = requestJson<AnimePayload>(`/api/yummy?${params.toString()}`, { signal: AbortSignal.timeout(25_000) })
                 .then(payload => payload.anime ?? []);
             for (const animeId of batchIds) {
                 const request = batch
@@ -182,6 +183,19 @@ export async function fetchAnimeVideoResult(
     if (cached) videoCache.delete(animeId);
     const request = requestAnimeVideos(animeId, Boolean(options.refresh))
         .catch(error => {
+            if (error instanceof CatalogVideoRequestError && (error.status === 0 || error.status >= 500)) {
+                // Recover from a transient connection/provider failure without
+                // making the viewer reload the entire anime page.
+                return requestAnimeVideos(animeId, Boolean(options.refresh));
+            }
+            throw error;
+        })
+        .then(result => {
+            // Empty/transient responses must be recoverable on the next visit.
+            if (!result.videos.length) videoCache.delete(animeId);
+            return result;
+        })
+        .catch(error => {
             videoCache.delete(animeId);
             throw error;
         });
@@ -196,7 +210,7 @@ async function requestAnimeVideos(
     const controller = new AbortController();
     const timeout = setTimeout(
         () => controller.abort(new DOMException("Request timed out", "TimeoutError")),
-        15_000,
+        25_000,
     );
     try {
         const params = new URLSearchParams({mode: "videos", id: String(animeId)});
@@ -221,7 +235,7 @@ async function requestAnimeVideos(
     } catch (error) {
         if (error instanceof CatalogVideoRequestError) throw error;
         const message = error instanceof DOMException && error.name === "TimeoutError"
-            ? "Источники не ответили за 15 секунд."
+            ? "Источники не ответили за 25 секунд."
             : error instanceof Error ? error.message : "Не удалось загрузить серии.";
         throw new CatalogVideoRequestError(message, 0, {});
     } finally {
@@ -242,13 +256,21 @@ function sourceStatesFromHeaders(headers: Headers): Record<string, string> {
 export async function fetchAnimeTrailers(animeId: number): Promise<HeroTrailer[]> {
     const payload = await requestJson<TrailerPayload>(
         `/api/yummy?mode=trailers&id=${animeId}`,
+        { signal: AbortSignal.timeout(15_000) },
     );
     return normalizeTrailers(payload.trailers);
 }
 
 export async function fetchReleaseSchedule(): Promise<ScheduleEntry[]> {
-    const payload = await requestJson<SchedulePayload>("/api/yummy?mode=schedule");
-    return payload.schedule ?? [];
+    if (scheduleCache && scheduleCache.expiresAt > Date.now()) return scheduleCache.request;
+    const request = requestJson<SchedulePayload>("/api/yummy?mode=schedule", { signal: AbortSignal.timeout(15_000) })
+        .then(payload => payload.schedule ?? [])
+        .catch(error => {
+            if (scheduleCache?.request === request) scheduleCache = undefined;
+            throw error;
+        });
+    scheduleCache = { expiresAt: Date.now() + 5 * 60_000, request };
+    return request;
 }
 
 export function normalizeTrailers(payload: unknown): HeroTrailer[] {

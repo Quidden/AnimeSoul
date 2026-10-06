@@ -3,7 +3,7 @@
 # dependencies
 /node_modules
 /app/frontend/node_modules
-/legacy-old-stack/node_modules
+/archive/legacy-old-stack/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -16,9 +16,9 @@
 /coverage
 
 # next.js
-/legacy-old-stack/.next/
-/legacy-old-stack/.vinext/
-/legacy-old-stack/out/
+/archive/legacy-old-stack/.next/
+/archive/legacy-old-stack/.vinext/
+/archive/legacy-old-stack/out/
 
 # misc
 .DS_Store
@@ -30,17 +30,18 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .dev-*.log
-/legacy-old-stack/.npm-cache/
+/archive/legacy-old-stack/.npm-cache/
 .local-dev.log
-/legacy-old-stack/release-work/
-/release-work/
+/archive/legacy-old-stack/release-work/
+/artifacts/
 /app/build/
 /app/dist/
 
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
-/legacy-old-stack/animesoul.config.json
+!.env.local.example
+/archive/legacy-old-stack/animesoul.config.json
 /app/animesoul.python.json
 /animesoul.config.json
 
@@ -49,18 +50,18 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
-/legacy-old-stack/dist/
-/legacy-old-stack/build/
-/legacy-old-stack/.wrangler/
-/legacy-old-stack/outputs/
-/legacy-old-stack/work/
-/legacy-old-stack/desktop-dist/
-/legacy-old-stack/desktop-dist-carousel/
-/legacy-old-stack/desktop-release/
-/legacy-old-stack/desktop-stage*/
-/legacy-old-stack/release-*/
-/legacy-old-stack/data/animesoul-storage.json
-/legacy-old-stack/data/animesoul-storage.tmp.json
+/archive/legacy-old-stack/dist/
+/archive/legacy-old-stack/build/
+/archive/legacy-old-stack/.wrangler/
+/archive/legacy-old-stack/outputs/
+/archive/legacy-old-stack/work/
+/archive/legacy-old-stack/desktop-dist/
+/archive/legacy-old-stack/desktop-dist-carousel/
+/archive/legacy-old-stack/desktop-release/
+/archive/legacy-old-stack/desktop-stage*/
+/archive/legacy-old-stack/release-*/
+/archive/legacy-old-stack/data/animesoul-storage.json
+/archive/legacy-old-stack/data/animesoul-storage.tmp.json
 /app/frontend/dist/
 /app/frontend/dist-android/
 /app/mobile/.toolchains/
@@ -73,7 +74,17 @@ next-env.d.ts
 /app/mobile/android/keystore.properties
 /app/.venv/
 /app/data/
+/app/.website-local/
 /app/__pycache__/
 /app/**/*.pyc
 /.idea/
 /app/launcher.spec
+
+# Generated checks and local design references
+__pycache__/
+.ruff_cache/
+*.log
+/app/frontend/.player-check/
+/docs/design/references/
+/_ui_edit_render/
+/_ui_reference_images/

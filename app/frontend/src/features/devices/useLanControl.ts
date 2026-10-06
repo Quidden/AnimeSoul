@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Anime } from "../../lib/types";
 import { lanRequest, type LanCommand, type LanPlayer } from "./api";
+import { isWebsiteRuntime } from "../../lib/accountRuntime";
 
 type Bridge = { state: () => LanPlayer; command: (command: LanCommand) => void | Promise<void> };
 let playerBridge: Bridge | null = null;
@@ -19,6 +20,7 @@ export function useLanControl(catalog: Anime[], openAnime: (anime: Anime, resume
   const latest = useRef({ catalog, openAnime });
   latest.current = { catalog, openAnime };
   useEffect(() => {
+    if (isWebsiteRuntime()) return;
     const controller = new AbortController();
     let stop: (() => void) | undefined;
     let busy = false;

@@ -4,6 +4,7 @@ import { fetchGDriveAuthUrl, fetchGDriveStatus, syncGDrive, type GDriveStatus } 
 import { emitAppEvent } from "../../lib/events";
 import { readLocal as read } from "../../lib/storage";
 import type { SaveStatus } from "../../lib/types";
+import { isWebsiteRuntime } from "../../lib/accountRuntime";
 
 type StatusNotice = {
   tone: "loading" | "success" | "error";
@@ -46,6 +47,7 @@ export function useHeaderCloudSync({ diskStatus, onStorageReload, showStatusNoti
   }, []);
 
   useEffect(() => {
+    if (isWebsiteRuntime()) return;
     void refreshGDriveStatus();
     const timer = window.setInterval(refreshGDriveStatus, 2_500);
     const handleMessage = (event: MessageEvent) => {

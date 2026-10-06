@@ -1,3 +1,5 @@
+import { accountFetch } from "./accountRuntime";
+
 type ErrorMessage = string | ((status: number) => string);
 
 export type JsonRequestInit = RequestInit & {
@@ -34,7 +36,7 @@ export async function requestJson<T>(
   options: JsonRequestInit = {},
 ): Promise<T> {
   const { errorMessage, ...init } = options;
-  const response = await fetch(input, init);
+  const response = await accountFetch(input, init);
   let payload: unknown;
   try {
     payload = await response.json();

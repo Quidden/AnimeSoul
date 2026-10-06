@@ -1,0 +1,72 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: animesoul
+      POSTGRES_USER: animesoul
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U animesoul -d animesoul"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks: [data]
+  migrate:
+    build:
+      context: ../..
+      dockerfile: app/deploy/Dockerfile
+    environment:
+      ANIMESOUL_RUNTIME: website
+      ANIMESOUL_DATABASE_URL: ${ANIMESOUL_DATABASE_URL:?Set ANIMESOUL_DATABASE_URL}
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [data]
+  web:
+    build:
+      context: ../..
+      dockerfile: app/deploy/Dockerfile
+    env_file: .env
+    environment:
+      ANIMESOUL_RUNTIME: website
+      ANIMESOUL_DATA_DIR: /runtime
+    volumes:
+      - runtime:/runtime
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [edge, data]
+  gateway:
+    image: caddy:2-alpine
+    environment:
+      ANIMESOUL_DOMAIN: ${ANIMESOUL_DOMAIN:?Set ANIMESOUL_DOMAIN}
+    ports:
+      - "${ANIMESOUL_BIND_ADDRESS:-0.0.0.0}:80:80"
+      - "${ANIMESOUL_BIND_ADDRESS:-0.0.0.0}:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+    restart: unless-stopped
+    networks: [edge]
+networks:
+  edge:
+  data:
+    internal: true
+volumes:
+  postgres:
+  runtime:
+  caddy_data:
+  caddy_config:

@@ -1,3 +1,5 @@
+import { accountFetch } from "./accountRuntime";
+
 export type KodikStreamRequest = {
   videoId: number | string;
   season: number;
@@ -115,9 +117,12 @@ export function kodikStreamRequestKey(request: KodikStreamRequest) {
   ]);
 }
 
+export class UnavailableKodikSourceError extends Error {}
+
 export async function fetchKodikStream(
   request: KodikStreamRequest,
   signal?: AbortSignal,
+  refresh = false,
 ): Promise<KodikStreamInfo> {
   if (request.directStream) {
     if (!request.directStream.sources.length) {
@@ -125,11 +130,11 @@ export async function fetchKodikStream(
     }
     return request.directStream;
   }
-  const response = await fetch("/api/kodik/stream", {
+  const response = await accountFetch("/api/kodik/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
-    body: JSON.stringify(request),
+    body: JSON.stringify({ ...request, refresh }),
     signal,
   });
   const payload = await response.json().catch(() => ({})) as Partial<KodikStreamInfo> & { detail?: string };
@@ -138,9 +143,15 @@ export async function fetchKodikStream(
       "Запущена старая версия сервера AnimeSoul. Полностью закройте приложение и запустите его снова.",
     );
   }
-  if (!response.ok) throw new Error(payload.detail || "Не удалось получить прямую ссылку Kodik.");
+  if (!response.ok) {
+    const detail = payload.detail || "Не удалось получить прямую ссылку Kodik.";
+    if (response.status === 422 && /Kodik не (вернул ссылку на конкретный|выдал прямую ссылку)/.test(detail)) {
+      throw new UnavailableKodikSourceError(detail);
+    }
+    throw new Error(detail);
+  }
   if (!Array.isArray(payload.sources) || !payload.sources.length) {
-    throw new Error("Kodik не предоставил прямую ссылку для этой серии.");
+    throw new UnavailableKodikSourceError("Kodik не предоставил прямую ссылку для этой серии.");
   }
   const info = {
     sources: payload.sources,

@@ -418,7 +418,8 @@ def _normalise_dubbing(value: object) -> str:
     """Make catalogue and application dubbing labels comparable."""
 
     text = str(value or "").casefold().replace("озвучка", "")
-    return re.sub(r"[^\w]+", "", text)
+    name = re.sub(r"[^\w]+", "", text)
+    return "anilibria" if name == "anilibriatv" else name
 
 
 def _normalise_title(value: object) -> str:

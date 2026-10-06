@@ -3,23 +3,29 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import time
+from urllib.parse import urlsplit
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..services.kodik import KodikAnimeGateway, KodikNotConfiguredError
 from ..services.offline_library import OfflineLibraryError, OfflineLibraryService
+from ..services.kodik_helpers import _is_kodik_url
 
 
 router = APIRouter(prefix="/api/kodik", tags=["Kodik"])
 gateway = KodikAnimeGateway(settings.data_dir)
 playback = OfflineLibraryService(settings.data_dir)
+logger = logging.getLogger(__name__)
 
 
 class KodikStreamPayload(BaseModel):
+    refresh: bool = False
     videoId: int | str
     season: int = Field(ge=1, le=99)
     episode: str = Field(min_length=1, max_length=40)
@@ -52,10 +58,25 @@ async def kodik_proxy(mode: str = "ping") -> dict[str, object]:
 
 
 @router.post("/stream")
-async def kodik_stream(payload: KodikStreamPayload) -> dict[str, object]:
+@router.post("/download")
+async def kodik_stream(payload: KodikStreamPayload, response: Response) -> dict[str, object]:
+    if os.getenv("ANIMESOUL_RUNTIME", "local") == "website":
+        try:
+            source = urlsplit("https:" + payload.iframeUrl if payload.iframeUrl.startswith("//") else payload.iframeUrl)
+            source_port = source.port
+        except ValueError as error:
+            raise HTTPException(422, "Некорректная ссылка Kodik") from error
+        if not _is_kodik_url(payload.iframeUrl) or source.scheme != "https" or source.username or source.password or source_port not in {None, 443}:
+            raise HTTPException(422, "Для серверного плеера требуется HTTPS-ссылка Kodik")
+    started_at = time.perf_counter()
     try:
         data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
-        return await playback.playback_source(data)
+        result = await playback.playback_source(data)
+        elapsed = round((time.perf_counter() - started_at) * 1000)
+        response.headers["Server-Timing"] = f"stream_resolve;dur={elapsed}"
+        response.headers["Cache-Control"] = "no-store"
+        logger.info("Kodik stream resolution completed in %s ms", elapsed)
+        return result
     except OfflineLibraryError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

@@ -1,10 +1,11 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ConfigProfile, PlayerPrefs, Theme, ToolbarPosition } from "../lib/types";
 import { DEFAULT_PLAYER_PREFS, STORAGE_KEYS as K, THEMES } from "../lib/settings";
 import { readLocal as read, writeLocal as write } from "../lib/storage";
+import { isWebsiteRuntime } from "../lib/accountRuntime";
 import { emitAppEvent, listenAppEvent } from "../lib/events";
 import { DebugPanel } from "./DebugPanel";
 import { ChangelogPanel } from "./ChangelogModal";
@@ -47,10 +48,12 @@ type Props = {
   onStorageReload?: () => void;
 };
 
-const SETTINGS_CENTER_TABS = SETTINGS_TABS.filter(tab =>
+const LOCAL_SETTINGS_CENTER_TABS = SETTINGS_TABS.filter(tab =>
   (!IS_ANDROID_APP || tab.id !== "party") && (DISCORD_FEATURE || tab.id !== "discord"));
 
 export function SettingsCenter(props: Props) {
+  const SETTINGS_CENTER_TABS = useMemo(() => LOCAL_SETTINGS_CENTER_TABS.filter(tab => !isWebsiteRuntime()
+    || ["watching", "player", "appearance", "profiles", "changelog"].includes(tab.id)), []);
   const mobile = useMobileLayout();
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
   const [open, setOpen] = useState(false);
@@ -89,7 +92,7 @@ export function SettingsCenter(props: Props) {
     if (matchingTab && matchingTab.id !== activeTab) {
       setActiveTab(matchingTab.id);
     }
-  }, [activeTab, searchQuery]);
+  }, [activeTab, searchQuery, SETTINGS_CENTER_TABS]);
 
   useEffect(() => {
     const handleChoiceEvent = () => {
@@ -103,6 +106,7 @@ export function SettingsCenter(props: Props) {
   useEffect(() => { void loadGDriveStatus(); }, [loadGDriveStatus]);
 
   useEffect(() => listenAppEvent("open-settings", ({ tab, targetTitle, overview }) => {
+    if (isWebsiteRuntime() && !["watching", "player", "appearance", "profiles", "changelog"].includes(tab)) return;
     if ((IS_ANDROID_APP && tab === "party") || (!DISCORD_FEATURE && tab === "discord")) return;
     setActiveTab(tab);
     setSearchQuery("");

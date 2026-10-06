@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App";
+import { AccountRoot } from "./features/account/AccountRoot";
 import "./globals.css";
 import { installDebugCapture } from "./lib/debugLog";
 import { IS_ANDROID_APP } from "./lib/platform";
@@ -10,6 +10,6 @@ if (IS_ANDROID_APP) document.documentElement.dataset.platform = "android";
 installDebugCapture();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <AccountRoot />
   </StrictMode>,
 );

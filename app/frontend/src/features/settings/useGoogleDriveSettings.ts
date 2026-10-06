@@ -13,6 +13,7 @@ import {
   type GDriveSyncMode,
 } from "../../lib/gdrive";
 import { readLocal as read, writeLocal as write } from "../../lib/storage";
+import { isWebsiteRuntime } from "../../lib/accountRuntime";
 import {
   mergePolledClientId,
   type CredentialCheck,
@@ -62,6 +63,7 @@ export function useGoogleDriveSettings({ onStorageReload, profileId }: Options) 
   const choiceSessionKey = (email: string) => `animesoul:gdrive-deferred:${profileId}:${email}`;
 
   const loadGDriveStatus = useCallback(async () => {
+    if (isWebsiteRuntime()) return;
     const requestRevision = ++statusRequestRevision.current;
     try {
       let status = await fetchGDriveStatus();

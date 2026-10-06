@@ -279,6 +279,7 @@ class OfflineLibraryService:
         self._library_cache: tuple[float, dict[str, Any]] | None = None
         self._library_cache_lock = asyncio.Lock()
         self.resolver = KodikSourceResolver()
+        self._playback_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
     async def settings(self) -> dict[str, str | bool]:
         directory = await self._directory()
@@ -294,6 +295,22 @@ class OfflineLibraryService:
         """Resolve a direct online stream while keeping account secrets local."""
 
         public_key, private_key = await self._kodik_private_credentials()
+        request = dict(request)
+        refresh = bool(request.pop("refresh", False))
+        # A short cache avoids repeating catalogue + signed-link requests on
+        # every return to a dubbing. Include credentials and the full selection;
+        # never share links across episodes or account changes.
+        cache_key = hashlib.sha256(json.dumps(
+            [public_key, private_key, request], sort_keys=True,
+        ).encode()).hexdigest()
+        now = time.monotonic()
+        self._playback_cache = {
+            key: value for key, value in self._playback_cache.items()
+            if now - value[0] < 60
+        }
+        cached = self._playback_cache.get(cache_key)
+        if cached and not refresh:
+            return copy.deepcopy(cached[1])
         result = await self.resolver.resolve_playback_api(
             str(request.get("iframeUrl") or ""),
             public_key,
@@ -309,6 +326,9 @@ class OfflineLibraryService:
         )
         if not result.get("sources"):
             raise OfflineLibraryError("Kodik не предоставил прямую ссылку для выбранной серии.")
+        if len(self._playback_cache) >= 32:
+            self._playback_cache.pop(next(iter(self._playback_cache)))
+        self._playback_cache[cache_key] = (time.monotonic(), copy.deepcopy(result))
         return result
 
     async def set_directory(self, value: str) -> dict[str, str | bool]:
@@ -1553,6 +1573,12 @@ class OfflineLibraryService:
         return dict(payload) if isinstance(payload, dict) else {}
 
     async def _kodik_private_credentials(self) -> tuple[str, str]:
+        if os.getenv("ANIMESOUL_RUNTIME", "local") == "website":
+            public_key = os.getenv("ANIMESOUL_KODIK_PUBLIC_KEY", "").strip()
+            private_key = os.getenv("ANIMESOUL_KODIK_PRIVATE_KEY", "").strip()
+            if not public_key or not private_key:
+                raise OfflineLibraryError("Администратор ещё не настроил ключи серверного плеера.")
+            return public_key, private_key
         payload = await self._settings_payload()
         public_key = str(payload.get("kodikPublicKey") or "").strip()
         if not public_key or not self.private_key_file.is_file():

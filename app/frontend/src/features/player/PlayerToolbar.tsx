@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PlayerPrefs, ToolbarPosition } from "../../lib/types";
 import { Toggle } from "../../components/Toggle";
+import { useMobileLayout } from "../../hooks/useMobileLayout";
 import { IS_ANDROID_APP } from "../../lib/platform";
 import { useModalAccessibility } from "../../lib/modalAccessibility";
 
@@ -92,6 +93,7 @@ export function PlayerToolbar({
   position,
   onPositionChange,
 }: PlayerToolbarProps) {
+  const mobile = useMobileLayout();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsDialogRef = useRef<HTMLElement>(null);
 
@@ -206,7 +208,7 @@ export function PlayerToolbar({
             value={prefs.toolbarIconOnly}
             onChange={toolbarIconOnly => onPrefsChange({ toolbarIconOnly })}
           />
-          {!IS_ANDROID_APP && <>
+          {!IS_ANDROID_APP && !mobile && <>
             <Toggle
               label="Совместный режим"
               value={prefs.watchPartyEnabled}

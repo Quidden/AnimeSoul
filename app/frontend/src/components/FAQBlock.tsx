@@ -20,7 +20,7 @@ export function FAQBlock() {
                 JSON-файл и переключитесь на импортированный профиль. Такой способ подходит и для переноса между
                 компьютерами.</p></article>
             <article><b>Перенос полного сохранения между двумя версиями</b><p>Закройте обе версии. Файлы находятся
-                в <code>legacy-old-stack/data/animesoul-storage.json</code> и <code>app/data/animesoul-storage.json</code>.
+                в <code>archive/legacy-old-stack/data/animesoul-storage.json</code> и <code>app/data/animesoul-storage.json</code>.
                 Безопаснее использовать инструмент из папки <code>app</code>: команда <code>python -m
                     tools.transfer_saves to-main</code> переносит данные в основную версию, а <code>to-legacy</code> —
                 обратно. Перед заменой автоматически создаётся резервная копия.</p></article>

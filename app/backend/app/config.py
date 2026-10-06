@@ -37,6 +37,7 @@ class Settings:
     )
     legacy_storage_file: Path = (
         PROJECT_ROOT.parent
+        / "archive"
         / "legacy-old-stack"
         / "data"
         / "animesoul-storage.json"
@@ -49,13 +50,18 @@ def load_settings() -> Settings:
     Returns:
         Settings: Initialized runtime configuration object.
     """
-    env_file = PROJECT_ROOT / ".env"
-    if env_file.is_file():
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, val = line.split("=", 1)
-                os.environ.setdefault(key.strip(), val.strip())
+    # Existing backend env files retain priority; app/.env is the convenient
+    # shared location for running the website from the app directory.
+    for env_file in (PROJECT_ROOT / ".env", PROJECT_ROOT.parent / ".env"):
+        if env_file.is_file():
+            for line in env_file.read_text(encoding="utf-8-sig").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    val = val.strip()
+                    if len(val) >= 2 and val[0] == val[-1] and val[0] in {"'", '"'}:
+                        val = val[1:-1]
+                    os.environ.setdefault(key.strip(), val)
 
     payload: dict[str, object] = {}
     if CONFIG_FILE.exists():
@@ -79,12 +85,16 @@ def load_settings() -> Settings:
     if not data_dir.is_absolute():
         data_dir = PROJECT_ROOT / data_dir
     data_dir = data_dir.resolve()
+    frontend_dist = Path(os.getenv("ANIMESOUL_FRONTEND_DIST", str(PACKAGED_ROOT / "frontend" / "dist")))
+    if not frontend_dist.is_absolute():
+        frontend_dist = PROJECT_ROOT / frontend_dist
     return Settings(
         port=port,
         yummy_token=token,
         gdrive_client_id=gdrive_client_id,
         gdrive_client_secret=gdrive_client_secret,
         data_dir=data_dir,
+        frontend_dist=frontend_dist.resolve(),
     )
 
 

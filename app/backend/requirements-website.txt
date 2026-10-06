@@ -1,0 +1,6 @@
+-r requirements-server.txt
+SQLAlchemy==2.0.54
+alembic==1.20.0
+psycopg[binary]==3.3.6
+argon2-cffi==25.1.0
+google-auth[requests]==2.59.1

@@ -8,6 +8,7 @@ import json
 import math
 import re
 from pathlib import Path
+from collections.abc import Awaitable
 from typing import Any
 
 from .anime_identity import anime_match_score
@@ -60,13 +61,16 @@ def _normalise(value: object) -> str:
 
 
 def _normalise_dubbing(value: object) -> str:
-    return (
+    name = (
         _normalise(value)
         .replace("озвучка", "")
         .replace("субтитры", "")
         .replace("subtitles", "")
         .strip()
     )
+    # Yummy labels this voice AniLibria; Kodik calls it AniLibria.TV.
+    # Keep the separate "Old" translation and all other voices distinct.
+    return "anilibria" if name == "anilibria tv" else name
 
 
 def _translation_kind(data: dict[str, Any]) -> str:
@@ -227,6 +231,10 @@ def _source_state(value: object) -> str:
     return "error" if isinstance(value, BaseException) else "ok"
 
 
+VIDEO_PROVIDER_TIMEOUT = 8.0
+DETAILS_PROVIDER_TIMEOUT = 8.0
+
+
 class HybridCatalogueService:
     """Serve the current UI contract while either upstream remains usable."""
 
@@ -293,47 +301,46 @@ class HybridCatalogueService:
         *,
         refresh: bool = False,
     ) -> tuple[list[dict[str, Any]], SourceStates]:
-        yummy_results = await asyncio.gather(
-            *(
-                self.yummy.request(f"/anime/{item}", refresh=True)
-                if refresh
-                else self.yummy.request(f"/anime/{item}")
-                for item in ids
-            ),
-            return_exceptions=True,
-        )
-        yummy_ok = any(isinstance(item, dict) for item in yummy_results)
-        yummy_failed = any(isinstance(item, BaseException) for item in yummy_results)
-        contexts: list[dict[str, Any] | None] = []
-        numeric_ids: list[int | None] = []
-        for raw_id, result in zip(ids, yummy_results):
+        async def load_title(raw_id: str) -> tuple[int | None, Any, Any]:
             try:
                 numeric_id = int(raw_id)
             except ValueError:
                 numeric_id = None
-            numeric_ids.append(numeric_id)
-            if isinstance(result, dict):
-                contexts.append(result)
-            elif numeric_id is not None:
-                contexts.append(await self.registry.get(numeric_id))
-            else:
-                contexts.append(None)
+            context = await self.registry.get(numeric_id) if numeric_id is not None else None
 
-        kodik_results = await asyncio.gather(
-            *(
-                self.kodik.find_for_anime(
-                    context,
-                    anime_id=anime_id,
-                    refresh=True,
+            async def load_yummy() -> Any:
+                # Negative IDs are local Kodik identities, never Yummy IDs.
+                if numeric_id is not None and numeric_id < 0:
+                    return None
+                call = self.yummy.request(f"/anime/{raw_id}", refresh=True) if refresh else self.yummy.request(f"/anime/{raw_id}")
+                return await asyncio.wait_for(call, timeout=DETAILS_PROVIDER_TIMEOUT)
+
+            async def load_kodik(identity: dict[str, Any] | None) -> Any:
+                call = self.kodik.find_for_anime(identity, anime_id=numeric_id, refresh=True) if refresh else self.kodik.find_for_anime(identity, anime_id=numeric_id)
+                return await asyncio.wait_for(call, timeout=DETAILS_PROVIDER_TIMEOUT)
+
+            if context or (numeric_id is not None and numeric_id < 0):
+                primary, reserve = await asyncio.gather(
+                    load_yummy(), load_kodik(context), return_exceptions=True,
                 )
-                if refresh
-                else self.kodik.find_for_anime(context, anime_id=anime_id)
-                for context, anime_id in zip(contexts, numeric_ids)
-            ),
-            return_exceptions=True,
-        )
+                if isinstance(primary, dict) and isinstance(reserve, list):
+                    reserve = matching_kodik_releases(reserve, primary)
+            else:
+                # Each title proceeds as soon as its own identity is available;
+                # a slower sibling in the same batch cannot delay its lookup.
+                (primary,) = await asyncio.gather(load_yummy(), return_exceptions=True)
+                identity = primary if isinstance(primary, dict) else None
+                (reserve,) = await asyncio.gather(load_kodik(identity), return_exceptions=True)
+            return numeric_id, primary, reserve
+
+        rows = await asyncio.gather(*(load_title(raw_id) for raw_id in ids))
+        numeric_ids = [row[0] for row in rows]
+        yummy_results = [row[1] for row in rows]
+        kodik_results = [row[2] for row in rows]
+        yummy_ok = any(isinstance(item, dict) for item in yummy_results)
+        yummy_failed = any(isinstance(item, BaseException) for item in yummy_results)
         sources = {
-            "yummy": "error" if yummy_failed and not yummy_ok else "ok",
+            "yummy": "unused" if ids and all(item is not None and item < 0 for item in numeric_ids) else "error" if yummy_failed and not yummy_ok else "ok",
             "kodik": next(
                 (_source_state(item) for item in kodik_results if isinstance(item, BaseException)),
                 "ok",
@@ -354,7 +361,7 @@ class HybridCatalogueService:
                 if numeric_id is not None:
                     card["anime_id"] = numeric_id
                 anime.append(card)
-        if not anime and sources["yummy"] == "error" and sources["kodik"] in {"error", "unconfigured"}:
+        if not anime and sources["yummy"] in {"error", "unused"} and sources["kodik"] in {"error", "unconfigured"}:
             raise CatalogueUnavailableError("Не удалось загрузить данны аниме из YummyAnime и Kodik", sources)
         await self.registry.remember(anime)
         return anime, sources
@@ -370,19 +377,21 @@ class HybridCatalogueService:
         # requests first, so the two upstream timeout windows accumulated and
         # made an anime page appear frozen. Keep the sequential fallback only
         # for a truly unknown id.
-        yummy_details_task = asyncio.create_task(
-            self.yummy.request(f"/anime/{anime_id}", refresh=True)
-            if refresh
-            else self.yummy.request(f"/anime/{anime_id}")
-        )
-        yummy_videos_task = asyncio.create_task(
-            self.yummy.request(f"/anime/{anime_id}/videos", refresh=True)
-            if refresh
-            else self.yummy.request(f"/anime/{anime_id}/videos")
-        )
+        # Two stages for an unknown identity stay below the UI's 25s deadline.
+        async def bounded(call: Awaitable[Any]) -> Any:
+            return await asyncio.wait_for(call, timeout=VIDEO_PROVIDER_TIMEOUT)
+
+        async def yummy_request(path: str) -> Any:
+            if anime_id < 0:
+                return None
+            call = self.yummy.request(path, refresh=True) if refresh else self.yummy.request(path)
+            return await bounded(call)
+
+        yummy_details_task = asyncio.create_task(yummy_request(f"/anime/{anime_id}"))
+        yummy_videos_task = asyncio.create_task(yummy_request(f"/anime/{anime_id}/videos"))
         context = await self.registry.get(anime_id)
         if context:
-            kodik_task = asyncio.create_task(
+            kodik_task = asyncio.create_task(bounded(
                 self.kodik.find_for_anime(
                     context,
                     anime_id=anime_id,
@@ -395,7 +404,7 @@ class HybridCatalogueService:
                     anime_id=anime_id,
                     with_episodes=True,
                 )
-            )
+            ))
             yummy_details, yummy_videos, kodik_value = await asyncio.gather(
                 yummy_details_task,
                 yummy_videos_task,
@@ -424,12 +433,12 @@ class HybridCatalogueService:
                 )
             )
             kodik_result = await asyncio.gather(
-                kodik_call,
+                bounded(kodik_call),
                 return_exceptions=True,
             )
             kodik_value = kodik_result[0]
         sources = {
-            "yummy": "error" if isinstance(yummy_details, BaseException) or isinstance(yummy_videos, BaseException) else "ok",
+            "yummy": "unused" if anime_id < 0 else "error" if isinstance(yummy_details, BaseException) or isinstance(yummy_videos, BaseException) else "ok",
             "kodik": _source_state(kodik_value),
         }
         yummy_video_rows = [item for item in yummy_videos if isinstance(item, dict)] if isinstance(yummy_videos, list) else []
@@ -464,7 +473,7 @@ class HybridCatalogueService:
             anime = context
         else:
             anime = None
-        if not videos and sources["yummy"] == "error" and sources["kodik"] in {"error", "unconfigured"}:
+        if not videos and sources["yummy"] in {"error", "unused"} and sources["kodik"] in {"error", "unconfigured"}:
             raise CatalogueUnavailableError("Серии недоступны в YummyAnime и Kodik", sources)
         if anime:
             await self.registry.remember([anime])

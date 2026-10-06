@@ -1323,6 +1323,22 @@ test("new episode notification records keep read state and a target link", () =>
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+test("release schedule reuses an in-flight request across page consumers", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  let finish!: (response: Response) => void;
+  globalThis.fetch = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+  try {
+    const {fetchReleaseSchedule} = await import("../src/features/catalog/api.ts");
+    const first = fetchReleaseSchedule();
+    const second = fetchReleaseSchedule();
+    assert.equal(calls, 1);
+    finish(new Response(JSON.stringify({schedule: [{anime_id: 99001}]})));
+    assert.deepEqual(await first, await second);
+    await fetchReleaseSchedule();
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
 import { AnimeFacts } from "../src/features/player/AnimeFacts.tsx";
 import { AnimeTrailer } from "../src/features/player/AnimeTrailer.tsx";
 import { ReleaseSchedule } from "../src/features/player/ReleaseSchedule.tsx";
@@ -1472,4 +1488,18 @@ test("calendar always has six full weeks, Monday first, including leap years", (
       assert.equal(dateKey(days[i]), dateKey(next));
     }
   }
+});
+
+test("unavailable episode streams are distinct from temporary provider failures", async () => {
+  const {fetchKodikStream, UnavailableKodikSourceError} = await import("../src/lib/kodikStream.ts");
+  const originalFetch = globalThis.fetch;
+  const request = {videoId: 1, season: 1, episode: "1", dubbing: "AniLibria", iframeUrl: "https://kodik.info/seria/1"};
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({sources: []}), {status: 200});
+    await assert.rejects(fetchKodikStream(request), UnavailableKodikSourceError);
+    globalThis.fetch = async () => new Response(JSON.stringify({detail: "Kodik не выдал прямую ссылку на выбранную серию."}), {status: 422});
+    await assert.rejects(fetchKodikStream(request), UnavailableKodikSourceError);
+    globalThis.fetch = async () => new Response(JSON.stringify({detail: "Не удалось подключиться к приватному API Kodik."}), {status: 422});
+    await assert.rejects(fetchKodikStream(request), error => error instanceof Error && !(error instanceof UnavailableKodikSourceError));
+  } finally { globalThis.fetch = originalFetch; }
 });

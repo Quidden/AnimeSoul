@@ -1,4 +1,5 @@
 import { DISCORD_FEATURE } from "../discord/config";
+import { isWebsiteRuntime } from "../../lib/accountRuntime";
 
 export type SettingsTab =
   | "watching"
@@ -229,6 +230,7 @@ export function searchSettings(
   const limit = Math.max(1, options.limit ?? 4);
 
   return [generalSettings, ...SETTINGS_SEARCH_ITEMS, ...sections]
+    .filter(entry => !isWebsiteRuntime() || ["watching", "player", "appearance", "profiles", "changelog"].includes(entry.tab))
     .filter((entry) => DISCORD_FEATURE || entry.tab !== "discord")
     .filter((entry) => includeParty || entry.tab !== "party")
     .filter((entry) => matchesSettingsQuery(

@@ -6,8 +6,8 @@ $ErrorActionPreference = "Stop"
 $AppRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $RepoRoot = (Resolve-Path (Join-Path $AppRoot "..")).Path
 $Version = (Get-Content -LiteralPath (Join-Path $AppRoot "frontend\package.json") -Raw | ConvertFrom-Json).version
-$WorkRoot = Join-Path $RepoRoot "release-work"
-$PyInstallerWork = Join-Path $WorkRoot "pyinstaller"
+$WorkRoot = Join-Path $RepoRoot "artifacts\releases"
+$PyInstallerWork = Join-Path $RepoRoot "artifacts\build\windows"
 $PackageRoot = Join-Path $WorkRoot "AnimeSoul-$Version"
 $Python = Join-Path $AppRoot ".venv\Scripts\python.exe"
 
@@ -57,7 +57,7 @@ if (Test-Path -LiteralPath $PackageRoot) {
     $ResolvedPackage = (Resolve-Path -LiteralPath $PackageRoot).Path
     $ResolvedWork = (Resolve-Path -LiteralPath $WorkRoot).Path
     if (-not $ResolvedPackage.StartsWith($ResolvedWork + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Package directory must be inside release-work."
+        throw "Package directory must be inside artifacts/releases."
     }
     Remove-Item -LiteralPath $PackageRoot -Recurse -Force
 }
@@ -70,8 +70,8 @@ Copy-Item `
     -LiteralPath (Join-Path $PyInstallerWork "runtime-dist\AnimeSoul Runtime") `
     -Destination (Join-Path $PackageRoot "runtime") `
     -Recurse
-Copy-Item -LiteralPath (Join-Path $AppRoot "README.md") -Destination $PackageRoot
-Copy-Item -LiteralPath (Join-Path $AppRoot "SAVE_COMPATIBILITY.md") -Destination $PackageRoot
+Copy-Item -LiteralPath (Join-Path $RepoRoot "docs\DEVELOPMENT.md") -Destination (Join-Path $PackageRoot "README.md")
+Copy-Item -LiteralPath (Join-Path $RepoRoot "docs\guides\SAVE_COMPATIBILITY.md") -Destination $PackageRoot
 
 if (-not $InnoCompiler) {
     $Candidates = @(
