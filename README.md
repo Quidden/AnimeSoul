@@ -5,6 +5,11 @@
 New website foundation: TypeScript, Next.js/React, NestJS/Fastify and PostgreSQL/Prisma.
 Android lives in an independent repository; desktop development is discontinued.
 
+The primary workspace is `C:/Users/dogem/Documents/AnimeSoul`, on branch `main`.
+The previous local application, settings, databases and releases are preserved in the adjacent
+`C:/Users/dogem/Documents/AnimeSoulArchive`, on branch `codex/legacy-local-2026-10-06`.
+Feature migration is ongoing: authentication, saved user data, playback and a complete admin app are still pending.
+
 ## Run locally
 
 Install Node.js 24 and pnpm 11.25.0, then:
@@ -14,6 +19,10 @@ pnpm install --frozen-lockfile
 pnpm run setup
 pnpm dev
 ```
+
+On Windows, [Start AnimeSoul.bat](Start%20AnimeSoul.bat) starts this TypeScript workspace
+and preserves an existing `.env`. If pnpm is unavailable, it uses `npx` with pnpm 11.25.0;
+the first download requires an internet connection.
 
 Website: http://localhost:8021 · API: http://127.0.0.1:8020 · administration: http://localhost:8022.
 The initial preview explicitly uses development fixtures. It contains no migrated account and is not indexed.

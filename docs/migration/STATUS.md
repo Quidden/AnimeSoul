@@ -5,14 +5,20 @@
 ## Preserved baseline
 
 - Website/source snapshot: commit cd54517, branch codex/archive-current-2026-10-06, annotated tag archive-current-2026-10-06.
-- Ignored local backup: original workspace artifacts/migration-backup/2026-10-06. Fifteen configuration/data/signing files were copied and hash-verified.
+- Private local backup: C:/Users/dogem/Documents/AnimeSoulArchive/artifacts/migration-backup/2026-10-06. Fifteen configuration/data/signing files were copied and hash-verified when the backup was created; it was preserved while relocating the old workspace.
 - Live preview SQLite backup: revision 52, integrity_check passed. The archived preview was restored and its health endpoint returned 200.
 - Secrets, databases, signing keys, dependencies and generated releases remain outside Git.
 - Independent mobile repository: C:/Users/dogem/Documents/AnimeSoulMobile, branch main. No signing material copied into Git.
-- New website working copy: C:/Users/dogem/.codex/worktrees/new-web-stack/AnimeSoul. Its main contains only the new stack and relevant documentation/assets.
+- Primary new website workspace: C:/Users/dogem/Documents/AnimeSoul, branch main. The new stack now occupies the root of the opened project.
+- The previous local workspace, including source, settings, data, dependencies and releases, was relocated to C:/Users/dogem/Documents/AnimeSoulArchive, branch codex/legacy-local-2026-10-06. Private files remain outside Git.
+- Additional Codex working copy: C:/Users/dogem/.codex/worktrees/new-web-stack/AnimeSoul, branch codex/root-workspace-transfer-2026-10-06. It no longer occupies main.
 
 The previous master ref remains recoverable. Remote branches/defaults have not been changed; no production cutover occurred.
 Old code/history lives in the archive branch rather than a legacy directory inside the new website.
+
+The primary workspace was switched from master to main. The Windows `Start AnimeSoul.bat`
+launcher now starts the TypeScript workspace there; services from the secondary working copy were stopped.
+Five critical archived configuration/signing files were checked against the protected backup again using SHA256.
 
 ## Implemented foundation
 
@@ -28,6 +34,8 @@ The archived website presentation has been restored: original palette and typogr
 ## Verification and limits
 
 Website/API builds, strict type checks, lint, document links, formatting and npm dependency audit are checked locally.
+After relocating the primary workspace, website/API/admin builds, types, lint, tests, documentation and formatting passed again.
+The Windows launcher was verified in the primary workspace; home, catalog, profile and the admin page respond with HTTP 200.
 Eight tests cover API boundaries, privacy, JSON-LD, indexing configuration and compiled HTML.
 The PostgreSQL integration test requires TEST_DATABASE_URL and an isolated local database ending in \_test.
 It is configured as mandatory in CI; local execution is skipped while Docker is unavailable.
