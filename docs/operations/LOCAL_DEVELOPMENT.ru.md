@@ -2,6 +2,10 @@
 
 # Локальная разработка
 
+Основной запуск всего проекта теперь выполняется в [Docker](DOCKER.ru.md):
+`docker compose up -d --build --wait`. Docker-приложения нужно остановить перед
+запуском Node.js-серверов ниже; PostgreSQL можно оставить работающим в контейнере.
+
 Команды выполняются из корня нового `main`. Нужны Node.js 24 и pnpm 11.25.0,
 закреплённые в [package.json](../../package.json). Для demo-предпросмотра Docker не нужен.
 
@@ -13,7 +17,7 @@ pnpm run setup
 pnpm dev
 ```
 
-Windows: [scripts/windows/Start AnimeSoul.bat](../../scripts/windows/Start%20AnimeSoul.bat).
+Windows: [scripts/windows/Start AnimeSoul Dev.bat](../../scripts/windows/Start%20AnimeSoul%20Dev.bat).
 Launcher сам переходит в корень, проверяет Node.js 24, устанавливает зависимости, если их ещё нет,
 сохраняет имеющийся `.env` и запускает `pnpm dev`. Без установленного pnpm используется
 `npx --yes pnpm@11.25.0`; первое скачивание требует интернета.
@@ -32,25 +36,34 @@ Launcher сам переходит в корень, проверяет Node.js 2
 `pnpm dev` сначала генерирует Prisma Client и собирает contracts/database/API,
 затем запускает API и два Next.js dev-сервера. Web/admin обновляются при редактировании;
 после изменения API или общих скомпилированных пакетов запуск нужно перезапустить.
-Ctrl+C останавливает только процессы этого запуска. При занятом порте сначала остановите
-предыдущий свой запуск; не завершайте все процессы Node.js на машине.
+Windows-launcher проверяет три порта до setup и сборки. Если рабочий AnimeSoul уже запущен,
+он открывает существующий сайт в браузере без повторной сборки и запуска серверов.
+При обычном запуске браузер открывается после готовности всех трёх сервисов, а окно
+батника остаётся открытым для серверов. `pnpm run dev --open` включает такое же открытие;
+обычный `pnpm dev` запускает серверы без открытия браузера.
+`pnpm dev` делает ту же проверку до сборки и ещё раз перед запуском процессов.
+Если запущена только часть сервисов или порт занят другим приложением, выводится список конфликтов.
+Остановите предыдущий свой запуск через Ctrl+C в его терминале и повторите запуск.
+Ctrl+C останавливает только процессы этого запуска.
+
+Native PostgreSQL, ключи `YUMMY_TOKEN`/`KODIK_TOKEN`, `LOCAL_POSTGRES`/`POSTGRES_BIN`, команды импорта и просмотра описаны в [отдельной инструкции](PLAYBACK.ru.md). На этой машине PostgreSQL 18 уже работает без Docker; миграции и восстановление проверены.
 
 ## Настройки и их потребители
 
-| Переменная             | Кто читает сейчас                    | Значение/смысл                                                                  |
-| ---------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
-| `SITE_URL`             | `apps/web/lib/site.ts`               | Канонический origin, локально `http://localhost:8021`                           |
-| `API_URL`              | `apps/web/lib/api.ts`, только сервер | Адрес API, локально `http://127.0.0.1:8020`                                     |
-| `API_HOST`, `API_PORT` | `apps/api/src/config.ts`             | API bind, по умолчанию `127.0.0.1:8020`                                         |
-| `NODE_ENV`             | API и Next.js                        | В production API запрещает demo и требует БД                                    |
-| `DEMO_CATALOG`         | API, Web и seed                      | `true` — fixtures в памяти; `false` — чтение PostgreSQL                         |
-| `DATABASE_URL`         | API, Prisma CLI, seed                | Приватная строка подключения PostgreSQL                                         |
-| `POSTGRES_PASSWORD`    | `infra/compose.dev.yaml`             | Пароль локального контейнера; setup согласует его с шаблоном `DATABASE_URL`     |
-| `PUBLIC_INDEXING`      | Web                                  | По умолчанию false; true требует публичного HTTPS и выключенного demo           |
-| `REDIS_URL`            | Пока ни один runtime-модуль          | Зарезервировано; Redis compose работает без интеграции приложения               |
-| `ALLOW_YUMMY`          | Пока не подключён к runtime          | Зарезервированный default-disabled запрет; наличие true не запускает провайдера |
-| `PAYMENTS_ENABLED`     | Пока не подключён к runtime          | Зарезервировано; изменение флага не создаёт оплату                              |
-| `TEST_DATABASE_URL`    | `tests/database.test.mjs`            | Только отдельная локальная БД с именем, заканчивающимся на `_test`              |
+| Переменная                   | Кто читает сейчас                    | Значение/смысл                                                              |
+| ---------------------------- | ------------------------------------ | --------------------------------------------------------------------------- |
+| `SITE_URL`                   | `apps/web/lib/site.ts`               | Канонический origin, локально `http://localhost:8021`                       |
+| `API_URL`                    | `apps/web/lib/api.ts`, только сервер | Адрес API, локально `http://127.0.0.1:8020`                                 |
+| `API_HOST`, `API_PORT`       | `apps/api/src/config.ts`             | API bind, по умолчанию `127.0.0.1:8020`                                     |
+| `NODE_ENV`                   | API и Next.js                        | В production API запрещает demo и требует БД                                |
+| `DEMO_CATALOG`               | API, Web и seed                      | `true` — fixtures в памяти; `false` — чтение PostgreSQL                     |
+| `DATABASE_URL`               | API, Prisma CLI, seed                | Приватная строка подключения PostgreSQL                                     |
+| `POSTGRES_PASSWORD`          | `infra/compose.dev.yaml`             | Пароль локального контейнера; setup согласует его с шаблоном `DATABASE_URL` |
+| `PUBLIC_INDEXING`            | Web                                  | По умолчанию false; true требует публичного HTTPS и выключенного demo       |
+| `REDIS_URL`                  | Пока ни один runtime-модуль          | Зарезервировано; Redis compose работает без интеграции приложения           |
+| `ALLOW_YUMMY`, `ALLOW_KODIK` | API адаптеров                        | Запрет окружения имеет приоритет над сохранённым переключателем             |
+| `PAYMENTS_ENABLED`           | Пока не подключён к runtime          | Зарезервировано; изменение флага не создаёт оплату                          |
+| `TEST_DATABASE_URL`          | `tests/database.test.mjs`            | Только отдельная локальная БД с именем, заканчивающимся на `_test`          |
 
 Корневые `dev`/`build` загружают `.env` в дочерние процессы. Самостоятельный запуск приложения
 из `apps/web` или `apps/api` не равнозначен запуску workspace: потребуются те же переменные.
@@ -79,8 +92,10 @@ Compose хранит данные в именованных volumes. Остан�
 docker compose --env-file .env -f infra/compose.dev.yaml stop
 ```
 
-На этой машине Docker пока недоступен; последние симптомы и ограничения записаны в
-[статусе миграции](../migration/STATUS.ru.md). В demo-режиме `/api/health` возвращает 200,
+На этой машине полный [Docker-стек](DOCKER.ru.md) работает с PostgreSQL 18.
+`infra:up` относится только к прежней отдельной инфраструктуре; не запускайте её
+параллельно с полной Compose-конфигурацией на порту 54329.
+В demo-режиме `/api/health` возвращает 200,
 а `/api/ready` может возвращать 503: demo не доказывает работоспособность PostgreSQL.
 
 ## Команды и проверки
@@ -103,12 +118,13 @@ docker compose --env-file .env -f infra/compose.dev.yaml stop
 `--env-file` в параметры их workers. Проверки HTML используют отдельные порты 18020–18022,
 чтобы не останавливать открытый предпросмотр.
 
-Сейчас 9 тестов: 8 не требуют PostgreSQL, один интеграционный пропускается без `TEST_DATABASE_URL`.
+Набор локальных тестов расширяется вместе с функциональностью. PostgreSQL-интеграции пропускаются без `TEST_DATABASE_URL`; `pnpm db:verify` выполняет 26 проверок против отдельной БД и backup/restore. Этот запуск не меняет рабочую БД.
 Для него заранее создаётся отдельная локальная БД `animesoul_test`, и в отдельном терминале
 `DATABASE_URL` и `TEST_DATABASE_URL` направляются только в неё; затем выполняются `pnpm db:migrate`
 и `pnpm check`. Не направляйте этот тест в рабочую или production-базу.
-В [quality.yml](../../.github/workflows/quality.yml) CI создаёт PostgreSQL test-service,
-применяет миграцию и задаёт обе переменные: интеграционный тест там должен выполняться.
+Автоматические тесты GitHub Actions удалены. Проверки выполняются локально; публикация
+образов запускается вручную: [GitHub/GHCR](GITHUB.ru.md). Перед коммитом выполняйте
+`pnpm secrets:check`, а после staging — `pnpm secrets:check --staged`.
 
 ## Куда складывать файлы
 
@@ -118,3 +134,14 @@ docker compose --env-file .env -f infra/compose.dev.yaml stop
 `node_modules`, `.next`, `dist`, `generated` и `.idea` — локальные служебные файлы.
 Старый код и базы не возвращаются в корень нового `main`; восстановление выполняется отдельно по
 [инструкции](../migration/STATUS.ru.md#восстановление).
+
+## Аккаунты
+
+Нужен Node.js 24.7+ в ветке 24 для native Argon2id. `pnpm setup` добавляет приватный MFA-ключ, сохраняя остальные настройки.
+Установите `ADMIN_URL=http://localhost:8022` рядом с `SITE_URL`. Регистрация и привязка находятся на `/account`;
+личная библиотека — `/library`. Команды `pnpm profiles:import` и `pnpm account:operator` описаны в
+[инструкции аккаунтов](ACCOUNTS.ru.md). `pnpm db:verify` включает проверки аккаунтов и восстановление библиотеки.
+
+Фоновые задачи каталога: `CATALOG_WORKER=true` запускает worker с `pnpm dev`; ручной запуск — `pnpm catalog:worker`, постановка — `pnpm catalog:sync`. Нужна настроенная PostgreSQL, источники по умолчанию выключены. [Полный импорт и админка](CATALOG.ru.md).
+
+Google и почта: `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `MAIL_MODE=file|smtp|disabled`, SMTP-поля описаны в [аккаунтах](ACCOUNTS.ru.md). `pnpm setup` добавляет локальный file mode, если он отсутствует; production его запрещает. Пароли/ключи не копируются в NEXT_PUBLIC-поля.

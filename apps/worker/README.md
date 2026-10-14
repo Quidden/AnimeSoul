@@ -1,16 +1,19 @@
 [English](README.md) | [Русский](README.ru.md)
 
-# Background worker boundary
+# Background jobs
 
-Reserved directory only: no `package.json`, entry point or job runner. `pnpm dev` does not launch a worker.
-Redis is available in local compose but no queue is connected to it yet.
+`main.mjs` launches the typed runner in `apps/api/src/providers/catalog-worker.ts`, built with API.
+Kodik is the only catalog provider. YummyAnime is a playback reserve. The active catalog queue uses PostgreSQL leases, a persisted Kodik next cursor and release counts, bounded retries
+and observable status.
 
-Planned responsibilities: catalog import/mapping, media validation/conversion, mail delivery,
-payment-event retry/reconciliation and metric aggregation. Each job needs a validated payload,
-idempotency, bounded retries/timeouts, dead-letter handling and observable status before activation.
-Durable payments and entitlements remain in PostgreSQL.
+Enqueue with `pnpm catalog:sync`, run with `pnpm catalog:worker`. `CATALOG_WORKER=true` opts into
+launch with `pnpm dev`. It is off by default and requires configured PostgreSQL. Redis is unused.
+The full [Docker stack](../../docs/operations/DOCKER.md) starts a separate worker
+container automatically after successful database migrations.
+Credentials never enter payloads or public logs. Admin provides control and mapping review.
+[Catalog operations](../../docs/operations/CATALOG.md).
 
-The first executable worker must be added to workspace build/launch/CI together with its actual queue
-and server configuration. Do not store provider credentials in job payloads or public logs.
-See [project dependencies](../../docs/architecture/PROJECT_MAP.md),
-[data model](../../docs/architecture/DATA_MODEL.md) and [roadmap](../../docs/architecture/WEB_STACK_PLAN.md).
+Lease competition, restart recovery, page rollback and disable behavior are covered by
+`pnpm db:verify` and mandatory CI PostgreSQL tests. Media, mail, payment reconciliation and metrics
+remain future jobs, not connected to this runner.
+[Project map](../../docs/architecture/PROJECT_MAP.md) · [Data model](../../docs/architecture/DATA_MODEL.md).

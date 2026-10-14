@@ -5,31 +5,60 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { PublicProfile } from "@animesoul/contracts";
 import { Icon } from "./Icon";
+import { ProfileControls } from "./ProfileControls";
+import { ProfileImage } from "./ProfileImage";
+import { accountSettingsHref } from "../lib/account-settings";
 
-function Avatar({ profile, large = false }: { profile: PublicProfile; large?: boolean }) {
-  return (
-    <span className={`profile-avatar${large ? " profile-avatar-large" : ""}`}>
-      {profile.avatar ? (
-        <img
-          src={profile.avatar}
+function Avatar({
+  profile,
+  large = false,
+  editable = false,
+}: {
+  profile: PublicProfile;
+  large?: boolean;
+  editable?: boolean;
+}) {
+  const [failed, setFailed] = useState<string | null>(null);
+  const content = (
+    <>
+      {profile.avatar && profile.avatar !== failed ? (
+        <ProfileImage
+          value={profile.avatar}
+          fallback={<span>{Array.from(profile.username).slice(0, 2).join("").toUpperCase()}</span>}
           alt={large ? `Аватар ${profile.username}` : ""}
           width={large ? 110 : 34}
           height={large ? 110 : 34}
+          onError={() => setFailed(profile.avatar)}
         />
       ) : (
-        <span>{profile.username.slice(0, 2).toUpperCase()}</span>
+        <span>{Array.from(profile.username).slice(0, 2).join("").toUpperCase()}</span>
       )}
       <i className={`profile-presence-dot is-${profile.presence}`} />
-    </span>
+    </>
+  );
+  const className = `profile-avatar${large ? " profile-avatar-large" : ""}`;
+  return editable ? (
+    <Link
+      className={className + " profile-avatar-settings-link"}
+      href={accountSettingsHref("media-settings")}
+      aria-label="Настроить аватар и обложку"
+      title="Аватар и обложка"
+    >
+      {content}
+    </Link>
+  ) : (
+    <span className={className}>{content}</span>
   );
 }
 export function ProfileHeader({ profile }: { profile: PublicProfile }) {
+  const [isOwner, setIsOwner] = useState(false);
+  const [failedCover, setFailedCover] = useState<string | null>(null);
   const hero = useRef<HTMLElement>(null);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [collapse, setCollapse] = useState(0);
   const identity = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    setPortalTarget(document.body);
+    setPortalTarget(document.querySelector<HTMLElement>(".profile-brand"));
     let frame = 0;
     const update = () => {
       if (frame) return;
@@ -66,8 +95,20 @@ export function ProfileHeader({ profile }: { profile: PublicProfile }) {
       style={{ "--profile-collapse": 0 } as CSSProperties}
     >
       <div className="profile-cover" aria-hidden="true">
-        {profile.banner ? (
-          <img src={profile.banner} alt="" />
+        {profile.banner && profile.banner !== failedCover ? (
+          <ProfileImage
+            value={profile.banner}
+            cover
+            alt=""
+            fallback={
+              <div className="profile-cover-art">
+                <span className="profile-moon" />
+                <span className="profile-mountain" />
+                <span className="profile-mountain mountain-near" />
+              </div>
+            }
+            onError={() => setFailedCover(profile.banner)}
+          />
         ) : (
           <div className="profile-cover-art">
             <span className="profile-moon" />
@@ -97,10 +138,22 @@ export function ProfileHeader({ profile }: { profile: PublicProfile }) {
           portalTarget,
         )}
       <div className="profile-identity" ref={identity}>
-        <Avatar profile={profile} large />
+        <Avatar profile={profile} large editable={isOwner} />
         <div className="profile-identity-text">
           <div className="profile-name-line">
-            <h1>{profile.username}</h1>
+            <div className="profile-name-edit-group">
+              <h1>{profile.username}</h1>
+              {isOwner && (
+                <Link
+                  className="profile-name-edit"
+                  href={accountSettingsHref("profile-settings")}
+                  aria-label="Настроить имя и описание профиля"
+                  title="Настройки профиля"
+                >
+                  <Icon name="settings" width={16} height={16} />
+                </Link>
+              )}
+            </div>
             {profile.badge && (
               <span className="profile-badge">
                 <Icon name="check" />
@@ -120,13 +173,14 @@ export function ProfileHeader({ profile }: { profile: PublicProfile }) {
           </div>
         </div>
       </div>
-      {profile.about !== undefined && (
+      {!!profile.about?.trim() && (
         <div className="profile-about">
           <div className="profile-about-text">
             <p>{profile.about}</p>
           </div>
         </div>
       )}
+      <ProfileControls profile={profile} onOwnerChange={setIsOwner} />
     </section>
   );
 }

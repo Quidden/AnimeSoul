@@ -1,0 +1,42 @@
+services:
+  postgres:
+    ports: !reset []
+  migrate:
+    environment:
+      NODE_ENV: production
+  api:
+    ports: !reset []
+    environment:
+      NODE_ENV: production
+      MAIL_MODE: ${MAIL_MODE:-disabled}
+    volumes: !override
+      - profile-media:/app/artifacts/profile-media
+      - diagnostics:/app/artifacts/diagnostics
+  worker:
+    environment:
+      NODE_ENV: production
+      MAIL_MODE: ${MAIL_MODE:-disabled}
+  web:
+    ports: !reset []
+  admin:
+    ports: !reset []
+  caddy:
+    image: caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+    restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set the public website domain}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?Set a separate administration domain}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./infra/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+
+volumes:
+  caddy-data:
+  caddy-config:

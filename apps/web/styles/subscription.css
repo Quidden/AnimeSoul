@@ -1,0 +1,407 @@
+.embedded-resume-notice {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 12px;
+}
+.player-engines {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 18px;
+}
+.player-engines .text-link {
+  border: 0;
+  padding: 0;
+  min-height: 0;
+  background: none;
+  color: var(--accent);
+}
+.subscription-page > .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.player-engines button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px 18px;
+}
+.player-engines button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--panel-strong);
+}
+.player-engines .player-engine-native {
+  border-color: var(--accent);
+  color: var(--accent-soft);
+  animation: player-engine-pulse 3s ease-in-out infinite;
+}
+.player-engine-native span {
+  font-size: 10px;
+  margin-left: 8px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.player-engines p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  flex: 1 1 200px;
+}
+@keyframes player-engine-pulse {
+  50% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--accent) 13%, transparent),
+      0 0 20px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
+.subscription-dialog {
+  width: min(960px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.subscription-dialog::backdrop {
+  background: #050409bd;
+  backdrop-filter: blur(8px);
+}
+.subscription-close {
+  position: sticky;
+  top: 16px;
+  margin: 16px 16px -58px auto;
+  display: flex;
+  z-index: 2;
+  font-size: 24px;
+  width: 42px;
+  padding: 0;
+  background: var(--panel);
+}
+.subscription-content {
+  padding: 44px;
+}
+.subscription-intro {
+  max-width: 650px;
+  padding-right: 20px;
+}
+.subscription-intro h2 {
+  margin: 14px 0;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.1;
+  letter-spacing: -1px;
+}
+.subscription-intro p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+.subscription-intro .subscription-trial,
+.subscription-intro .subscription-access {
+  color: var(--accent-soft);
+}
+.subscription-plans-link {
+  display: inline-block;
+  color: var(--accent-soft);
+  text-underline-offset: 4px;
+  margin-top: 6px;
+}
+#subscription-plans-title {
+  scroll-margin-top: 100px;
+}
+.subscription-features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 28px 0 36px;
+}
+.subscription-features figure {
+  margin: 0;
+  min-width: 0;
+}
+.subscription-features img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16/9;
+  object-fit: contain;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.subscription-features h4 {
+  margin: 16px 0 8px;
+  font-size: 18px;
+}
+.subscription-features p,
+.subscription-billing-note {
+  color: var(--muted);
+  line-height: 1.6;
+  font-size: 13px;
+}
+.subscription-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.subscription-plan {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.subscription-plan[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--panel-strong);
+}
+.subscription-price {
+  font-size: 21px;
+  font-weight: 700;
+}
+.subscription-plan del {
+  color: var(--muted);
+  font-size: 12px;
+}
+.subscription-discount {
+  color: var(--accent-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.subscription-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0 12px;
+}
+.subscription-cta button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+.subscription-page {
+  max-width: 1280px;
+  margin: 24px auto 60px;
+}
+.subscription-demo {
+  margin: 36px 0 54px;
+}
+.subscription-demo-heading h3,
+.subscription-gallery > h3 {
+  font-size: clamp(21px, 2.3vw, 28px);
+  letter-spacing: -0.5px;
+  margin: 0 0 10px;
+}
+.subscription-demo-heading p,
+.subscription-gallery-intro,
+.subscription-demo-footer p,
+.subscription-demo-hint {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.subscription-demo-screen {
+  position: relative;
+  aspect-ratio: 16/9;
+  margin-top: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #050407;
+  isolation: isolate;
+}
+.subscription-demo-screen:has(:fullscreen) {
+  overflow: visible;
+}
+.subscription-demo-start,
+.subscription-demo-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.subscription-demo-start img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.subscription-demo-start > div {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 18px;
+}
+.subscription-demo-start p {
+  background: #100d19eb;
+  color: #fff;
+  padding: 12px;
+  border-radius: 8px;
+}
+.subscription-demo-start .primary {
+  box-shadow: 0 4px 24px #100c2580;
+}
+.subscription-demo-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+.subscription-demo-footer p,
+.subscription-demo-hint {
+  margin: 0;
+}
+.subscription-demo-hint {
+  font-size: 12px;
+  margin-top: 10px;
+}
+.subscription-shot {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--accent-soft);
+  text-align: left;
+  cursor: zoom-in;
+}
+.subscription-shot img {
+  transition: border-color 0.2s;
+}
+.subscription-shot:hover img {
+  border-color: var(--accent);
+}
+.subscription-shot span {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+}
+.subscription-shot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+  border-radius: 12px;
+}
+.subscription-lightbox {
+  width: min(1440px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 16px;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.subscription-lightbox::backdrop {
+  background: #030207e6;
+}
+.subscription-lightbox-heading,
+.subscription-lightbox-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.subscription-lightbox-heading {
+  margin-bottom: 14px;
+}
+.subscription-lightbox img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: calc(100dvh - 190px);
+  object-fit: contain;
+  background: #050407;
+}
+.subscription-lightbox-footer {
+  margin-top: 14px;
+  color: var(--muted);
+}
+.subscription-lightbox-original {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--accent-soft);
+  font-size: 13px;
+  text-underline-offset: 4px;
+}
+@media (min-width: 721px) {
+  .subscription-dialog .animesoul-player-settings {
+    position: fixed;
+    top: 32px;
+    bottom: 32px;
+    right: max(32px, calc((100vw - 960px) / 2 + 32px));
+    max-height: calc(100dvh - 64px);
+  }
+  .subscription-dialog .animesoul-player:fullscreen .animesoul-player-settings {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    bottom: 66px;
+    max-height: none;
+  }
+}
+@media (max-width: 600px) {
+  .subscription-dialog {
+    width: calc(100% - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 14px;
+  }
+  .subscription-content {
+    padding: 28px 18px;
+  }
+  .subscription-intro {
+    padding-right: 22px;
+  }
+  .subscription-features {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .subscription-plan-grid {
+    grid-template-columns: 1fr;
+  }
+  .subscription-plan {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .subscription-plan .subscription-discount {
+    grid-column: 1/-1;
+  }
+  .subscription-cta a,
+  .subscription-cta button {
+    width: 100%;
+  }
+  .player-engines button {
+    flex: 1;
+    padding: 10px 12px;
+  }
+  .player-engines p {
+    flex-basis: 100%;
+  }
+  .subscription-close {
+    top: 10px;
+    margin: 10px 10px -52px auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-engines .player-engine-native {
+    animation: none;
+  }
+}

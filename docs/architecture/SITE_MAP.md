@@ -2,135 +2,111 @@
 
 # Site and API map
 
-Implemented `main` routes as of 2026-10-06. Local origins: website `http://localhost:8021`,
-API `http://127.0.0.1:8020`, administration `http://localhost:8022`.
-The `/api` prefix currently belongs to port 8020; Next.js does not proxy it yet.
+Checked 2026-10-08. Website: http://localhost:8021; API: http://127.0.0.1:8020; admin: http://localhost:8022.
+Public SSR uses server DTO requests. Client mutations use bounded, allowlisted Next.js proxies.
 
-## Pages and navigation
+| Page                                      | Implemented behavior                                                                       |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------ |
+| /                                         | Actual continue-watching banner, watching shelf and popular catalog                        |
+| /catalog                                  | Popular/ongoing/new/top shelves, full-database filters and random selection                |
+| /catalog/:section, /catalog/genres/:genre | Dedicated discovery pages, pagination and watched-genre selection                          |
+| /anime/:slug/franchise                    | Published exact-ID related titles and current-title marker                                 |
+| /characters/:slug                         | Character portrait, names, description, voice actors and published anime appearances       |
+| /anime/:slug                              | Metadata, episode/translation embeds, favorites, scores and folders                        |
+| /users/:username                          | Guest public profile; owner/friends see permitted blocks; inaccessible profiles return 404 |
+| /account                                  | Login/register/claim, owner editing/privacy, password and MFA setup                        |
+| /library                                  | Private folders, notes, season/episode scores and imported positions                       |
+| /friends                                  | People search, friends, requests, subscriptions, followers and blocks; sign-in required    |
+| /robots.txt, /sitemap.xml                 | Locally disallowed/empty; public indexing requires consent and HTTPS                       |
+| Admin /                                   | Role/MFA sign-in, provider switches, import queue and mapping review                       |
 
-```mermaid
-flowchart TD
-  Home[Home /] --> Catalog[Catalog /catalog]
-  Search[Header search] --> Filter[Catalog with query parameters]
-  Catalog --> Anime[Anime /anime/:slug]
-  Filter --> Anime
-  Anime -->|Genre link| Filter
-  Header[Menu and demo account button] --> Profile[Public profile /users/:username]
-  Footer --> Home
-  Footer --> Catalog
-  Footer -->|Demo mode| Profile
-  Profile --> Favorites[Favorites anchor]
-  Profile --> Collections[Collections if visible]
-  Profile --> Ratings[Ratings if visible]
-  Profile --> Statistics[Statistics if visible]
-  Favorites --> Anime
-  Ratings --> Anime
-  Admin[Separate admin origin] --> Closed[Closed-access page]
-```
+Header links to catalog, account, library and friends. Demo soul is not authentication.
+Published library titles open playback; unpublished imported references await catalog enrichment.
+Profile anchors are profile-favorites, profile-collections, profile-ratings and profile-statistics,
+only when their blocks are visible. Catalog accepts q (100 chars), genre, status (released/ongoing/announced),
+sort (popular/rating/rating-asc/title/newest/oldest), format, translation, group, excludeGenre,
+ratingSource/minRating, personalized, from/to (1900–2200) and page; all filters precede pagination.
+Filtered pages use noindex and canonical /catalog.
 
-| URL                                                | Content/data                                                                                                      | Source under `apps/web/app`                                                   | State                                                                     |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `/`                                                | Banner, empty watching shelf, up to 6 cards from `GET /api/catalog`                                               | [page.tsx](../../apps/web/app/page.tsx)                                       | SSR works; resume playback is pending                                     |
-| `/catalog`                                         | Cards, search and filter form                                                                                     | [catalog/page.tsx](../../apps/web/app/catalog/page.tsx)                       | SSR works; no pagination                                                  |
-| `/catalog?q=…&genre=…&status=…&sort=…&from=…&to=…` | Filtered version of the same page                                                                                 | Same source                                                                   | Canonical `/catalog`; nonempty query parameters trigger noindex           |
-| `/anime/:slug`                                     | Poster, names, year, genres, status and description from `GET /api/anime/:slug`                                   | [anime/[slug]/page.tsx](../../apps/web/app/anime/%5Bslug%5D/page.tsx)         | SSR/metadata work; playback, episodes and save controls are pending       |
-| `/users/:username`                                 | Cover, avatar, username, UUID, decorative badge, presence and permitted blocks from `GET /api/profiles/:username` | [users/[username]/page.tsx](../../apps/web/app/users/%5Busername%5D/page.tsx) | Public read; no owner editing/persistence                                 |
-| `/robots.txt`                                      | Crawl rules from `PUBLIC_INDEXING`                                                                                | [robots.ts](../../apps/web/app/robots.ts)                                     | Local crawling is disallowed                                              |
-| `/sitemap.xml`                                     | Home, catalog, published anime and eligible public profiles                                                       | [sitemap.ts](../../apps/web/app/sitemap.ts)                                   | Empty locally; requires real data and public HTTPS                        |
-| Unknown URL                                        | 404 page                                                                                                          | [not-found.tsx](../../apps/web/app/not-found.tsx)                             | Includes legacy `/account`, `/auth` and `/watch`, absent from the new app |
-| Content read failure                               | Page error message                                                                                                | [error.tsx](../../apps/web/app/error.tsx)                                     | API failures do not silently introduce fabricated content                 |
+## API
 
-Fixture examples: `/anime/attack-on-titan`, `/anime/frieren`, `/anime/violet-evergarden`,
-`/anime/your-name`. `/users/soul` is a fixture, not a signed-in account.
-The `soul` header button appears with `DEMO_CATALOG=true`.
+`GET /api/catalog/random?mode=all|filtered|taste` selects a published title; taste and
+personal scores require the web session. `GET /api/anime/:slug/related` returns exact-ID
+published related titles. Personal catalog queries use no-store and are excluded from indexing.
 
-### Catalog parameters
+| Routes                                                                             | Access and purpose                                                  |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| GET /api/health, /api/ready                                                        | Process liveness; PostgreSQL readiness returns 503 when unavailable |
+| GET /api/catalog, /api/anime/:slug                                                 | Public catalog and metadata                                         |
+| GET /api/anime/:slug/characters, /api/characters/:slug                             | Per-title cast and shared character profiles                        |
+| GET /api/anime/:slug/playback                                                      | Current approved iframes; no provider secrets                       |
+| GET /api/profiles/:username                                                        | Filtered public DTO                                                 |
+| GET /api/sitemap/catalog, /api/sitemap/profiles                                    | Published/indexing-eligible records                                 |
+| POST /api/auth/register, /api/auth/login, /api/auth/claim                          | Origin/custom header; issue web cookie                              |
+| GET /api/auth/me                                                                   | Own identity, roles, MFA status and CSRF; web session               |
+| POST /api/auth/logout, /api/auth/logout-all, /api/auth/password                    | Revoke sessions/change password; Origin/CSRF                        |
+| POST /api/auth/mfa/begin, /api/auth/mfa/confirm                                    | Owner-only confirmed setup                                          |
+| GET/POST /api/account/profile, /api/account/library                                | Owner profile/library and mutations                                 |
+| POST /api/account/ratings                                                          | Season/episode scores                                               |
+| POST /api/account/folders, /api/account/folders/delete, /api/account/folders/entry | Owner folders, memberships and notes                                |
+| POST /api/account/progress                                                         | Position/duration/completion without video URLs                     |
+| POST /api/admin/auth/login                                                         | Admin Origin, password, explicit role and MFA; separate cookie      |
+| GET /api/admin/auth/me, POST /api/admin/auth/logout, GET /api/admin                | Separate admin audience, role and MFA                               |
 
-| Parameter    | Values/behavior                                                                   |
-| ------------ | --------------------------------------------------------------------------------- |
-| `q`          | Trimmed title query, at most 100 characters; the only filter forwarded to the API |
-| `genre`      | Exact genre from the returned catalog                                             |
-| `status`     | `released`, `ongoing`, `announced`                                                |
-| `sort`       | `title` by default; `newest` or `oldest` by year                                  |
-| `from`, `to` | Four-digit year from 1900 to 2200; invalid input is ignored                       |
+All responses use no-store. Account mutations derive ownership from the session, ignoring body IDs/x-role.
+Administrative paths are guarded before handlers except login, which verifies credentials/role/MFA itself.
+Web proxy excludes admin paths; admin proxy excludes web-account paths. Request streams are limited to 64 KiB.
+[Account DTOs](../../packages/contracts/src/account.ts).
 
-The server page applies genre, status, year and sorting to the returned records.
-Database mode returns at most 60 title-sorted records: these filters do not yet cover the entire database.
-Search also requests the unfiltered catalog for genre options. Full-text/trigram search,
-username search, season relationships and pagination remain planned.
+## Indexing and pending routes
 
-### Profile sections
+PUBLIC_INDEXING=false sets noindex/disallow and an empty sitemap. Public HTTPS, real data and owner consent
+are required to enable indexing. Filters, account, library, admin and fixtures never enter sitemap.
+Metadata/JSON-LD use only public DTOs. Media/GIF uploads, public collection pages,
+payment callbacks and broader user/moderation administration remain pending.
 
-| Anchor                 | Public DTO field | Availability                                                 |
-| ---------------------- | ---------------- | ------------------------------------------------------------ |
-| `#profile-favorites`   | `favoriteIds`    | Only when favorites are permitted by the server              |
-| `#profile-collections` | `folders`        | Only when collections are permitted; no separate folder page |
-| `#profile-ratings`     | `ratings`        | Only when ratings are permitted                              |
-| `#profile-statistics`  | `statistics`     | Only when statistics are permitted                           |
+[Accounts](../operations/ACCOUNTS.md) · [Playback](../operations/PLAYBACK.md) · [Data](DATA_MODEL.md).
 
-About appears below the username without a separate route. Anchors are sections of one page,
-not sitemap entries. The demo profile exposes about, favorites and statistics; collections/ratings are hidden.
-Hidden blocks and their local navigation do not appear in server HTML.
-Stored presence values: `online`, `offline`, `dnd`, `invisible`; public `invisible` becomes `offline`.
-Owner presence changes and persistent settings are not implemented.
-Presence is a stored profile field; heartbeat and automatic online detection are also pending.
+## Catalog administration
 
-## Public API
+GET /api/anime/:slug/playback uses Kodik then the enabled reserve; ?provider=yummy is rejected. Site-wide reserve changes require owner/delegation and admin MFA.
+GET /api/catalog/by-ids accepts up to 100 UUIDs and returns published metadata only.
+GET /api/admin/catalog?page=1 returns provider states, recent jobs and conflict review pages.
+POST /api/admin/providers/switch, /api/admin/catalog/import, /api/admin/catalog/job and
+/api/admin/catalog/resolve require admin audience, role, MFA, Origin/CSRF and a reason.
+[Contracts](../../packages/contracts/src/catalog-admin.ts) · [Operations](../operations/CATALOG.md).
 
-Routes come from [CatalogController](../../apps/api/src/catalog/catalog.controller.ts);
-liveness/readiness from [HealthController](../../apps/api/src/health/health.controller.ts).
-Every response has `Cache-Control: no-store`. [app.ts](../../apps/api/src/app.ts) denies the
-administrative prefix before handlers execute.
+## Identity and future social routes
 
-| Method/path                     | Response/constraints                                                                                         | Consumer                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
-| `GET /api/health`               | `status: ok`, version `0.4.0`; checks process, not database                                                  | Diagnostics                              |
-| `GET /api/ready`                | 200 if `SELECT 1` succeeds; otherwise 503                                                                    | PostgreSQL readiness                     |
-| `GET /api/catalog?q=…`          | `{ source, items }`; query ≤ 100 characters, invalid input 400; database reads published records, maximum 60 | Home, catalog, profile favorites/ratings |
-| `GET /api/anime/:slug`          | Public `Anime`; `[a-z0-9-]` slug, length 1–160; missing/invalid slug 404                                     | Anime page/metadata                      |
-| `GET /api/profiles/:username`   | Public DTO with hidden fields removed; name > 80 characters or unavailable record 404                        | Profile/metadata                         |
-| `GET /api/sitemap/catalog`      | `{ slug, updatedAt }[]`, published non-demo records only; demo returns `[]`                                  | Sitemap                                  |
-| `GET /api/sitemap/profiles`     | `{ username, updatedAt }[]`, public indexing-enabled profiles of active users; demo returns `[]`             | Sitemap                                  |
-| Any `/api/admin` or nested path | 401; no management operations                                                                                | Future admin app                         |
+`GET /api/auth/options` reports Google/email availability without credentials. `POST /api/auth/email/verify` and `/email/change` require owner/Origin/CSRF; `/email/confirm`, `/password/request-reset`, `/password/reset` require Origin/custom header. `POST /api/auth/google/start` starts login/link; linking requires session, CSRF and password. `GET /api/auth/google/callback` checks state/browser/PKCE/nonce and issues a web cookie. Next callback redirects to `/account` without retaining code/state in the URL. `/api/account/profile` persists presets; `/api/auth/me` includes avatar, publication, emailVerified, hasPassword and googleLinked.
 
-Database mode fails if persistence is unavailable; it does not silently enable fixtures.
-There are no write APIs yet: login/logout, profile/library mutations, media uploads, GIF search,
-playback streams and payment callbacks are absent. See the [data model](DATA_MODEL.md) for DTO boundaries.
+Community, hashtag filtering and post routes are implemented below. Message and watch-room routes remain planned: [Social network plan](SOCIAL_NETWORK_PLAN.md).
 
-## Administration
+## Episodes and progress
 
-Port 8022 implements `/` and `/robots.txt`. The home page returns 200 explaining closed access,
-with no personal/financial data or functional dashboard. Metadata, `X-Robots-Tag` and robots
-deny indexing/crawling. This is a separate application, not `/admin` inside the public website.
-Administrative sessions and UI-to-API integration are pending.
+`/anime/:slug/episodes/:episodeId?t=125` serves episode SSR, canonical without timestamps, TVEpisode and links.
+`GET /api/anime/:slug/episodes` and `/episodes/:id` expose published episodes without media URLs.
+`GET /api/anime/:slug/stream?source=<ID>` returns a temporary direct DTO or embed fallback without private keys.
+`GET /api/account/playback/:animeId`, `POST /api/account/playback/session` and `/progress` require the owner;
+writes verify Origin/CSRF. `/episodes/sitemap-index.xml` lists 256 `/episodes/sitemap/:bucket.xml` shards;
+`GET /api/sitemap/episodes/:bucket` (0–255) reads only real published episodes.
+[Player configuration and limits](../operations/PLAYBACK.md).
 
-## Indexing
+## Friends and private profiles
 
-`PUBLIC_INDEXING=false` means noindex, robots disallow and an empty sitemap.
-Enabling it requires `DEMO_CATALOG=false` and a public HTTPS `SITE_URL`.
-Anime also requires `indexable`; profiles require owner indexing consent and public availability.
-Descriptions/JSON-LD use public DTOs, keeping hidden fields out of search metadata.
-Anime uses `CreativeWork`; profile uses `ProfilePage`/`Person`, emitted only when indexing is permitted.
+The friends route provides user search, requests, friends, follows and blocks with noindex. User pages honor owner/friend/block access with a web session; guests see only public sections. The profile-friends anchor requires an accessible list. The account/social and account/profiles APIs are documented in the [guide](../operations/FRIENDS.md). Metadata/JSON-LD use guest data only; authenticated HTML has noindex.
 
-Sitemap excludes filters, anchors, admin, account and development records; update dates come from the database.
-The generator rejects totals over 50,000 URLs until sharding is implemented.
-Redirect tables, OpenAPI, localization and Search Console integration are pending.
-Robots controls crawling, not authorization.
+## First stage 6 discussions
 
-## Planned product routes
+`/community` lists recent content, `/community?tag=…` filters hashtags, `/posts/:id` opens a post
+and replies. Anime/episode pages show related posts and discussion; profiles expose permitted
+posts, reviews and comment history. All read the same Post/Comment records; discussion SEO is off.
+[Content APIs](../operations/CONTENT.md) · [100 demo accounts](../operations/DEMO_COMMUNITY.md).
 
-These are proposed addresses for later work, not existing pages.
+## Administration routes
 
-| Area              | Proposed address                                                                        | Prerequisite                                                        |
-| ----------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Authentication    | `/auth/login`, `/auth/register`, `/auth/reset`                                          | Sessions, passwords, CSRF and anti-bot                              |
-| Owner settings    | `/account`, `/account/profile`, `/account/privacy`, `/account/security`                 | Ownership, persistent presence/media/visibility, session revocation |
-| Library           | `/library`, `/library/folders/:id`, `/library/history`                                  | Normalized records and imported UUIDs/progress                      |
-| Public collection | `/users/:username/collections/:id`                                                      | Folder visibility policy and dedicated DTO                          |
-| Playback          | Player on `/anime/:slug`; dedicated watch URL to be decided during migration            | Permitted provider, seasons/episodes, progress and rights           |
-| Premium/payment   | `/premium`, `/payment/return`                                                           | Plans, server entitlements, sandbox and verified callbacks          |
-| Help/legal        | `/help`, `/terms`, `/privacy`                                                           | Reviewed texts before public launch                                 |
-| Management        | Separate admin origin: users, catalog, providers, media, billing, security, system, SEO | Sessions/MFA, permissions, audit and defined metric formulas        |
+`/`, `/analytics`, `/activity`, `/features`, `/users`, `/journal`, `/plans`, `/promotions`,
+`/subscription-history`, `/announcements`, `/notifications`, `/anime-notices`, `/catalog`,
+`/winter`, `/maintenance`, `/templates`, `/system`, `/admin-journal`, `/diagnostics` share a protected layout and noindex.
 
-Update the route map and DTOs alongside new pages, APIs and checks.
-See the [migration roadmap](WEB_STACK_PLAN.md) for sequencing.
+[API and operating rules](../operations/ADMINISTRATION.md).

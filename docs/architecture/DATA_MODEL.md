@@ -2,93 +2,100 @@
 
 # Data and public contracts
 
-Authoritative schema: [schema.prisma](../../packages/database/prisma/schema.prisma).
-Initial migration: [202610060001_foundation](../../packages/database/prisma/migrations/202610060001_foundation/migration.sql).
-A table does not imply an implemented workflow. Local PostgreSQL migration and restoration remain
-unconfirmed; see [migration evidence](../migration/STATUS.md).
+Stage 4 adds `Episode` (UUID, title, normalized season/number, optional duration) and `EpisodeProvider`
+(provider/title/source ID mapped to an episode without URLs). Composite foreign keys prevent cross-title mappings;
+conflicts never overwrite established identity. New progress uses `episode:<UUID>` and `activePlaybackId`;
+nullable `episodeId` preserves legacy keys/positions. `PlaybackSession` binds user, web auth session and episode
+with sequence/lastEventAt/expiry. Row locking rejects stale events and wall time bounds watchedSeconds.
+Auth-session deletion cascades playback sessions; starting playback cleans the user's expired sessions.
+[Episode contracts](../../packages/contracts/src/episodes.ts) · [Streams](../../packages/contracts/src/streams.ts).
 
-## Schema relationships
+The current [Prisma schema](../../packages/database/prisma/schema.prisma) is applied through twelve SQL migrations.
+See [status](../migration/STATUS.md) for PostgreSQL, import and restoration evidence.
 
-```mermaid
-erDiagram
-  User ||--o| UserProfile : profile
-  User ||--o{ Session : sessions
-  User ||--o{ UserRole : roles
-  User ||--o{ Order : orders
-  User ||--o{ Entitlement : entitlements
-  Order ||--o{ Payment : payments
-  Anime ||--o{ AnimeProvider : providers
-```
+| Model                                                        | Implemented purpose                                                                                                                                            |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User / UserProfile                                           | Stable UUID, unique nullable email, Argon2id hash, disable flag; username, visibility, presence and private preferences. Unclaimed imports have no credentials |
+| Session / UserRole                                           | Hashed random token, web/admin audience, expiry, revocation and MFA confirmation; explicit role grants                                                         |
+| LegacyProfile                                                | Legacy ID → UUID, source hash, expiring one-time claim hash and claimed timestamp                                                                              |
+| MfaCredential                                                | Encrypted TOTP, expiring pending setup, monotonic used counter and hashed single-use recovery codes                                                            |
+| AuthThrottle                                                 | Hashed identity/IP key, attempt count and window retained across restarts                                                                                      |
+| LibraryItem                                                  | Unique user/anime, favorite, title score, last episode/dub/season and safe progress/tracking details                                                           |
+| LibraryRating                                                | Normalized season/episode scores with unique user/anime/scope/key and owner-library FK                                                                         |
+| LibraryFolder / FolderEntry                                  | Owner folders, memberships and private notes. Composite folder/user FK prevents inconsistent ownership                                                         |
+| EpisodeProgress                                              | Unique user/anime/episode key; position/duration/watchedSeconds, completion and safe legacy details                                                            |
+| Anime / AnimeProvider                                        | Stable internal UUID/slug and metadata; exact external ID mappings                                                                                             |
+| Character / AnimeCharacter                                   | Stable Shikimori character identity, cached names/portrait/profile and per-title role relationships                                                            |
+| ProviderSetting                                              | Persisted provider switch, off by default and subordinate to environment policy                                                                                |
+| AuditEvent                                                   | Import, claim, sessions, password, MFA, profile and operator actions; database append-only privileges remain pending                                           |
+| SubscriptionTrial / SubscriptionPlan / SubscriptionPromotion | One registration trial, editable plans and dated promotional discounts; see [subscriptions](../operations/SUBSCRIPTIONS.md)                                    |
+| Entitlement                                                  | Dated player access, including audited manual grants and revocations; checked before issuing direct streams                                                    |
+| Order / Payment / WebhookEvent                               | Reserved billing boundary; payment processing is not connected                                                                                                 |
 
-| Model             | Main fields/constraints                                                                                       | Current use                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `User`            | UUID, unique email, nullable `passwordHash`, creation/blocking                                                | Public profile reads check `disabledAt`; registration/import are pending          |
-| `UserProfile`     | One profile per UUID, unique `usernameKey`, visibility/indexing consent, media, badge, presence and JSON      | Public profile read API                                                           |
-| `Session`         | User, unique token hash, expiry/revocation and `mfaVerifiedAt`                                                | Schema only; no session issuance/verification                                     |
-| `UserRole`        | Unique `(userId, role)`                                                                                       | Schema only; no role assignment or owner bootstrap                                |
-| `Anime`           | UUID, unique slug, names, aliases, description, genres, year, poster, status, publication and `isDevelopment` | Catalog, detail and sitemap reads                                                 |
-| `AnimeProvider`   | `(provider, externalId)` primary key; unique `(animeId, provider)`                                            | Mapping schema only; no provider calls                                            |
-| `ProviderSetting` | Key and persistent `enabled`, default false                                                                   | Schema only; no admin toggle                                                      |
-| `AuditEvent`      | Action, nullable actor UUID, object, reason, timestamp                                                        | Schema only; `actorId` has no foreign key and append-only permissions are pending |
-| `Order`           | User, `amountMinor`, three-character currency, product and status                                             | Payment boundary only; no order creation                                          |
-| `Payment`         | Order, provider/external ID, unique `(provider, externalId)`                                                  | Schema only; no charging/refunds                                                  |
-| `WebhookEvent`    | Provider/external ID, payload hash, receipt/processing timestamps; unique pair                                | Schema only; no callback endpoint/signature validation                            |
-| `Entitlement`     | User, permission, source, expiry/revocation                                                                   | Schema only; no premium issuance/enforcement                                      |
+User deletion cascades through profiles, sessions and libraries. Anime deletion is restricted while library references exist.
+Financial relationships use Restrict. AuditEvent has no actor foreign key.
 
-Profile, sessions, roles and entitlements use Cascade on their user relationship.
-Orders/payments use Restrict on their relationships, preserving financial records from those cascades.
-`WebhookEvent`, `ProviderSetting` and `AuditEvent` have no additional Prisma relations.
-Order statuses are `pending`, `paid`, `failed`, `refunded`; subscription, plan, price and refund
-models have not been added yet.
+## Privacy
 
-## Profile privacy and presence
+Migration `20261007220000_catalog_discovery` adds optional Shikimori scores/votes,
+popularity, format, translations, known franchise size and validated public details to Anime.
+Details hold premiere dates, studios, duration, episode counts and public media/related IDs;
+they never hold playback URLs or credentials. Community scores aggregate LibraryItem;
+personal preferences derive from persisted watched episodes.
 
-`UserProfile.content` temporarily stores JSON `favoriteIds`, `folders`, `ratings`, `statistics`.
-Library, folders, ratings and progress are not yet normalized into separate tables.
-`visibility` contains five booleans: `about`, `favorites`, `folders`, `ratings`, `statistics`.
-Visibility is server-internal and excluded from the public DTO.
+New favorites, folders, scores and progress use normalized tables. UserProfile.content remains a baseline compatibility
+field and receives no new library writes; preferences are private. Visibility controls about/favorites/folders/ratings/statistics.
+Public DTOs omit flags, email, preferences, notes, sessions, MFA, roles and hashes; hidden blocks are removed before
+API, HTML and metadata serialization. Invisible appears offline. Publication and indexing consent are separate.
+Watched counts titles with completed episodes; minutes derive from persisted watchedSeconds.
+The new player submits timestamps automatically when its source supplies playback events.
 
-| Stored value                          | Public output                                                   |
-| ------------------------------------- | --------------------------------------------------------------- |
-| `userId`                              | `id`, the same UUID rather than a username or sequential number |
-| `username` / `usernameKey`            | Display `username`; comparison key stays in the database        |
-| `avatar`, `banner`, `badge`           | Public nullable strings; badge does not grant roles/premium     |
-| `online`, `offline`, `dnd`            | Corresponding public presence                                   |
-| `invisible`                           | `offline`                                                       |
-| Hidden block                          | Field is removed, not sent with a hidden flag                   |
-| Email, password hash, sessions, roles | Absent from the public profile                                  |
+## Import and temporary URLs
 
-Reads require `isPublic=true` and `User.disabledAt=null`. `indexable` is separate search-indexing
-consent, not a consequence of public visibility. Statistics currently come from JSON: `watched`
-counts anime, `minutes` holds minutes; the page displays `Math.round(minutes / 60)` hours.
-No viewing-event aggregation is implemented yet.
+Four local profiles were imported without invented credentials or privileges. Three UUIDs survive unchanged; one legacy ID
+has a deterministic mapping. Repeat import preserves newer edits; changed source profiles require reviewed reconciliation.
+Unknown titles remain unpublished metadata with exact provider IDs for later catalog enrichment.
+There is no video URL column. Legacy video/iframe/credential URLs are excluded. Current iframe sources are resolved
+on playback requests and provider responses cached only in RAM for 60 seconds. Signed HLS/MP4 URLs are not persisted.
 
-## API contracts
+Contracts: [account.ts](../../packages/contracts/src/account.ts), [profiles.ts](../../packages/contracts/src/profiles.ts),
+[catalog.ts](../../packages/contracts/src/catalog.ts), [playback.ts](../../packages/contracts/src/playback.ts).
+[Account operations](../operations/ACCOUNTS.md) · [Routes](SITE_MAP.md) · [Playback](../operations/PLAYBACK.md).
 
-| Source                                                    | Contents                                                     | Consumers                                         |
-| --------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------- |
-| [catalog.ts](../../packages/contracts/src/catalog.ts)     | `animeSchema`, `catalogSchema`, `searchSchema`               | Catalog API and Next.js server client             |
-| [profiles.ts](../../packages/contracts/src/profiles.ts)   | `visibilitySchema`, `publicProfileSchema`, `publicProfile()` | API serializer, Next.js and privacy tests         |
-| [providers.ts](../../packages/contracts/src/providers.ts) | Pure `providerDecision()` function                           | Policy tests; no runtime provider integration yet |
+## Stage 3 catalog and queue
 
-Zod validates input and output at runtime. Catalog output is `{ source, items }`, where source is
-`development` or `database`. See [API endpoints](SITE_MAP.md#public-api).
-Provider policy prioritizes the environment restriction over the stored toggle, then checks credentials.
-It is not yet wired to an adapter or `ProviderSetting`.
+Anime.searchText is materialized from titles/aliases by a database trigger.
+Anime.metadataProvider separates Kodik, manual and retained legacy metadata.
+KodikRelease maps translations to UUIDs without video URLs; CatalogImportPage hashes detect cursor cycles. CatalogImportJob stores
+provider, Kodik strategy, API release count, opaque cursor, lease, counters and fixed error codes. A partial unique index
+allows one queued/running/paused job per provider. ProviderMappingConflict records candidate IDs,
+ownership snapshot, version and decision; ProviderMappingOverride preserves reviewed policy on
+reimport. Secondary IDs can move without merging Anime or changing library/folder/progress references.
+Jobs and AuditEvent contain no credentials, raw provider responses or video URLs.
+[Catalog operations](../operations/CATALOG.md).
 
-## Sources and import
+## Account identity
 
-`DEMO_CATALOG=true` reads [fixtures.ts](../../packages/database/src/fixtures.ts) in memory:
-four anime and the `soul` profile. This is neither a migrated account nor authentication.
-The local [seed.ts](../../packages/database/src/seed.ts) inserts only development anime into PostgreSQL,
-marks them `isDevelopment=true`, and creates no user/profile/administrator.
-Switching off demo after seeding will not create a database `soul` profile.
+Migration `20261007093000_account_identity` adds `User.emailVerifiedAt`, unique nullable `googleSubject` and `authVersion`. Existing UUIDs/data survive; old emails are not automatically verified. `AccountToken` stores one token per user/purpose (verify/reset/change), SHA256, targetEmail, issuedVersion, expiry and consumedAt. `OAuthAttempt` stores state/browser hashes, nonce, encrypted PKCE verifier, optional user/session binding, expiry/consumption. Google access/refresh tokens are not persisted.
 
-`DEMO_CATALOG=false` uses [createDatabase()](../../packages/database/src/index.ts), Prisma and PostgreSQL.
-Legacy JSON/SQLite remains in `AnimeSoulArchive/app/data` and the protected backup; the API does not
-read or import it automatically. Connecting PostgreSQL does not migrate that data.
+Voting, messaging and room models remain future work. Friendship arrived in stage 5 and initial Post/Comment content in stage 6; both are outside the earlier episode migration: [Social network plan](SOCIAL_NETWORK_PLAN.md).
 
-Next work: repeatable import preserving UUIDs and anime mappings, normalized library/folders/ratings/progress,
-unresolved-link reports, password migration and old-session revocation. Identity stays separate from username;
-permissions stay separate from decorative badges. Run migrations only against the explicitly selected database;
-see [local development](../operations/LOCAL_DEVELOPMENT.md).
+## Stage 5 relationships
+
+FriendRequest/Friendship use lowId/highId compound keys with ordered UUID CHECK constraints; requestedBy must be a participant. Follow/UserBlock use directed keys and reject self-relations. User FKs cascade. UserProfile.profileAccess/friendRequests extend settings; isPublic remains the guest boundary. Visibility supports public/friends/private sections, reading legacy booleans compatibly. [Behavior and migration](../operations/FRIENDS.md).
+
+## Local community content
+
+Migration `20261007200000_content` adds Post and Comment. Review is Post.kind=review,
+with one active author/title pair enforced by a partial unique index. Posts store audiences,
+tags, labels, anime/episode UUIDs and timestamps. Comments target exactly one anime, episode
+or post and optionally a parent. Soft deletion leaves a placeholder. Audience/block checks
+run in transactions; adult preferences remain in profile.preferences.
+[Behavior](../operations/CONTENT.md) · [Demo data](../operations/DEMO_COMMUNITY.md).
+
+## Administration data
+
+`AnalyticsEvent`, `Announcement`, `NotificationCampaign`, `NotificationReceipt`, `SiteSetting`;
+existing User/AuditEvent/SubscriptionPlan/SubscriptionPromotion/Entitlement receive additive fields and indexes.
+
+[Migrations, collection and storage boundaries](../operations/ADMINISTRATION.md).

@@ -2,94 +2,132 @@
 
 # Данные и публичные контракты
 
-Актуальная схема: [schema.prisma](../../packages/database/prisma/schema.prisma).
-Первая миграция: [202610060001_foundation](../../packages/database/prisma/migrations/202610060001_foundation/migration.sql).
-Наличие таблицы не означает, что её сценарий уже реализован. Применение миграции и восстановление
-локального PostgreSQL пока не подтверждены; [статус миграции](../migration/STATUS.ru.md) фиксирует проверки.
-
-## Связи в схеме
+Актуальная [схема Prisma](../../packages/database/prisma/schema.prisma) применяется через двенадцать SQL-миграций.
+Проверки PostgreSQL, переноса и восстановления описаны в [статусе](../migration/STATUS.ru.md).
 
 ```mermaid
 erDiagram
   User ||--o| UserProfile : profile
   User ||--o{ Session : sessions
   User ||--o{ UserRole : roles
-  User ||--o{ Order : orders
-  User ||--o{ Entitlement : entitlements
-  Order ||--o{ Payment : payments
+  User ||--o| LegacyProfile : import
+  User ||--o| MfaCredential : mfa
+  User ||--o{ LibraryItem : library
+  User ||--o{ LibraryFolder : folders
+  User ||--o{ EpisodeProgress : progress
+  LibraryItem ||--o{ LibraryRating : scores
+  LibraryFolder ||--o{ FolderEntry : entries
+  Anime ||--o{ LibraryItem : titles
+  Anime ||--o{ EpisodeProgress : episodes
   Anime ||--o{ AnimeProvider : providers
+  User ||--o{ Order : orders
+  Order ||--o{ Payment : payments
+  User ||--o{ Entitlement : permissions
 ```
 
-| Модель            | Основные данные и ограничения                                                                                           | Реальное использование сейчас                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `User`            | UUID, уникальный email, nullable `passwordHash`, создание и блокировка                                                  | Публичное чтение проверяет `disabledAt`; регистрации/импорта пока нет          |
-| `UserProfile`     | Один профиль на UUID, уникальный `usernameKey`, публичность, согласие на индексацию, медиа, `badge`, присутствие и JSON | API читает разрешённый публичный профиль                                       |
-| `Session`         | Пользователь, уникальный хеш токена, срок, отзыв и `mfaVerifiedAt`                                                      | Только схема; сессии не выдаются и не проверяются                              |
-| `UserRole`        | Пара `(userId, role)` уникальна                                                                                         | Только схема; назначения ролей и bootstrap владельца нет                       |
-| `Anime`           | UUID, уникальный slug, названия, aliases, описание, жанры, год, постер, статус, публикация и `isDevelopment`            | Чтение каталога, страницы и sitemap                                            |
-| `AnimeProvider`   | Ключ `(provider, externalId)` и уникальность `(animeId, provider)`                                                      | Только схема сопоставлений; адаптеры не вызываются                             |
-| `ProviderSetting` | Ключ и сохраняемый `enabled`, по умолчанию false                                                                        | Только схема; admin-переключателя ещё нет                                      |
-| `AuditEvent`      | Действие, nullable UUID актёра, объект, причина, время                                                                  | Только схема; `actorId` сейчас без foreign key, append-only права не настроены |
-| `Order`           | Пользователь, сумма `amountMinor`, валюта из 3 символов, продукт и статус                                               | Основа платежей; создание заказа не реализовано                                |
-| `Payment`         | Заказ, провайдер и внешний ID, уникальная пара `(provider, externalId)`                                                 | Только схема; списаний/возвратов нет                                           |
-| `WebhookEvent`    | Провайдер, внешний ID, хеш payload, время получения/обработки; уникальная пара                                          | Только схема; endpoint и проверка подписи отсутствуют                          |
-| `Entitlement`     | Пользователь, permission, источник, срок и отзыв                                                                        | Только схема; премиум-права ещё не выдаются и не проверяются                   |
+| Таблица                                                      | Действующее назначение                                                                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| User                                                         | UUID, уникальная nullable почта, nullable Argon2id hash, блокировка. У непривязанных импортированных профилей нет почты/пароля |
+| UserProfile                                                  | Имя и ключ, приватность, описание, медиа/декоративный badge, присутствие, visibility и приватные preferences                   |
+| Session                                                      | Хеш случайного токена, audience web/admin, срок, отзыв, подтверждение MFA                                                      |
+| UserRole                                                     | Уникальная пара user/role; owner назначается явной операторской командой                                                       |
+| LegacyProfile                                                | Исходный ID → UUID, hash исходного профиля, одноразовый claim hash/срок и отметка привязки                                     |
+| MfaCredential                                                | Зашифрованный TOTP, ограниченный по времени pending secret, последний counter и хеши резервных кодов                           |
+| AuthThrottle                                                 | Хешированный ключ лимита, число попыток и начало окна; хранится между перезапусками                                            |
+| LibraryItem                                                  | Уникальная пара user/anime, любимое, общая оценка, последняя серия/озвучка/сезон, безопасные детали и трекинг                  |
+| LibraryRating                                                | Нормализованные оценки сезонов/серий, уникальный user/anime/scope/key, FK на библиотеку владельца                              |
+| LibraryFolder / FolderEntry                                  | Папки владельца, принадлежность аниме и приватная заметка. Составной FK folder/user запрещает чужое владение                   |
+| EpisodeProgress                                              | Уникальный user/anime/episode key, позиция/длительность в секундах, watchedSeconds, completed, безопасные детали               |
+| Anime / AnimeProvider                                        | Стабильный внутренний UUID/slug и метаданные; точные соответствия внешним ID                                                   |
+| Character / AnimeCharacter                                   | Устойчивый ID Shikimori, имена/портрет/описание персонажа и роли в конкретных тайтлах                                          |
+| ProviderSetting                                              | Сохранённый выключатель источника, false по умолчанию; окружение может запретить источник выше этой настройки                  |
+| AuditEvent                                                   | Импорт, привязка, вход/выход, пароль, MFA, приватность и операторские действия. Права append-only БД ещё впереди               |
+| SubscriptionTrial / SubscriptionPlan / SubscriptionPromotion | Однократный пробный период, тарифы и акции с датами; см. [подписки](../operations/SUBSCRIPTIONS.ru.md)                         |
+| Entitlement                                                  | Доступ к плееру на срок, включая ручную выдачу и отзыв с аудитом; проверяется перед выдачей видеофайла                         |
+| Order / Payment / WebhookEvent                               | Граница будущих платежей; обработка оплаты пока не подключена                                                                  |
 
-Профиль, сессии, роли и права удаляются вместе с пользователем по Cascade.
-Заказы и платежи имеют Restrict на своих связях: финансовые записи не удаляются таким каскадом.
-`WebhookEvent`, `ProviderSetting` и `AuditEvent` не имеют дополнительных отношений Prisma.
-Статусы заказа: `pending`, `paid`, `failed`, `refunded`; подписки, тарифы, цены и возвраты
-отдельными моделями ещё не выделены.
+User удаляет свой профиль, сессии и библиотеку каскадом. Anime нельзя удалить, пока на него ссылается библиотека.
+Финансовые отношения используют Restrict. AuditEvent не имеет FK на актёра.
 
-## Профиль, приватность и присутствие
+## Приватность
 
-`UserProfile.content` — временный JSON для `favoriteIds`, `folders`, `ratings` и `statistics`.
-Библиотека, папки, оценки и прогресс пока не нормализованы в отдельные таблицы.
-`visibility` содержит пять boolean: `about`, `favorites`, `folders`, `ratings`, `statistics`.
-Эти поля доступны серверу; публичный DTO их не выдаёт.
+Миграция `20261007220000_catalog_discovery` добавляет оценки/голоса Shikimori, популярность,
+формат, озвучки, размер известной франшизы и проверенные публичные сведения в Anime.
+Премьеры, студии, длительность, число серий, трейлеры/кадры и связанные ID не содержат
+ключей или временных видеоадресов. Оценка сообщества агрегирует LibraryItem;
+персональные жанры выводятся из сохранённых просмотров.
 
-| Хранение                              | Публичный ответ                                                    |
-| ------------------------------------- | ------------------------------------------------------------------ |
-| `userId`                              | `id` — тот же UUID, а не порядковый номер или ник                  |
-| `username` / `usernameKey`            | Отображаемый `username`; ключ сравнения остаётся в БД              |
-| `avatar`, `banner`, `badge`           | Публичные строки/nullable значения; badge не даёт роль или премиум |
-| `online`, `offline`, `dnd`            | Выдаётся соответствующее присутствие                               |
-| `invisible`                           | Выдаётся `offline`                                                 |
-| Скрытый блок                          | Поле отсутствует в ответе, а не приходит с флагом «скрыто»         |
-| `email`, `passwordHash`, сессии, роли | Не входят в публичный профиль                                      |
+Новые любимое, папки, оценки и прогресс читаются из отдельных таблиц. `UserProfile.content` остаётся
+для старой основы, но не используется для новых записей библиотеки. `preferences` приватен.
+`visibility` содержит about/favorites/folders/ratings/statistics. Публичный DTO не выдаёт сами флаги,
+почту, preferences, notes, сессии, MFA, роли или hashes. Закрытые блоки удаляются до API/HTML/metadata.
+`invisible` выдаётся как `offline`. В гостевой выдаче профиль доступен только при isPublic и активном пользователе;
+индексация дополнительно требует отдельного согласия. watched считает тайтлы с завершёнными сериями,
+minutes — сохранённые watchedSeconds; новый плеер передаёт временные позиции автоматически при наличии событий источника.
 
-Публичная запись читается только при `isPublic=true` и `User.disabledAt=null`.
-`indexable` — отдельное согласие на поисковую индексацию; публичность сама по себе его не включает.
-Статистика сейчас берётся из JSON: `watched` — число аниме, `minutes` — минуты;
-страница показывает `Math.round(minutes / 60)` часов. Это ещё не расчёт по событиям просмотра.
+## Импорт и временные ссылки
 
-## Контракты API
+Четыре локальных профиля перенесены без вымышленных credentials и привилегий. Три UUID сохранены,
+один legacy ID сопоставлен детерминированно. Повторный импорт не перезаписывает новые изменения;
+изменённый исходник требует проверенного слияния. Неизвестные тайтлы остаются неопубликованными
+записями с точными provider ID и заполняются следующим импортом каталога.
+В БД нет поля для видео URL. Импорт не копирует video/iframe/credential URL из старых настроек.
+Актуальные iframe получаются при запросе просмотра; ответы провайдера кешируются в RAM на 60 секунд.
+Подписанные HLS/MP4 URL новым runtime не сохраняются.
 
-| Файл                                                      | Содержимое                                                   | Потребители                                             |
-| --------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
-| [catalog.ts](../../packages/contracts/src/catalog.ts)     | `animeSchema`, `catalogSchema`, `searchSchema`               | API каталога и серверный клиент Next.js                 |
-| [profiles.ts](../../packages/contracts/src/profiles.ts)   | `visibilitySchema`, `publicProfileSchema`, `publicProfile()` | Серверный сериализатор API, Next.js и тесты приватности |
-| [providers.ts](../../packages/contracts/src/providers.ts) | Чистая функция `providerDecision()`                          | Сейчас тесты политики; реальной интеграции ещё нет      |
+Контракты: [account.ts](../../packages/contracts/src/account.ts), [profiles.ts](../../packages/contracts/src/profiles.ts),
+[catalog.ts](../../packages/contracts/src/catalog.ts), [playback.ts](../../packages/contracts/src/playback.ts).
+[Аккаунты](../operations/ACCOUNTS.ru.md) · [Маршруты](SITE_MAP.ru.md) · [Просмотр](../operations/PLAYBACK.ru.md).
 
-Ввод и ответы проверяются во время выполнения через Zod. Каталог отвечает `{ source, items }`,
-где `source` — `development` или `database`. API-поля перечислены в [карте API](SITE_MAP.ru.md#публичный-api).
-Политика провайдеров ставит запрет окружения выше настройки администратора, затем проверяет наличие ключей.
-Она пока не подключена к адаптеру или `ProviderSetting`.
+## Каталог и очередь этапа 3
 
-## Источники и перенос
+Anime.searchText автоматически собирается из названий и aliases триггером БД.
+Anime.metadataProvider отличает Kodik от ручных и сохранённых legacy-записей.
+KodikRelease связывает несколько озвучек с UUID без видео URL. CatalogImportPage хранит хеши курсоров для обнаружения циклов.
+CatalogImportJob хранит провайдера, стратегию Kodik, число выпусков API, непрозрачный курсор, аренду, счётчики и локальные коды ошибок.
+Частичный уникальный индекс разрешает одно queued/running/paused задание провайдера.
+ProviderMappingConflict сохраняет кандидатов, снимок соответствия, версию и решение;
+ProviderMappingOverride удерживает решение при следующем импорте. Внешние ID можно
+переназначить без объединения Anime или изменения ссылок LibraryItem/FolderEntry/EpisodeProgress.
+Job и AuditEvent не содержат ключей, ответов провайдера или видео URL.
+[Операции каталога](../operations/CATALOG.ru.md).
 
-`DEMO_CATALOG=true` читает [fixtures.ts](../../packages/database/src/fixtures.ts) в памяти:
-четыре аниме и один профиль `soul`. Это не импорт старого аккаунта и не авторизация.
-Локальный [seed.ts](../../packages/database/src/seed.ts) записывает только demo-аниме в PostgreSQL,
-помечает их `isDevelopment=true` и не создаёт пользователя, профиль или администратора.
-При выключении demo после seed профиль `soul` сам по себе в БД не появится.
+## Идентичность аккаунта
 
-`DEMO_CATALOG=false` использует [createDatabase()](../../packages/database/src/index.ts),
-Prisma и PostgreSQL. Данные прежнего сайта остаются отдельно в `AnimeSoulArchive/app/data`
-и защищённой копии; старые SQLite/JSON не читаются новым API автоматически.
-Подключение PostgreSQL не переносит эти данные.
+Миграция `20261007093000_account_identity` добавляет `User.emailVerifiedAt`, уникальный nullable `googleSubject` и `authVersion`. Существующие UUID/данные сохраняются; старые email не получают подтверждение автоматически. `AccountToken` хранит один токен на user/purpose (verify/reset/change), SHA256, targetEmail, issuedVersion, срок и consumedAt. `OAuthAttempt` хранит хеши state/browser, nonce, зашифрованный PKCE verifier, optional user/session binding, срок и потребление. Access/refresh tokens Google не сохраняются.
 
-Следующий этап: повторяемый импорт с сохранением UUID и сопоставлений аниме, нормализация
-библиотеки/папок/оценок/прогресса, отчёт пропущенных связей, политика паролей и отзыв прежних сессий.
-Идентичность пользователя отделена от ника, права — от декоративного badge.
-Миграции запускаются только против явно выбранной БД; инструкция — в [локальной разработке](../operations/LOCAL_DEVELOPMENT.ru.md).
+Модели контента, голосов, сообщений и комнат — будущие модели; дружба добавлена на этапе 5; они не входят в эту миграцию: [План соцсети](SOCIAL_NETWORK_PLAN.ru.md).
+
+## Серии и прогресс этапа 4
+
+`Episode` содержит стабильный UUID, animeId, нормализованные season/number и необязательную длительность.
+Уникальность animeId/season/number не зависит от озвучки. `EpisodeProvider` связывает provider/animeId/externalId
+с UUID серии; externalId — идентификатор нормализованного источника, не URL. Composite FK не позволяет связать
+серии разных тайтлов. Существующие соответствия не перезаписываются при конфликте.
+`EpisodeProgress.episodeId` nullable: старые записи остаются без переписывания ключей/позиций.
+Новые ключи `episode:<UUID>` имеют ссылку на серию; `activePlaybackId` определяет последнюю вкладку.
+`PlaybackSession` привязана к пользователю, web Session и Episode, содержит sequence/lastEventAt/expiresAt,
+но не credentials и не URL. Последовательность проверяется под row lock, watchedSeconds ограничены wall time.
+Сессии каскадно удаляются при удалении auth Session; собственные просроченные очищаются при новом запуске.
+[Контракты серий](../../packages/contracts/src/episodes.ts) · [Потоки](../../packages/contracts/src/streams.ts) · [Эксплуатация](../operations/PLAYBACK.ru.md).
+
+## Отношения этапа 5
+
+FriendRequest и Friendship имеют составной ключ lowId/highId и CHECK порядка UUID; requestedBy должен быть одним из участников. Follow и UserBlock имеют направленные ключи и запрет связи с собой. FK на User удаляются каскадом. UserProfile.profileAccess/friendRequests расширяют настройки, прежний isPublic остаётся границей гостевой выдачи. visibility поддерживает public/friends/private для прежних и будущих разделов; boolean-флаги читаются совместимо. [Поведение и миграция](../operations/FRIENDS.ru.md).
+
+## Публикации для локального сообщества
+
+Миграция `20261007200000_content` добавляет Post и Comment. Рецензия — Post.kind=review,
+один активный вариант на автора/тайтл ограничен частичным уникальным индексом. Post хранит
+аудиторию, хештеги, метки, UUID аниме/серии и таймкод; Comment имеет ровно один объект
+(animeId, episodeId или postId) и необязательный родитель. Удаление комментария оставляет
+заглушку. Индексы поддерживают историю автора и обсуждение объекта. Изменение пары с блокировкой
+проверяется в транзакции. Adult-предпочтение сохраняется отдельно в preferences.
+[Поведение](../operations/CONTENT.ru.md) · [Демо-данные](../operations/DEMO_COMMUNITY.ru.md).
+
+## Данные администрирования
+
+`AnalyticsEvent`, `Announcement`, `NotificationCampaign`, `NotificationReceipt`, `SiteSetting`;
+существующие User/AuditEvent/SubscriptionPlan/SubscriptionPromotion/Entitlement расширены добавочными полями и индексами.
+
+[Миграции, сбор событий и границы хранения](../operations/ADMINISTRATION.ru.md).

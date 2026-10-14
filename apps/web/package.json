@@ -10,15 +10,22 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@animesoul/contracts": "workspace:*",
+    "@animesoul/diagnostics": "workspace:*",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/react": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
+    "anime4k-webgpu": "1.0.0",
+    "hls.js": "1.7.3",
     "next": "16.3.8",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "@animesoul/contracts": "workspace:*",
-    "zod": "4.6.5",
-    "server-only": "0.0.1"
+    "server-only": "0.0.1",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3"
+    "@types/react-dom": "19.2.3",
+    "@webgpu/types": "0.1.71"
   }
 }

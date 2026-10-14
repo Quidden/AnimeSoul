@@ -2,13 +2,18 @@
 
 # AnimeSoul web
 
-New website foundation: TypeScript, Next.js/React, NestJS/Fastify and PostgreSQL/Prisma.
+Website stack: TypeScript, Next.js/React, NestJS/Fastify and PostgreSQL/Prisma.
 Android lives in an independent repository; desktop development is discontinued.
 
 The primary workspace is `C:/Users/dogem/Documents/AnimeSoul`, on branch `main`.
 The previous local application, settings, databases and releases are preserved in the adjacent
 `C:/Users/dogem/Documents/AnimeSoulArchive`, on branch `codex/legacy-local-2026-10-06`.
-Feature migration is ongoing: authentication, saved user data, playback and a complete admin app are still pending.
+Primary Kodik and optional YummyAnime reserve embeds, accounts, private libraries and MFA-protected admin access are connected.
+Episode pages, timestamps, new progress and custom HLS with embed fallback are implemented.
+Profile uploads/GIPHY, character pages, universal/frame search, subscriptions and administrative analytics are implemented.
+See [migration status](docs/migration/STATUS.md), [playback](docs/operations/PLAYBACK.md),
+[accounts](docs/operations/ACCOUNTS.md) and [administration](docs/operations/ADMINISTRATION.md).
+Production rollout and real payments remain separate milestones.
 
 ## Project navigation
 
@@ -26,7 +31,21 @@ Maps describe current implementation; the roadmap describes future work.
 
 ## Run locally
 
-Install Node.js 24 and pnpm 11.25.0, then:
+The default full-stack launch uses Docker Desktop with Linux containers:
+
+```sh
+docker compose up -d --build --wait
+```
+
+Web/API/admin/worker/PostgreSQL run in containers. On Windows,
+[Start AnimeSoul.bat](scripts/windows/Start%20AnimeSoul.bat) runs this command,
+creates a missing private `.env` and opens the browser. Closing the window leaves
+the site running. Stop with `docker compose stop`.
+[Docker, persistent data and HTTPS server deployment](docs/operations/DOCKER.md).
+
+For development with updates on edits, use Node.js:
+
+Install Node.js 24.7+ (24.x) and pnpm 11.25.0, then:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -34,28 +53,34 @@ pnpm run setup
 pnpm dev
 ```
 
-On Windows, [Start AnimeSoul.bat](scripts/windows/Start%20AnimeSoul.bat) starts this TypeScript workspace
+On Windows, [Start AnimeSoul Dev.bat](scripts/windows/Start%20AnimeSoul%20Dev.bat) starts this TypeScript workspace
 and preserves an existing `.env`. If pnpm is unavailable, it uses `npx` with pnpm 11.25.0;
 the first download requires an internet connection.
 
 Website: http://localhost:8021 · API: http://127.0.0.1:8020 · administration: http://localhost:8022.
-The initial preview explicitly uses development fixtures. It contains no migrated account and is not indexed.
+A fresh checkout uses development fixtures and contains no migrated accounts. Private database/media data must be restored separately. Local indexing is disabled.
 Stop the development command with Ctrl+C; it terminates only its own services.
 
-For PostgreSQL and Redis, start Docker Desktop and run:
-
-```sh
-pnpm infra:up
-pnpm db:migrate
-pnpm build
-pnpm db:seed
-```
+The full Docker launch starts PostgreSQL and applies migrations automatically.
+Redis is unused by applications and is enabled separately with the `cache` profile.
+The older `infra:up` command remains for separate development infrastructure;
+do not run it alongside the full stack on the same ports.
 
 Set DEMO_CATALOG=false in the private .env to read PostgreSQL instead of fixtures.
 The development seed is forbidden in production and never creates an administrator.
 The API readiness endpoint returns 503 until a real database responds.
 Seed adds development anime only, not profiles/accounts; connecting PostgreSQL does not import legacy data.
-Docker is currently unavailable on this machine; the fixture preview operates without it.
+Current data has been copied to PostgreSQL 18 in Docker; the original native cluster and
+configuration are preserved. `LOCAL_POSTGRES=false` connects host utilities to Docker.
+`LOCAL_POSTGRES=true` still starts an isolated native cluster with `pnpm dev`. Fixture preview works
+without a database; playback requires imported catalog records and enabled providers.
+
+## GitHub and images
+
+`main` contains the website; the previous application remains in `master`. Automated GitHub
+test runs have been removed. Manually publish API/Web/Admin/migration images with
+**Actions → Publish containers → Run workflow**. [GHCR publication and launch](docs/operations/GITHUB.md).
+The Dockerfile remains in `infra/docker/`; images contain source/build output and receive secrets at runtime.
 
 ## Check
 
@@ -63,6 +88,7 @@ Docker is currently unavailable on this machine; the fixture preview operates wi
 pnpm check
 pnpm format:check
 pnpm audit --audit-level high
+pnpm secrets:check
 ```
 
 The HTTP website tests start isolated compiled services on ports 18020–18022.
@@ -75,3 +101,9 @@ standard locations for automatic tool discovery.
 See [current milestone](docs/migration/STATUS.md), [architecture](docs/architecture/FOUNDATION.md)
 and the [full roadmap](docs/architecture/WEB_STACK_PLAN.md).
 The archive branch codex/archive-current-2026-10-06 and tag archive-current-2026-10-06 preserve the previous application.
+
+Kodik catalog: metadata cache, durable jobs, filters/pagination and provider administration. [Operations](docs/operations/CATALOG.md).
+
+Social features, votes, hashtags and content labels: [expanded plan](docs/architecture/SOCIAL_NETWORK_PLAN.md).
+
+Friendship, follows, blocks and three privacy audiences are implemented: [guide](docs/operations/FRIENDS.md).

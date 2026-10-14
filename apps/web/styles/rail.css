@@ -1,0 +1,48 @@
+.rail-shell {
+  position: relative;
+  min-width: 0;
+  padding-inline: 44px;
+}
+.rail-controls {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+.rail-controls button {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1;
+  box-shadow: none;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateY(-50%);
+  transition: opacity 160ms;
+}
+.rail-controls button:first-child {
+  left: 0;
+}
+.rail-controls button:last-child {
+  right: 0;
+}
+.rail-controls button:hover {
+  opacity: 0.7;
+}
+.rail-controls button:focus-visible {
+  outline-offset: -4px;
+}
+.rail-controls button:disabled {
+  visibility: hidden;
+  pointer-events: none;
+}

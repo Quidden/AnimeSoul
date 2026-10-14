@@ -1,0 +1,293 @@
+.anime-characters {
+  margin: 38px 0;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+  scroll-margin-top: calc(var(--header-height) + var(--anime-navigation-height) + 24px);
+}
+.anime-characters h2,
+.character-appearances > h2 {
+  margin: 0 0 10px;
+  font-size: 21px;
+  font-weight: 650;
+}
+.anime-characters h2 span,
+.character-appearances > h2 span {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+.anime-characters > p {
+  margin: 0 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.character-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 24px 18px;
+}
+.card-rail {
+  container: character-rail / inline-size;
+}
+.card-rail-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--card-rail-card-width, clamp(136px, 14cqw, 184px));
+  width: var(--card-rail-width, 100%);
+  max-width: 100%;
+  margin-inline: auto;
+  gap: 20px;
+  align-items: stretch;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding: 4px 0 12px;
+}
+.card-rail-track > * {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+.character-detail-page [id] {
+  scroll-margin-top: calc(var(--header-height) + var(--anime-navigation-height) + 24px);
+}
+.character-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  border-radius: 9px;
+}
+.character-card-image {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 8 / 11;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--panel-strong);
+  color: var(--muted);
+}
+.character-card-image img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.character-card-image > svg {
+  width: 36px;
+  height: 36px;
+}
+.character-card strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.character-card > span:last-child,
+.character-role {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.character-card:hover strong,
+.character-card:focus-visible strong,
+.character-role[data-role="main"] {
+  color: var(--accent-soft);
+}
+.character-hero {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(28px, 4vw, 52px);
+  margin: 28px 0 42px;
+}
+.character-portrait-rail {
+  display: grid;
+  gap: 16px;
+}
+.character-portrait {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 13 / 18;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--panel-strong);
+  color: var(--muted);
+}
+.character-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.character-portrait > svg {
+  width: 64px;
+  height: 64px;
+}
+.character-hero-copy {
+  min-width: 0;
+}
+.character-type {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.character-hero h1 {
+  margin: 0 0 12px;
+  font-size: clamp(28px, 3vw, 46px);
+  line-height: 1.15;
+  font-weight: 680;
+  letter-spacing: -0.025em;
+}
+.character-alternate-names {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.character-description,
+.character-voice-actors {
+  margin-top: 28px;
+}
+.character-description h2,
+.character-voice-actors h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 650;
+}
+.character-description p {
+  margin: 0;
+  max-width: 860px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.character-voice-actors ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.character-voice-actors li > a,
+.character-voice-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.character-voice-actors a:hover {
+  color: var(--accent-soft);
+}
+.character-voice-image {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--panel-strong);
+  color: var(--muted);
+}
+.character-voice-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.character-appearances {
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+.character-appearances > .card-rail {
+  margin-top: 24px;
+}
+.character-appearance {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+.character-appearance-poster {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--panel-strong);
+  color: var(--muted);
+}
+.character-appearance-poster img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.character-appearance > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.character-appearance h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  min-height: 42px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.character-appearance h3 a:hover {
+  color: var(--accent-soft);
+}
+.character-appearance p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.character-appearance .text-link {
+  width: fit-content;
+  margin-top: 3px;
+}
+@media (max-width: 760px) {
+  .character-hero {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 24px;
+  }
+  .character-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 20px 14px;
+  }
+}
+@media (max-width: 600px) {
+  .card-rail-track {
+    gap: 14px;
+    grid-auto-columns: var(--card-rail-card-width, clamp(112px, 35cqw, 136px));
+  }
+  .character-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+  }
+  .character-portrait-rail {
+    width: min(100%, 220px);
+  }
+  .character-grid {
+    grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+    gap: 20px 12px;
+  }
+  .character-card strong {
+    font-size: 12px;
+  }
+  .character-card > span:last-child {
+    font-size: 10px;
+  }
+}

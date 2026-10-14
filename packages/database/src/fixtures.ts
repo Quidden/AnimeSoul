@@ -1,4 +1,4 @@
-import type { Anime, ProfileRecord } from "@animesoul/contracts";
+import type { Anime, CharacterDetails, ProfileRecord } from "@animesoul/contracts";
 export const developmentAnime: Anime[] = [
   {
     id: "00000000-0000-4000-8000-000000000001",
@@ -55,6 +55,50 @@ export const developmentAnime: Anime[] = [
     poster: "https://static.yani.tv/posters/full/1636668539.jpg",
     indexable: false,
     status: "released",
+  },
+];
+export const developmentCharacters: CharacterDetails[] = [
+  {
+    id: "40882",
+    slug: "40882-eren-yeager",
+    name: "Эрен Йегер",
+    originalName: "Eren Yeager",
+    japaneseName: "エレン・イェーガー",
+    aliases: ["Eren Jaeger", "Эрен Егер"],
+    image: "https://shikimori.one/system/characters/original/40882.jpg",
+    description:
+      "Эрен вырос за стенами и мечтает увидеть мир снаружи. После нападения титанов он поступает в кадетский корпус вместе с Микасой и Армином.",
+    sourceUrl: "https://shikimori.one/characters/40882-eren-yeager",
+    voiceActors: [],
+    appearances: [{ anime: developmentAnime[0]!, role: "main" }],
+  },
+  {
+    id: "40881",
+    slug: "40881-mikasa-ackerman",
+    name: "Микаса Аккерман",
+    originalName: "Mikasa Ackerman",
+    japaneseName: "ミカサ・アッカーマン",
+    aliases: [],
+    image: "https://shikimori.one/system/characters/original/40881.jpg",
+    description:
+      "Микаса — близкая подруга Эрена и Армина. Она отличается решительностью и выдающимися способностями в бою.",
+    sourceUrl: "https://shikimori.one/characters/40881-mikasa-ackerman",
+    voiceActors: [],
+    appearances: [{ anime: developmentAnime[0]!, role: "main" }],
+  },
+  {
+    id: "184404",
+    slug: "184404-frieren",
+    name: "Фрирен",
+    originalName: "Frieren",
+    japaneseName: "フリーレン",
+    aliases: [],
+    image: "https://shikimori.one/system/characters/original/184404.jpg",
+    description:
+      "Эльфийская волшебница, которая вместе с отрядом героя победила Короля демонов. Теперь она путешествует, изучает магию и учится понимать людей.",
+    sourceUrl: "https://shikimori.one/characters/184404-frieren",
+    voiceActors: [],
+    appearances: [{ anime: developmentAnime[1]!, role: "main" }],
   },
 ];
 export const developmentProfile: ProfileRecord = {

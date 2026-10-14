@@ -3,6 +3,7 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   {
     ignores: [
+      "artifacts/**",
       "**/node_modules/**",
       "**/.next/**",
       "**/dist/**",
@@ -20,8 +21,10 @@ export default tseslint.config(
         console: "readonly",
         URL: "readonly",
         fetch: "readonly",
+        Response: "readonly",
         setTimeout: "readonly",
         AbortSignal: "readonly",
+        AbortController: "readonly",
       },
     },
   },

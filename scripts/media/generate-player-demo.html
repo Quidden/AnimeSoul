@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ru">
+  <meta charset="utf-8" /><title>Генератор сцены AnimeSoul</title>
+  <style>
+    body {
+      background: #171321;
+      color: #eee;
+      font: 16px system-ui;
+      padding: 24px;
+    }
+    canvas {
+      max-width: 90vw;
+    }
+    button,
+    a {
+      padding: 12px;
+      background: #9367eb;
+      color: white;
+      display: inline-block;
+      margin: 8px;
+    }
+  </style>
+  <h1>Собственная сцена: Путь к городу</h1>
+  <button id="generate">Создать фрагмент</button>
+  <p id="status">Готов к записи</p>
+  <canvas id="scene" width="1280" height="720"></canvas>
+  <div id="files"></div>
+  <script>
+    const canvas = document.getElementById("scene"),
+      ctx = canvas.getContext("2d"),
+      low = document.createElement("canvas");
+    low.width = 640;
+    low.height = 360;
+    const lowCtx = low.getContext("2d");
+    function shape(points, fill, stroke) {
+      ctx.beginPath();
+      points.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    function ellipse(x, y, rx, ry, color) {
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+    function draw(t) {
+      const sky = ctx.createLinearGradient(0, 0, 0, 720);
+      sky.addColorStop(0, "#789abf");
+      sky.addColorStop(0.55, "#f0bc8e");
+      sky.addColorStop(1, "#d9af7a");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, 1280, 720);
+      const sun = ctx.createRadialGradient(890, 240, 10, 890, 240, 230);
+      sun.addColorStop(0, "#fff4c0aa");
+      sun.addColorStop(1, "#fff2cb00");
+      ctx.fillStyle = sun;
+      ctx.fillRect(600, 0, 580, 500);
+      ellipse(890, 240, 49, 49, "#ffebbb");
+      for (let i = 0; i < 6; i++) {
+        const x = ((i * 275 + t * 2) % 1700) - 230,
+          y = 75 + (i % 3) * 42;
+        ellipse(x, y, 100, 13, "#fff1dd66");
+        ellipse(x + 65, y - 5, 80, 17, "#fff1dd88");
+      }
+      shape(
+        [
+          [0, 390],
+          [120, 300],
+          [218, 349],
+          [370, 238],
+          [500, 335],
+          [630, 264],
+          [806, 387],
+          [928, 316],
+          [1100, 360],
+          [1280, 270],
+          [1280, 720],
+          [0, 720],
+        ],
+        "#8295a5",
+      );
+      shape(
+        [
+          [0, 445],
+          [190, 382],
+          [302, 422],
+          [530, 348],
+          [664, 423],
+          [801, 375],
+          [938, 443],
+          [1120, 346],
+          [1280, 419],
+          [1280, 720],
+          [0, 720],
+        ],
+        "#678477",
+      );
+      ctx.save();
+      ctx.translate(Math.sin(t / 4) * 5, 0);
+      shape(
+        [
+          [365, 494],
+          [365, 405],
+          [932, 405],
+          [932, 494],
+        ],
+        "#c8bda1",
+        "#6e7a73",
+      );
+      for (let i = 0; i < 12; i++) {
+        const x = 355 + i * 49;
+        ctx.fillStyle = "#a5aa91";
+        ctx.fillRect(x, 392, 35, 22);
+        ctx.fillStyle = "#6b827a";
+        ctx.fillRect(x + 12, 402, 5, 7);
+      }
+      for (let i = 0; i < 13; i++) {
+        const x = 390 + i * 40,
+          y = 373 + (i % 4) * 13;
+        ctx.fillStyle = i % 2 ? "#e0d2b1" : "#c4cfb0";
+        ctx.fillRect(x, y, 35, 55);
+        shape(
+          [
+            [x - 4, y],
+            [x + 18, y - 22],
+            [x + 39, y],
+          ],
+          i % 2 ? "#986359" : "#526f75",
+          "#626b60",
+        );
+        ctx.fillStyle = "#f1d78f";
+        ctx.fillRect(x + 13, y + 12, 6, 10);
+      }
+      for (const [x, y, w, h] of [
+        [458, 325, 46, 83],
+        [626, 297, 58, 110],
+        [800, 329, 46, 80],
+      ]) {
+        ctx.fillStyle = "#cec9ae";
+        ctx.fillRect(x, y, w, h);
+        shape(
+          [
+            [x - 9, y],
+            [x + w / 2, y - 47],
+            [x + w + 9, y],
+          ],
+          "#607881",
+          "#57616a",
+        );
+        for (let j = 0; j < 3; j++) {
+          ctx.fillStyle = "#6a8279";
+          ctx.fillRect(x + 12 + j * 11, y + 22, 5, 12);
+        }
+      }
+      shape(
+        [
+          [609, 453],
+          [609, 425],
+          [621, 410],
+          [646, 410],
+          [659, 425],
+          [659, 453],
+        ],
+        "#465c57",
+      );
+      ctx.restore();
+      shape(
+        [
+          [0, 470],
+          [220, 449],
+          [390, 477],
+          [695, 447],
+          [860, 485],
+          [1060, 450],
+          [1280, 474],
+          [1280, 720],
+          [0, 720],
+        ],
+        "#6e875e",
+      );
+      shape(
+        [
+          [597, 455],
+          [648, 455],
+          [759, 575],
+          [888, 720],
+          [463, 720],
+          [540, 561],
+        ],
+        "#d8c59e",
+      );
+      shape(
+        [
+          [597, 455],
+          [606, 455],
+          [547, 578],
+          [479, 720],
+          [463, 720],
+          [540, 561],
+        ],
+        "#aaad85",
+      );
+      for (let i = 0; i < 4; i++) {
+        const x = i < 2 ? 80 + i * 205 : 1070 + (i - 2) * 160,
+          y = 455 + (i % 2) * 63;
+        ctx.fillStyle = "#564d49";
+        ctx.fillRect(x - 7, y - 38, 14, 176);
+        for (let j = 0; j < 5; j++)
+          ellipse(
+            x + Math.cos(j * 2) * 34,
+            y - 70 + Math.sin(j * 2) * 27,
+            57,
+            66,
+            i < 2 ? "#3f6557" : "#567454",
+          );
+      }
+      const bob = Math.sin(t * 2.4) * 2;
+      ctx.save();
+      ctx.translate(576, 540 + bob);
+      ellipse(0, 98, 47, 9, "#263f383f");
+      shape(
+        [
+          [-18, 45],
+          [-9, 44],
+          [-8, 94],
+          [-22, 96],
+        ],
+        "#263d48",
+      );
+      shape(
+        [
+          [7, 44],
+          [19, 46],
+          [25, 94],
+          [9, 96],
+        ],
+        "#293e48",
+      );
+      shape(
+        [
+          [-24, -15],
+          [18, -20],
+          [35, 59],
+          [-37, 63],
+        ],
+        "#303e66",
+        "#263143",
+      );
+      shape(
+        [
+          [15, -20],
+          [31, -14],
+          [46 + Math.sin(t * 2) * 4, 50],
+          [20, 43],
+        ],
+        "#ba6e62",
+      );
+      ellipse(0, -37, 15, 21, "#e7b38e");
+      shape(
+        [
+          [-19, -40],
+          [-16, -59],
+          [3, -64],
+          [18, -49],
+          [15, -27],
+          [7, -41],
+          [-4, -48],
+          [-13, -28],
+        ],
+        "#3c3840",
+      );
+      shape(
+        [
+          [-25, 8],
+          [-35, 27],
+          [-34, 47],
+          [-26, 45],
+          [-15, 18],
+        ],
+        "#c6b28e",
+      );
+      ctx.strokeStyle = "#665344";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(44, 8);
+      ctx.lineTo(54, 99);
+      ctx.stroke();
+      ellipse(44, 5, 4, 5, "#cbb398");
+      ctx.restore();
+      for (let i = 0; i < 18; i++) {
+        const x = (i * 151 + Math.sin(t * 0.4 + i) * 20) % 1280,
+          y = 570 + ((i * 31) % 160);
+        shape(
+          [
+            [x, y],
+            [x + Math.sin(t + i) * 10 - 2, y - 29],
+            [x + 4, y - 7],
+            [x + 9, y - 17],
+          ],
+          "#3e6556",
+        );
+      }
+      for (let i = 0; i < 12; i++) {
+        const x = (i * 127 + t * (10 + (i % 3))) % 1320,
+          y = 80 + ((i * 59) % 580) + Math.sin(t + i) * 12;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(t * 0.3 + i);
+        ellipse(0, 0, 4, 1.8, "#ffefc0aa");
+        ctx.restore();
+      }
+    }
+    draw(4);
+    document.getElementById("generate").onclick = async () => {
+      const button = document.getElementById("generate");
+      button.disabled = true;
+      document.getElementById("files").replaceChildren();
+      const type = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9"
+        : "video/webm;codecs=vp8";
+      const records = [canvas, low].map((c, i) => {
+        const stream = c.captureStream(30),
+          recorder = new MediaRecorder(stream, {
+            mimeType: type,
+            videoBitsPerSecond: i ? 600000 : 2200000,
+          }),
+          parts = [];
+        recorder.ondataavailable = (e) => parts.push(e.data);
+        const done = new Promise(
+          (resolve) =>
+            (recorder.onstop = () => {
+              stream.getTracks().forEach((track) => track.stop());
+              resolve(new Blob(parts, { type: "video/webm" }));
+            }),
+        );
+        recorder.start();
+        return { recorder, done };
+      });
+      const began = performance.now();
+      let frame;
+      function animate(now) {
+        const time = (now - began) / 1000;
+        draw(time);
+        lowCtx.drawImage(canvas, 0, 0, 640, 360);
+        document.getElementById("status").textContent =
+          "Записываем: " + Math.min(18, Math.floor(time)) + " / 18 с";
+        if (time < 18) frame = requestAnimationFrame(animate);
+        else records.forEach((r) => r.recorder.stop());
+      }
+      frame = requestAnimationFrame(animate);
+      const blobs = await Promise.all(records.map((r) => r.done));
+      cancelAnimationFrame(frame);
+      draw(4);
+      blobs.forEach((blob, i) => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = i ? "city-road-360.webm" : "city-road-720.webm";
+        a.textContent = i ? "Загрузить 360p" : "Загрузить 720p";
+        document.getElementById("files").append(a);
+      });
+      const poster = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(poster);
+      a.download = "city-road-poster.jpg";
+      a.textContent = "Загрузить постер";
+      document.getElementById("files").append(a);
+      document.getElementById("status").textContent = "Фрагмент готов";
+      button.disabled = false;
+    };
+  </script>
+</html>

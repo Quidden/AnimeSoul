@@ -1,0 +1,157 @@
+html[data-theme="graphite"] {
+  --bg: #090c0f;
+  --panel: #151b20;
+  --line: #303c44;
+  --ink: #eff3f5;
+  --muted: #98a6af;
+  --accent: #a9bfcd;
+  --accent-soft: #c5d6e1;
+  --panel-strong: #23313b;
+  --field-bg: #0e151a;
+  --ambient: #253c49;
+  --primary-start: #536977;
+  --primary-end: #354956;
+  color-scheme: dark;
+}
+
+html[data-theme="graphite"] .app,
+html[data-theme="graphite"] .user-profile-page,
+html[data-theme="graphite"] body:has(.user-profile-page) .app {
+  background:
+    radial-gradient(
+      ellipse at 12% 15%,
+      color-mix(in srgb, var(--ambient) 30%, transparent),
+      transparent 58%
+    ),
+    var(--bg);
+}
+html[data-theme="graphite"] body:has(.user-profile-page) {
+  background: var(--bg);
+}
+html[data-theme="graphite"] .user-profile-page {
+  --profile-ink: var(--ink);
+  --profile-muted: var(--muted);
+}
+html[data-theme="graphite"] .profile-site-header {
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+}
+html[data-theme="graphite"] .primary {
+  background: linear-gradient(135deg, var(--primary-start), var(--primary-end));
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+html[data-theme="graphite"] .eyebrow,
+html[data-theme="graphite"] .profile-brand > span > span,
+html[data-theme="graphite"] .home-cinema-copy h1 i,
+html[data-theme="graphite"] .filter-heading a,
+html[data-theme="graphite"] .anime-card h3 a:hover {
+  color: var(--accent-soft);
+}
+html[data-theme="graphite"] .account-button:hover,
+html[data-theme="graphite"] .outline:hover,
+html[data-theme="graphite"] .header-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+html[data-theme="graphite"] .account-avatar {
+  background: var(--panel-strong);
+  color: var(--accent-soft);
+}
+html[data-theme="graphite"] .header-menu-panel,
+html[data-theme="graphite"] .catalog-filter-drawer,
+html[data-theme="graphite"] .filter-panel,
+html[data-theme="graphite"] .content-spoiler {
+  background: var(--panel);
+}
+html[data-theme="graphite"] .catalog-filter-drawer .filter-panel {
+  background: transparent;
+}
+html[data-theme="graphite"] .header-menu-panel a:hover,
+html[data-theme="graphite"] .header-menu-panel a[aria-current="page"],
+html[data-theme="graphite"] .catalog-sections a:hover,
+html[data-theme="graphite"] .catalog-sections a[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+html[data-theme="graphite"] .account-page input,
+html[data-theme="graphite"] .account-page select,
+html[data-theme="graphite"] .account-page textarea,
+html[data-theme="graphite"] .anime-library select,
+html[data-theme="graphite"] .social-search input,
+html[data-theme="graphite"] .content-form input,
+html[data-theme="graphite"] .content-form textarea,
+html[data-theme="graphite"] .content-form select {
+  background: var(--field-bg);
+  color: var(--ink);
+}
+html[data-theme="graphite"] .catalog-recommendations {
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--ambient) 80%, transparent),
+    var(--panel)
+  );
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+html[data-theme="graphite"] .catalog-sections a,
+html[data-theme="graphite"] .genre-row a,
+html[data-theme="graphite"] .tagline a,
+html[data-theme="graphite"] .tagline span {
+  background: var(--panel);
+  color: var(--muted);
+}
+html[data-theme="graphite"] .genre-row a:hover,
+html[data-theme="graphite"] .genre-row a[aria-current="page"] {
+  background: var(--primary-start);
+  color: white;
+  border-color: var(--accent);
+  box-shadow: 0 14px 46px color-mix(in srgb, var(--ambient) 50%, transparent);
+}
+html[data-theme="graphite"] .catalog-controls {
+  scrollbar-color: var(--accent) var(--panel);
+}
+
+.theme-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.theme-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field-bg);
+}
+.theme-choice[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--field-bg));
+}
+.theme-choice > span:last-child {
+  display: grid;
+  gap: 6px;
+}
+.theme-choice strong {
+  font-size: 14px;
+}
+.theme-choice small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.theme-swatch {
+  width: 36px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 7px;
+}
+.theme-swatch-lilac {
+  background: linear-gradient(135deg, #a98aff 0 28%, #211a30 28% 65%, #09080d 65%);
+}
+.theme-swatch-graphite {
+  background: linear-gradient(135deg, #a9bfcd 0 28%, #23313b 28% 65%, #090c0f 65%);
+}
+@media (max-width: 500px) {
+  .theme-choices {
+    grid-template-columns: 1fr;
+  }
+}

@@ -50,3 +50,37 @@ test("HTTP boundaries protect admin, profiles and catalog search", async () => {
     await app.close();
   }
 });
+
+test("disabled playback makes no upstream calls and discloses no credentials", async () => {
+  let calls = 0;
+  const app = await createApplication(
+    readConfig({
+      NODE_ENV: "test",
+      DEMO_CATALOG: "true",
+      YUMMY_TOKEN: "private-yummy-test",
+      KODIK_TOKEN: "private-kodik-test",
+    }),
+    async () => {
+      calls++;
+      throw new Error("Must not contact providers.");
+    },
+  );
+  try {
+    const server = app.getHttpAdapter().getInstance();
+    const response = await server.inject({
+      method: "GET",
+      url: "/api/anime/attack-on-titan/playback",
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().state, "disabled");
+    assert.deepEqual(response.json().sources, []);
+    assert.equal(calls, 0);
+    assert.equal(response.body.includes("private-"), false);
+    assert.equal(
+      (await server.inject({ method: "GET", url: "/api/anime/missing/playback" })).statusCode,
+      404,
+    );
+  } finally {
+    await app.close();
+  }
+});

@@ -1,0 +1,308 @@
+.episode-stage {
+  position: relative;
+  isolation: isolate;
+  margin: 30px 0 24px;
+}
+.anime-detail-page {
+  overflow-anchor: none;
+}
+.episode-center {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 90%;
+  margin: auto;
+  z-index: 2;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+}
+.episode-center .playback-screen {
+  border: 0;
+  border-radius: 17px;
+  min-width: 0;
+}
+.player-frame-glow {
+  position: absolute;
+  inset: -12px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.player-frame-glow i {
+  position: absolute;
+  filter: blur(34px);
+  opacity: 0.48;
+  transition: background-color 650ms ease;
+}
+.player-frame-glow i:nth-child(1) {
+  inset: 0 8% auto;
+  height: 65px;
+  background-color: rgb(var(--video-color-0, var(--poster-color-0, 80 55 125)));
+}
+.player-frame-glow i:nth-child(2) {
+  inset: 8% 0 8% auto;
+  width: 65px;
+  background-color: rgb(var(--video-color-1, var(--poster-color-1, 80 55 125)));
+}
+.player-frame-glow i:nth-child(3) {
+  inset: auto 8% 0;
+  height: 65px;
+  background-color: rgb(var(--video-color-2, var(--poster-color-2, 80 55 125)));
+}
+.player-frame-glow i:nth-child(4) {
+  inset: 8% auto 8% 0;
+  width: 65px;
+  background-color: rgb(var(--video-color-3, var(--poster-color-0, 80 55 125)));
+}
+.episode-preview {
+  position: absolute;
+  top: 20%;
+  height: 60%;
+  border: 0;
+  padding: 16px;
+  overflow: visible;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  transition:
+    filter 220ms,
+    opacity 220ms,
+    border-color 220ms;
+}
+.episode-preview.previous {
+  left: max(-5%, calc((100% - 100vw) / 2 + 12px));
+  right: 95%;
+}
+.episode-preview-visual {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: auto;
+  aspect-ratio: 16 / 9;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.episode-preview.next .episode-preview-visual {
+  left: auto;
+  right: 0;
+}
+.episode-preview.next {
+  left: 95%;
+  right: max(-5%, calc((100% - 100vw) / 2 + 12px));
+  text-align: right;
+}
+.episode-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.36;
+  filter: saturate(0.7);
+}
+.episode-preview-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 20%, #090610d9);
+  pointer-events: none;
+}
+.episode-preview-copy {
+  position: absolute;
+  bottom: 14px;
+  left: 8px;
+  right: 8px;
+  display: grid;
+  gap: 5px;
+  z-index: 1;
+}
+.episode-preview.next .episode-preview-copy {
+  left: 8px;
+  right: 8px;
+}
+.episode-preview-copy strong {
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.episode-preview-copy > span,
+.episode-preview-copy small {
+  font-size: 10px;
+  color: #ddd7ea;
+}
+.episode-preview-arrow {
+  position: absolute;
+  top: 20%;
+  left: 18px;
+  font-size: 34px;
+  z-index: 1;
+}
+.episode-preview.next .episode-preview-arrow {
+  left: auto;
+  right: 18px;
+}
+.episode-preview:hover,
+.episode-preview:focus-visible {
+  filter: brightness(1.3);
+}
+.episode-preview:hover .episode-preview-visual,
+.episode-preview:focus-visible .episode-preview-visual {
+  border-color: var(--accent);
+}
+.episode-preview:disabled {
+  cursor: wait;
+}
+.episode-outgoing {
+  position: absolute;
+  top: 0;
+  left: 5%;
+  width: 90%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  pointer-events: none;
+  z-index: 1;
+}
+.episode-outgoing img,
+.episode-preparing img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.episode-outgoing span {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 24px;
+  background: linear-gradient(transparent, #090610d9);
+}
+.episode-preparing img {
+  opacity: 0.5;
+}
+.episode-preparing > span {
+  position: relative;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #090610c9;
+}
+.episode-transition-status {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: #090610dc;
+  color: var(--ink);
+  font-size: 12px;
+  pointer-events: none;
+}
+.episode-stage[data-motion] .episode-center {
+  animation: player-carousel-in 480ms cubic-bezier(0.22, 0.7, 0.22, 1) both;
+  will-change: transform;
+}
+.episode-stage[data-motion] .episode-outgoing {
+  animation: player-carousel-out 480ms cubic-bezier(0.22, 0.7, 0.22, 1) both;
+  will-change: transform, opacity;
+}
+.episode-stage[data-motion] .player-frame-glow {
+  visibility: hidden;
+}
+.episode-stage[data-motion="enter-next"] .episode-preview.previous,
+.episode-stage[data-motion="enter-previous"] .episode-preview.next {
+  visibility: hidden;
+}
+@keyframes player-carousel-in {
+  from {
+    transform: translate3d(var(--episode-travel, 55%), 0, 0) scale(0.6);
+  }
+  to {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+@keyframes player-carousel-out {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(calc(-1 * var(--episode-travel, 55%)), 0, 0) scale(0.6);
+    opacity: 0.36;
+  }
+}
+@media (max-width: 1000px) {
+  .episode-preview {
+    height: 60%;
+    top: 20%;
+  }
+}
+@media (max-width: 600px) {
+  .episode-center {
+    width: calc(100% - 48px);
+    border-radius: 12px;
+  }
+  .episode-center .playback-screen {
+    border-radius: 11px;
+  }
+  .episode-outgoing {
+    left: 24px;
+    width: calc(100% - 48px);
+    border-radius: 12px;
+  }
+  .episode-preview {
+    width: 48px;
+    top: 20%;
+    height: 60%;
+    padding: 0;
+  }
+  .episode-preview-visual {
+    border-radius: 9px;
+  }
+  .episode-preview.next .episode-preview-visual {
+    border-radius: 9px;
+  }
+  .episode-preview.previous {
+    left: 0;
+    right: auto;
+  }
+  .episode-preview.next {
+    left: auto;
+    right: 0;
+  }
+  .episode-preview-copy {
+    display: none;
+  }
+  .episode-preview-arrow {
+    left: 5px;
+    top: 25%;
+    font-size: 26px;
+  }
+  .episode-preview.next .episode-preview-arrow {
+    right: 5px;
+  }
+  .player-frame-glow i {
+    filter: blur(22px);
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .episode-stage .episode-center,
+  .episode-stage .episode-preview,
+  .episode-stage .episode-outgoing {
+    animation: none !important;
+  }
+  .player-frame-glow i {
+    transition: none;
+  }
+}

@@ -12,7 +12,7 @@ Next.js server pages consume validated public API responses; they do not reprodu
 | -------------------- | ------------------------------------------------------------------------- |
 | apps/web             | Public server-rendered pages, metadata, JSON-LD, sitemap and presentation |
 | apps/api/src/catalog | Published catalog and public profile reads                                |
-| apps/api/src/admin   | Closed administrative boundary                                            |
+| apps/api/src/admin   | Session, role and MFA administrative boundary                             |
 | apps/admin           | Separate non-indexed administration application                           |
 | apps/worker          | Reserved boundary; no job runner yet                                      |
 | packages/contracts   | Zod DTOs, server privacy serializer and provider policy                   |
@@ -39,8 +39,8 @@ Development services bind to loopback on 8020–8022. Database and Redis bind to
 DEMO_CATALOG is opt-in and rejected by the API in production.
 PUBLIC_INDEXING=true requires a public HTTPS SITE_URL and forbids the development catalog.
 SITE_URL is the canonical public origin; API_URL is a server-only service origin.
-`ALLOW_YUMMY`, `PAYMENTS_ENABLED` and the Redis URL are reserved without runtime integration.
-Changing them does not activate missing providers or billing. See the
+`ALLOW_YUMMY`/`ALLOW_KODIK` enforce runtime restrictions together with `ProviderSetting` and credentials.
+`PAYMENTS_ENABLED` and Redis remain reserved without billing integration. See the
 [configuration-consumer table](../operations/LOCAL_DEVELOPMENT.md#configuration-consumers).
 
 ## Public API
@@ -59,7 +59,7 @@ Changing them does not activate missing providers or billing. See the
 All API responses use no-store. Closed profiles and disabled users do not leave the database.
 The public serializer removes hidden about, favorites, folders, ratings and statistics.
 Invisible presence becomes offline; internal visibility, email and password data never appear in its DTO.
-Owner editing and authenticated DTOs are stage 2 work, not simulated by development data.
+Owner editing, authenticated DTOs, account migration and MFA are implemented in stage 2; see [accounts](../operations/ACCOUNTS.md).
 
 ## SEO
 
@@ -72,8 +72,10 @@ The single sitemap refuses to exceed 50,000 URLs in total; implement shards befo
 
 ## Deliberate boundaries
 
-No live provider is called by this milestone. Yummy's policy contract and default-disabled environment flag are ready,
-but the adapter, audited admin switch and cache invalidation follow in stage 3.
+Kodik supplies the primary catalog and playback; YummyAnime is an optional playback reserve.
+Audited local operator switches and cache invalidation are implemented.
+Providers default to disabled; the personal environment was explicitly enabled with user approval.
+Full background import and secure administrative controls remain stage 3 work. [Playback](../operations/PLAYBACK.md).
 Payments have foundational order/payment/webhook/entitlement tables, with no charge endpoint or premium activation.
 Library normalization, translations, pagination, media processing, sessions, MFA and metrics follow the roadmap.
 

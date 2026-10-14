@@ -1,0 +1,415 @@
+.player-select {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.player-select-label {
+  color: #aaa2b0;
+  font-size: 11px;
+}
+.player-select-trigger {
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid #ffffff19;
+  border-radius: 10px;
+  background: #17131cf2;
+  color: #f6f1fc;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.player-select-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.player-select-trigger i {
+  font-style: normal;
+  color: #bba0fa;
+}
+.player-select-trigger[aria-expanded="true"],
+.player-select-trigger:focus-visible {
+  border-color: #aa89ee;
+  outline: none;
+  box-shadow: none;
+}
+.player-select-popup {
+  position: absolute;
+  z-index: 10000;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid #ad92d44a;
+  border-radius: 12px;
+  background: #18131ef5;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 16px 50px #0009;
+  color: #f7f2ff;
+  scrollbar-width: thin;
+  scrollbar-color: #8d6fc9 #21192b;
+  animation: player-menu-open 0.15s ease-out;
+}
+.player-select-group-label {
+  padding: 9px 11px 5px;
+  color: #a79bb7;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+.player-select-group-label:not(:first-child) {
+  margin-top: 5px;
+  border-top: 1px solid #ffffff14;
+}
+.player-select-option-row {
+  display: flex;
+  gap: 3px;
+}
+.player-select-option-row > button[role="option"] {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 9px;
+  padding: 10px 11px;
+  min-height: 39px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.player-select-option-row > button[role="option"] > span {
+  flex: 1;
+}
+.player-select-option-row > button[role="option"] > i {
+  font-style: normal;
+  color: #c6a4ff;
+}
+.player-select-option-row > button.highlighted,
+.player-select-option-row > button:hover {
+  background: #a580eb22;
+}
+.player-select-option-row > button[aria-selected="true"] {
+  background: #a580eb33;
+  color: #ddcaff;
+}
+.player-option-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+}
+.player-dubbing-star {
+  flex: 0 0 36px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #a99fb8;
+  font-size: 20px;
+  cursor: pointer;
+}
+.player-dubbing-star.selected {
+  color: #f4ca76;
+}
+.player-select-empty {
+  padding: 10px;
+  color: #b4a5c7;
+  font-size: 12px;
+}
+.player-select.compact .player-select-trigger {
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 11px;
+  background: #ffffff0d;
+}
+.animesoul-player-voice-pill .player-select.compact .player-select-trigger {
+  background: transparent;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  min-height: 28px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.animesoul-player-voice-pill .player-select-trigger:focus-visible > span {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: #aa89ee;
+}
+.animesoul-player .animesoul-player-quick-picker {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(480px, calc(100% - 40px));
+  gap: 14px;
+  padding: 14px;
+  max-height: calc(100% - 120px);
+  overflow: auto;
+}
+.player-episode-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.player-episode-part,
+.player-episode-number.full-width {
+  grid-column: 1 / -1;
+}
+.player-episode-fields .player-select-trigger {
+  min-height: 40px;
+}
+.player-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.player-picker-heading strong {
+  font-size: 13px;
+}
+.player-picker-heading button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: #ffffff0d;
+  color: #eee7f7;
+  font-size: 19px;
+  cursor: pointer;
+}
+.animesoul-player-settings-content {
+  gap: 14px;
+}
+.animesoul-player-quick-picker .anime-part-switches,
+.animesoul-player-quick-picker .player-playback-preferences {
+  grid-column: 1 / -1;
+}
+.animesoul-player .anime-part-switches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid #ffffff13;
+  margin: 0;
+}
+.animesoul-player .anime-part-switches label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: 11px;
+}
+.animesoul-player .anime-part-switches label > span:last-child {
+  line-height: 1.35;
+}
+.animesoul-player .anime-switch-slider {
+  width: 32px;
+  height: 19px;
+}
+.animesoul-player .anime-switch-slider::after {
+  width: 13px;
+  height: 13px;
+}
+.animesoul-player .anime-part-switches input:checked + .anime-switch-slider::after {
+  transform: translateX(13px);
+}
+.player-playback-preferences {
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #ffffff13;
+}
+.player-playback-preferences label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #cfc3df;
+  font-size: 11px;
+}
+.player-playback-preferences input {
+  accent-color: #ac86f7;
+  flex: 0 0 auto;
+}
+.player-playback-preferences p,
+.player-upscale-info {
+  margin: 0;
+  color: #bfb0d0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.player-reset-dubbing {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #c1a2f5;
+  text-align: left;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.player-favorite-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.animesoul-upscale-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  background: #000;
+  z-index: 3;
+}
+.animesoul-player > .player-standby-video {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.player-quality-pending {
+  position: absolute;
+  z-index: 6;
+  top: 90px;
+  right: 18px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #100d14ca;
+  color: #cdc1dd;
+  font-size: 11px;
+  pointer-events: none;
+}
+.fit-cover .animesoul-upscale-canvas {
+  object-fit: cover;
+}
+.animesoul-player-timeline-preview {
+  position: absolute;
+  bottom: 24px;
+  left: clamp(102px, var(--player-preview-position, 50%), calc(100% - 102px));
+  width: 192px;
+  padding: 5px;
+  border: 1px solid #ffffff28;
+  border-radius: 12px;
+  background: #151019eb;
+  box-shadow: 0 8px 30px #0008;
+  opacity: 0;
+  transform: translate(-50%, 8px) scale(0.96);
+  transition:
+    opacity 0.13s,
+    transform 0.13s;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+.animesoul-player-timeline-preview.visible {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+.animesoul-player-timeline-preview-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #282031;
+}
+.animesoul-player-timeline-preview-frame > video {
+  display: none !important;
+}
+.animesoul-player-timeline-preview-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px #ffffff0d;
+  pointer-events: none;
+}
+.animesoul-player-timeline-preview-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.animesoul-player-timeline-preview-frame span {
+  color: #b6a7c7;
+  font-size: 10px;
+}
+.animesoul-player-timeline-preview time {
+  display: block;
+  padding: 5px 0 0;
+  color: #fff;
+  text-align: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes player-menu-open {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@media (max-width: 720px) {
+  .animesoul-player .animesoul-player-quick-picker {
+    position: fixed;
+    top: calc(var(--header-height) + var(--anime-navigation-height) + 12px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100dvh - var(--header-height) - var(--anime-navigation-height) - 24px);
+    padding: 12px;
+    gap: 12px;
+  }
+  .animesoul-player .animesoul-player-settings {
+    position: fixed;
+    top: calc(var(--header-height) + var(--anime-navigation-height) + 12px);
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+  .animesoul-player:fullscreen .animesoul-player-quick-picker {
+    top: 12px;
+    max-height: calc(100dvh - 24px);
+  }
+  .animesoul-player:fullscreen .animesoul-player-settings {
+    top: 12px;
+  }
+  .animesoul-player-timeline-preview {
+    width: 128px;
+    left: clamp(68px, var(--player-preview-position), calc(100% - 68px));
+  }
+  .animesoul-player-control-row .player-select-trigger {
+    padding: 5px;
+    font-size: 9px;
+    min-height: 28px;
+    gap: 4px;
+  }
+  .animesoul-player .anime-part-switches {
+    gap: 7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-select-popup {
+    animation: none;
+  }
+  .animesoul-player-timeline-preview {
+    transition: none;
+  }
+}

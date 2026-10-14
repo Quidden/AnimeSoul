@@ -1,0 +1,796 @@
+html:has(.franchise-board) {
+  overflow: hidden;
+}
+html:has(.franchise-board) .site-footer {
+  display: none;
+}
+html[data-anime-docked] .app-header {
+  box-shadow: none;
+}
+.anime-franchise-page {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+.franchise-board {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+}
+.franchise-graph-canvas {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--muted) 28%, transparent) 0.8px,
+    transparent 0.8px
+  );
+  background-size: 26px 26px;
+}
+.franchise-graph-canvas svg {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.franchise-graph-canvas.dragging svg {
+  cursor: grabbing;
+}
+.franchise-graph-edge {
+  fill: none;
+  stroke: var(--part-color, var(--muted));
+  stroke-width: 1.8;
+  opacity: 0.48;
+  transition:
+    opacity 260ms,
+    stroke-width 260ms;
+}
+.franchise-graph-edge.main {
+  stroke: var(--accent-soft);
+  stroke-width: 2.4;
+  opacity: 0.8;
+}
+.franchise-graph-edge.branch {
+  stroke-dasharray: 5 6;
+}
+.franchise-graph-edge.emphasized {
+  opacity: 1;
+  stroke-width: 3.6;
+}
+.franchise-graph-edge.dimmed {
+  opacity: 0.055;
+}
+.franchise-graph-node {
+  transition: opacity 260ms;
+}
+.franchise-graph-node.dimmed {
+  opacity: 0.13;
+}
+.franchise-graph-node .franchise-node-halo {
+  fill: var(--part-color);
+  opacity: 0.09;
+  stroke: none;
+  pointer-events: none;
+}
+.franchise-node-poster,
+.franchise-node-label {
+  cursor: pointer;
+  outline: none;
+}
+.franchise-graph-node:has(:focus-visible) .franchise-node-halo,
+.franchise-graph-node:hover .franchise-node-halo,
+.franchise-graph-node.selected .franchise-node-halo {
+  opacity: 0.24;
+}
+.franchise-node-poster-frame {
+  fill: var(--panel);
+  stroke: var(--part-color);
+  stroke-width: 2px;
+}
+.franchise-graph-node.selected .franchise-node-poster-frame,
+.franchise-node-poster:focus-visible .franchise-node-poster-frame {
+  stroke: var(--ink);
+  stroke-width: 3px;
+}
+.franchise-graph-node .franchise-node-placeholder {
+  font-size: 10px;
+  fill: var(--muted);
+}
+.franchise-character-edge {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.3px;
+  stroke-dasharray: 3 6;
+  opacity: 0.35;
+}
+.franchise-character-edge.dimmed {
+  opacity: 0.06;
+}
+.franchise-character-edge.emphasized {
+  stroke: var(--accent-soft);
+  stroke-width: 3px;
+  opacity: 1;
+}
+.franchise-graph-character {
+  transition: opacity 260ms;
+}
+.franchise-graph-character.dimmed {
+  opacity: 0.14;
+}
+.franchise-graph-character [role="button"] {
+  cursor: pointer;
+  outline: none;
+}
+.franchise-character-frame {
+  fill: var(--panel);
+  stroke: var(--line);
+  stroke-width: 2px;
+}
+.franchise-graph-character [role="button"]:hover .franchise-character-frame,
+.franchise-graph-character [role="button"]:focus-visible .franchise-character-frame,
+.franchise-graph-character.selected .franchise-character-frame {
+  stroke: var(--accent-soft);
+  stroke-width: 3px;
+}
+.franchise-graph-character text {
+  font:
+    12px "Segoe UI",
+    sans-serif;
+  fill: var(--ink);
+}
+.franchise-graph-character .franchise-character-initial {
+  font-size: 22px;
+  fill: var(--muted);
+}
+.franchise-graph-character .franchise-character-role {
+  font-size: 9px;
+  fill: var(--muted);
+}
+.franchise-graph-node text {
+  font:
+    14px "Segoe UI",
+    sans-serif;
+  fill: var(--ink);
+}
+.franchise-graph-node .franchise-node-label:hover,
+.franchise-graph-node .franchise-node-label:focus-visible {
+  fill: var(--part-color);
+}
+.franchise-graph-node .franchise-node-year {
+  fill: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+.franchise-graph-node .franchise-node-current {
+  fill: var(--accent-soft);
+  font-size: 11px;
+  pointer-events: none;
+}
+.franchise-floating-panel {
+  position: absolute;
+  z-index: 2;
+  background: var(--navigation-bg);
+  -webkit-backdrop-filter: var(--navigation-backdrop);
+  backdrop-filter: var(--navigation-backdrop);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 12px 35px #0005;
+}
+.franchise-board-legend {
+  top: calc(var(--header-height) + var(--anime-navigation-height) + 18px);
+  left: 20px;
+  width: 260px;
+  max-height: calc(100% - var(--header-height) - var(--anime-navigation-height) - 244px);
+  overflow: auto;
+  padding: 15px;
+  scrollbar-width: thin;
+}
+.franchise-board-legend.character-selected {
+  width: 320px;
+}
+.franchise-character-portrait {
+  float: left;
+  width: 88px;
+  height: 126px;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 10px;
+  margin: 0 14px 14px 0;
+}
+.franchise-character-aliases {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.franchise-character-profile > .primary {
+  clear: both;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 14px;
+  font-size: 11px;
+}
+.franchise-character-profile h2 {
+  margin: 20px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.franchise-character-biography > p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.franchise-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.franchise-panel-heading > span {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.franchise-panel-heading > button {
+  min-height: 26px;
+  width: 26px;
+  padding: 1px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+.franchise-board-legend h1 {
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0;
+  font-weight: 600;
+}
+.franchise-board-help {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.65;
+  margin: 13px 0;
+}
+.franchise-graph-legend {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+}
+.franchise-type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.franchise-type-row > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 0;
+  padding: 9px 7px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11px;
+}
+.franchise-type-row > button:hover,
+.franchise-type-row > button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--part-color) 12%, transparent);
+  color: var(--part-color);
+}
+.franchise-type-row > button > i {
+  background: var(--part-color);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.franchise-type-row > button > small {
+  color: var(--muted);
+  margin-left: auto;
+}
+.franchise-cast-filter {
+  margin: 14px 0;
+}
+.franchise-external-links {
+  clear: both;
+  margin: 16px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.franchise-external-links h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.franchise-external-links > a {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.franchise-external-links img,
+.franchise-external-placeholder {
+  width: 32px;
+  height: 48px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--panel-strong);
+}
+.franchise-external-placeholder {
+  display: grid;
+  place-items: center;
+}
+.franchise-external-links strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.franchise-external-links small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+.franchise-external-links a:hover strong {
+  color: var(--accent-soft);
+}
+.franchise-cast-filter .franchise-type-row {
+  justify-content: space-between;
+  font-size: 11px;
+}
+.franchise-cast-filter p {
+  font-size: 10px;
+  line-height: 1.65;
+  color: var(--muted);
+  margin: 9px 0;
+}
+.franchise-cast-status,
+.franchise-cast-error p {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.franchise-cast-error button {
+  min-height: 28px;
+  padding: 5px 10px;
+  font-size: 10px;
+}
+.franchise-cast-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.franchise-cast-pagination button {
+  min-height: 26px;
+  padding: 3px 8px;
+}
+.franchise-type-row .anime-part-switch {
+  margin: 0;
+}
+.franchise-relation-legend {
+  display: grid;
+  gap: 10px;
+  border-block: 1px solid var(--line);
+  padding: 14px 0;
+}
+.franchise-relation-legend > button,
+.franchise-relation-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 10px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+}
+.franchise-relation-legend > button:hover {
+  color: var(--accent-soft);
+}
+.franchise-relation-legend > button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.franchise-relation-legend i {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 24px;
+  font-style: normal;
+}
+.franchise-relation-legend .solid {
+  border-top: 2px solid var(--accent-soft);
+}
+.franchise-relation-legend .dashed {
+  border-top: 1px dashed var(--muted);
+}
+.franchise-relation-legend .arrow {
+  color: var(--muted);
+  line-height: 4px;
+}
+.franchise-reset {
+  width: 100%;
+  min-height: 32px;
+  padding: 8px;
+  font-size: 11px;
+}
+.franchise-map-controls {
+  left: 50%;
+  bottom: 163px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  white-space: nowrap;
+}
+.franchise-map-controls button {
+  min-height: 32px;
+  padding: 7px 12px;
+  font-size: 11px;
+}
+.franchise-map-controls > span {
+  min-width: 38px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+.franchise-focus-caption {
+  position: absolute;
+  bottom: 222px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(600px, calc(100% - 48px));
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
+.franchise-node-details {
+  top: calc(var(--header-height) + var(--anime-navigation-height) + 18px);
+  right: 20px;
+  width: 280px;
+  padding: 16px;
+  max-height: calc(100% - var(--header-height) - var(--anime-navigation-height) - 244px);
+  overflow: auto;
+  scrollbar-width: thin;
+  animation: franchise-panel-enter 200ms ease;
+}
+.franchise-node-details > img {
+  float: left;
+  width: 55px;
+  height: 82px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin: 0 12px 12px 0;
+}
+.franchise-node-details h2 {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.franchise-node-details > p {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 5px 0;
+}
+.franchise-node-details > .primary {
+  clear: both;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 14px;
+  font-size: 11px;
+}
+.franchise-node-relations h3 {
+  font-size: 11px;
+  margin: 16px 0 8px;
+  font-weight: 600;
+}
+.franchise-node-relations button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.franchise-node-relations button:hover {
+  color: var(--accent-soft);
+}
+.franchise-node-relations button span {
+  color: var(--muted);
+  font-size: 9px;
+}
+.franchise-selected-cast h3 {
+  margin: 16px 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.franchise-selected-cast > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 0;
+  color: var(--ink);
+  font-size: 11px;
+  text-decoration: none;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+.franchise-selected-cast > button:hover {
+  color: var(--accent-soft);
+}
+.franchise-selected-cast img,
+.franchise-cast-avatar {
+  width: 32px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.franchise-cast-avatar {
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  color: var(--muted);
+}
+.franchise-selected-cast small {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  margin-top: 4px;
+}
+.franchise-season-strip {
+  bottom: 12px;
+  left: 20px;
+  right: 20px;
+  padding: 10px 12px;
+}
+.franchise-season-strip-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.franchise-season-strip-heading h2 {
+  font-size: 11px;
+  font-weight: 600;
+  margin: 0;
+}
+.franchise-season-strip-heading h2 > span {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 5px;
+}
+.franchise-season-strip-heading > div {
+  display: flex;
+  gap: 5px;
+}
+.franchise-season-strip-heading button {
+  min-height: 22px;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+.franchise-season-strip-heading button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.franchise-season-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  padding: 2px 1px 8px;
+  scroll-snap-type: x proximity;
+}
+.franchise-season-card {
+  position: relative;
+  flex: 0 0 218px;
+  scroll-snap-align: start;
+  border-radius: 10px;
+  padding: 4px;
+}
+.franchise-season-card.selected {
+  background: color-mix(in srgb, var(--part-color) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--part-color) 45%, transparent);
+}
+.franchise-season-card > a {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--ink);
+  text-decoration: none;
+}
+.franchise-season-card > a:hover strong {
+  color: var(--part-color);
+}
+.franchise-season-card img,
+.franchise-season-placeholder {
+  flex-shrink: 0;
+  width: 52px;
+  height: 78px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+.franchise-season-placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 9px;
+}
+.franchise-season-card > a > span:last-child {
+  min-width: 0;
+}
+.franchise-season-card strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.franchise-season-card small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.franchise-season-card > button {
+  position: absolute;
+  bottom: 4px;
+  left: 66px;
+  min-height: 23px;
+  padding: 3px 8px;
+  font-size: 9px;
+}
+.franchise-chronology {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+}
+.franchise-chronology summary {
+  font-size: 10px;
+  color: var(--accent-soft);
+  padding-top: 14px;
+  cursor: pointer;
+}
+.franchise-chronology ol {
+  margin: 10px 0 0;
+  padding-left: 16px;
+  font-size: 10px;
+}
+.franchise-chronology li {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+.franchise-chronology button {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  line-height: 1.5;
+  font-size: 10px;
+  color: var(--ink);
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.franchise-chronology button:hover {
+  color: var(--accent-soft);
+}
+.franchise-chronology button span {
+  color: var(--muted);
+  font-size: 9px;
+}
+.franchise-map-empty {
+  position: absolute;
+  bottom: 262px;
+  left: 300px;
+  right: 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+@keyframes franchise-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 899px) {
+  .franchise-board-legend {
+    top: calc(var(--header-height) + var(--anime-navigation-height) + 12px);
+    left: 12px;
+    width: 240px;
+    max-height: calc(100% - var(--header-height) - var(--anime-navigation-height) - 248px);
+  }
+  .franchise-board-legend:not(.expanded) {
+    width: min(380px, calc(100% - 24px));
+  }
+  .franchise-board-legend:not(.expanded) h1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .franchise-board-legend.character-selected {
+    width: min(320px, calc(100% - 24px));
+    max-height: 48%;
+  }
+  .franchise-node-details {
+    top: auto;
+    bottom: 224px;
+    right: 12px;
+    width: 270px;
+    max-height: 42%;
+  }
+  .franchise-map-empty {
+    left: 24px;
+  }
+}
+@media (max-width: 480px) {
+  .franchise-map-controls {
+    gap: 4px;
+    bottom: 160px;
+    max-width: calc(100% - 20px);
+  }
+  .franchise-map-controls button {
+    padding: 7px 9px;
+    font-size: 10px;
+  }
+  .franchise-focus-caption {
+    bottom: 215px;
+    font-size: 10px;
+  }
+  .franchise-node-details {
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+  .franchise-season-strip {
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    padding: 9px;
+  }
+  .franchise-season-card {
+    flex-basis: 202px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .franchise-graph-node,
+  .franchise-graph-edge {
+    transition: none;
+  }
+  .franchise-node-details {
+    animation: none;
+  }
+}

@@ -1,0 +1,10 @@
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:8021
+}
+
+{$ADMIN_DOMAIN} {
+	encode zstd gzip
+	header X-Robots-Tag "noindex, nofollow"
+	reverse_proxy admin:8022
+}

@@ -6,17 +6,70 @@ import {
   NotFoundException,
   Param,
   Query,
+  Req,
+  Header,
+  UnauthorizedException,
 } from "@nestjs/common";
-import { searchSchema } from "@animesoul/contracts";
+import {
+  catalogQuerySchema,
+  catalogIdsSchema,
+  randomCatalogQuerySchema,
+  globalSearchQuerySchema,
+} from "@animesoul/contracts";
 import { CatalogService } from "./catalog.service.js";
+import { AuthService, cookieToken, type AuthRequest } from "../auth/auth.service.js";
 @Controller("api")
 export class CatalogController {
-  constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}
+  constructor(
+    @Inject(CatalogService) private readonly catalog: CatalogService,
+    @Inject(AuthService) private readonly auth: AuthService,
+  ) {}
+  @Get("search")
+  @Header("Cache-Control", "private, no-store")
+  async search(@Query() query: unknown, @Req() request: AuthRequest) {
+    const parsed = globalSearchQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException("Invalid search query.");
+    let userId: string | undefined;
+    if (cookieToken(request, "web")) {
+      try {
+        userId = (await this.auth.requireSession(request)).userId;
+      } catch (error) {
+        if (!(error instanceof UnauthorizedException)) throw error;
+      }
+    }
+    return this.catalog.search(parsed.data, userId);
+  }
   @Get("catalog")
-  list(@Query("q") q: unknown) {
-    const input = searchSchema.safeParse({ q });
+  @Header("Cache-Control", "private, no-store")
+  async list(@Query() query: unknown, @Req() request: AuthRequest) {
+    const input = catalogQuerySchema.safeParse(query);
     if (!input.success) throw new BadRequestException("Invalid search query.");
-    return this.catalog.list(input.data.q);
+    const session =
+      input.data.personalized === "1" || input.data.ratingSource === "mine"
+        ? await this.auth.requireSession(request)
+        : null;
+    return this.catalog.list(input.data, session?.userId);
+  }
+  @Get("catalog/random")
+  @Header("Cache-Control", "private, no-store")
+  async random(@Query() query: unknown, @Req() request: AuthRequest) {
+    const parsed = randomCatalogQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException("Invalid random filters.");
+    const { mode, ...filters } = parsed.data;
+    const input = mode === "all" ? catalogQuerySchema.parse({}) : filters;
+    const session =
+      mode === "taste" || input.ratingSource === "mine" || input.personalized === "1"
+        ? await this.auth.requireSession(request)
+        : null;
+    const anime = await this.catalog.random(input, mode, session?.userId);
+    if (!anime) throw new NotFoundException("No matching anime.");
+    return { slug: anime.slug, title: anime.title };
+  }
+  @Get("catalog/by-ids")
+  byIds(@Query("ids") ids: unknown) {
+    const input = catalogIdsSchema.safeParse(ids);
+    if (!input.success) throw new BadRequestException("Invalid catalog identities.");
+    return this.catalog.byIds(input.data);
   }
   @Get("anime/:slug")
   async anime(@Param("slug") slug: string) {
@@ -24,6 +77,41 @@ export class CatalogController {
     const anime = await this.catalog.find(slug);
     if (!anime) throw new NotFoundException();
     return anime;
+  }
+  @Get("anime/:slug/related")
+  async related(@Param("slug") slug: string) {
+    if (!/^[a-z0-9-]{1,160}$/.test(slug)) throw new NotFoundException();
+    const result = await this.catalog.related(slug);
+    if (!result) throw new NotFoundException();
+    return result;
+  }
+  @Get("anime/:slug/characters")
+  async characters(@Param("slug") slug: string) {
+    if (!/^[a-z0-9-]{1,160}$/.test(slug)) throw new NotFoundException();
+    const result = await this.catalog.characters(slug);
+    if (!result) throw new NotFoundException();
+    return result;
+  }
+  @Get("characters/search")
+  @Header("Cache-Control", "private, no-store")
+  async characterSearch(@Query() query: unknown) {
+    const parsed = globalSearchQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException("Invalid search query.");
+    return this.catalog.characterSearch(parsed.data);
+  }
+  @Get("characters/:slug")
+  async character(@Param("slug") slug: string) {
+    if (!/^[a-z0-9-]{1,160}$/.test(slug)) throw new NotFoundException();
+    const result = await this.catalog.character(slug);
+    if (!result) throw new NotFoundException();
+    return result;
+  }
+  @Get("anime/:slug/franchise")
+  async franchise(@Param("slug") slug: string) {
+    if (!/^[a-z0-9-]{1,160}$/.test(slug)) throw new NotFoundException();
+    const result = await this.catalog.franchise(slug);
+    if (!result) throw new NotFoundException();
+    return result;
   }
   @Get("profiles/:username")
   async profile(@Param("username") username: string) {

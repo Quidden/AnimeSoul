@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
+import { SiteExperience } from "../components/SiteExperience";
 import { SiteHeader } from "../components/SiteHeader";
 import { SiteFooter } from "../components/SiteFooter";
+import { CardLibraryProvider } from "../components/CardLibrary";
 import { siteConfiguration } from "../lib/site";
+import { themeBootstrap } from "../lib/theme";
+import { posterPaletteBootstrap } from "../lib/poster-palette";
 import "./globals.css";
 
+// Origins, indexing and preview settings are supplied when the container starts.
+export const dynamic = "force-dynamic";
 const site = siteConfiguration();
 export const metadata: Metadata = {
   metadataBase: site.url,
@@ -14,11 +20,29 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const preview = process.env.DEMO_CATALOG === "true";
   return (
-    <html lang="ru">
+    <html lang="ru" data-scroll-behavior="smooth" data-theme="lilac" suppressHydrationWarning>
+      <head>
+        <script id="animesoul-theme" dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+        <script
+          id="animesoul-poster-palette"
+          dangerouslySetInnerHTML={{ __html: posterPaletteBootstrap }}
+        />
+      </head>
       <body>
+        <div className="poster-ambient" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </div>
         <div className="app">
+          <div className="site-navigation-glass" aria-hidden="true" />
           <SiteHeader preview={preview} />
-          <main id="main-content">{children}</main>
+          <CardLibraryProvider>
+            <main id="main-content">
+              <SiteExperience />
+              {children}
+            </main>
+          </CardLibraryProvider>
           <SiteFooter preview={preview} />
         </div>
       </body>

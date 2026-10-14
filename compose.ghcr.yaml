@@ -1,0 +1,15 @@
+services:
+  migrate:
+    image: ghcr.io/${ANIMESOUL_GHCR_REPOSITORY:-quidden/animesoul}-migrate:${ANIMESOUL_IMAGE_TAG:?Set the published sha tag}
+    build: !reset null
+  api:
+    image: ghcr.io/${ANIMESOUL_GHCR_REPOSITORY:-quidden/animesoul}-api:${ANIMESOUL_IMAGE_TAG:?Set the published sha tag}
+    build: !reset null
+  worker:
+    image: ghcr.io/${ANIMESOUL_GHCR_REPOSITORY:-quidden/animesoul}-api:${ANIMESOUL_IMAGE_TAG:?Set the published sha tag}
+  web:
+    image: ghcr.io/${ANIMESOUL_GHCR_REPOSITORY:-quidden/animesoul}-web:${ANIMESOUL_IMAGE_TAG:?Set the published sha tag}
+    build: !reset null
+  admin:
+    image: ghcr.io/${ANIMESOUL_GHCR_REPOSITORY:-quidden/animesoul}-admin:${ANIMESOUL_IMAGE_TAG:?Set the published sha tag}
+    build: !reset null

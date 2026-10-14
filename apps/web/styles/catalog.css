@@ -71,28 +71,6 @@
 .release-badge.ongoing i {
   background: #7bd7a0;
 }
-.card-open {
-  display: grid;
-  place-items: center;
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 46px;
-  height: 46px;
-  border: 1px solid #ffffff44;
-  border-radius: 50%;
-  background: #17121dbb;
-  backdrop-filter: blur(10px);
-  font-size: 24px;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.poster:hover .card-open,
-.poster:focus-visible .card-open {
-  opacity: 1;
-}
 .anime-card h3 {
   font-size: 14px;
   margin: 12px 0 5px;
@@ -302,7 +280,7 @@
     gap: 12px;
   }
   .filter-heading,
-  .filter-panel label:first-of-type,
+  .filter-panel > label:first-of-type,
   .filter-panel button {
     grid-column: 1 / -1;
   }
@@ -316,4 +294,13 @@
   .anime-card h3 {
     font-size: 13px;
   }
+}
+
+.catalog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin: 32px 0;
+  flex-wrap: wrap;
 }

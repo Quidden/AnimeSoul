@@ -9,6 +9,10 @@ const paths = {
   folder: "M3 7V5h7l2 2h9v13H3Z",
   image: "M4 4h16v16H4zM4 16l5-5 4 4 3-3 4 4M14 8h.01",
   check: "m5 12 4 4L19 6",
+  close: "m6 6 12 12M18 6 6 18",
+  erase: "m16 3 5 5-12 12H5l-3-3L16 3ZM9 20h12M9 10l5 5",
+  settings:
+    "M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3ZM15 12a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z",
 } as const;
 
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: keyof typeof paths }) {

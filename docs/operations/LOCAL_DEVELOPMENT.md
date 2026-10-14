@@ -2,6 +2,10 @@
 
 # Local development
 
+The default full-stack launch now uses [Docker](DOCKER.md):
+`docker compose up -d --build --wait`. Stop Docker applications before starting the
+Node.js servers below; PostgreSQL can keep running in its container.
+
 Run commands from the new `main` root. Requirements: Node.js 24 and pnpm 11.25.0,
 pinned in [package.json](../../package.json). Docker is unnecessary for the fixture preview.
 
@@ -13,7 +17,7 @@ pnpm run setup
 pnpm dev
 ```
 
-Windows: [scripts/windows/Start AnimeSoul.bat](../../scripts/windows/Start%20AnimeSoul.bat).
+Windows: [scripts/windows/Start AnimeSoul Dev.bat](../../scripts/windows/Start%20AnimeSoul%20Dev.bat).
 It changes to the root, verifies Node.js 24, installs absent dependencies, preserves `.env` and starts
 `pnpm dev`. If pnpm is unavailable it uses `npx --yes pnpm@11.25.0`; the first download requires internet.
 
@@ -30,25 +34,33 @@ Legacy credentials/settings are not imported automatically.
 
 `pnpm dev` generates Prisma Client, builds contracts/database/API, then starts the API and two Next.js
 dev servers. Web/admin update on edits; API and compiled shared-package changes require restarting the command.
-Ctrl+C terminates only that launch's processes. If a port is occupied, stop the previous own launch;
-do not terminate every Node.js process on the machine.
+Before setup/build, the Windows launcher checks all three ports. If a healthy AnimeSoul stack is
+already running, it opens the existing website without rebuilding or starting duplicate servers.
+On a normal launch the browser opens after all three services become ready; the batch window
+remains open for the servers. `pnpm run dev --open` enables the same browser launch, while
+plain `pnpm dev` starts servers without opening a browser.
+`pnpm dev` performs the same check before building and again before starting its processes.
+An incomplete stack or an unrelated occupied port produces a list of conflicts. Stop the previous
+own launch with Ctrl+C in its terminal, then retry. Ctrl+C terminates only that launch's processes.
+
+Native PostgreSQL, server `YUMMY_TOKEN`/`KODIK_TOKEN`, `LOCAL_POSTGRES`/`POSTGRES_BIN`, import and playback commands are covered by [playback operations](PLAYBACK.md). Native PostgreSQL 18 works here without Docker; migrations and restore passed.
 
 ## Configuration consumers
 
-| Variable               | Current consumer                   | Meaning                                                                |
-| ---------------------- | ---------------------------------- | ---------------------------------------------------------------------- |
-| `SITE_URL`             | `apps/web/lib/site.ts`             | Canonical origin; locally `http://localhost:8021`                      |
-| `API_URL`              | `apps/web/lib/api.ts`, server-only | API origin; locally `http://127.0.0.1:8020`                            |
-| `API_HOST`, `API_PORT` | `apps/api/src/config.ts`           | Bind; defaults to `127.0.0.1:8020`                                     |
-| `NODE_ENV`             | API and Next.js                    | Production API refuses fixtures and requires PostgreSQL                |
-| `DEMO_CATALOG`         | API, Web and seed                  | `true` uses in-memory fixtures; `false` reads PostgreSQL               |
-| `DATABASE_URL`         | API, Prisma CLI, seed              | Private PostgreSQL connection string                                   |
-| `POSTGRES_PASSWORD`    | `infra/compose.dev.yaml`           | Container password; setup matches it to the template connection string |
-| `PUBLIC_INDEXING`      | Web                                | Defaults false; true requires public HTTPS and demo disabled           |
-| `REDIS_URL`            | No runtime module yet              | Reserved; compose Redis is not connected to the app                    |
-| `ALLOW_YUMMY`          | Not connected to runtime yet       | Reserved default-disabled policy; true does not activate a provider    |
-| `PAYMENTS_ENABLED`     | Not connected to runtime yet       | Reserved; toggling it does not implement billing                       |
-| `TEST_DATABASE_URL`    | `tests/database.test.mjs`          | Isolated local database with a name ending in `_test`                  |
+| Variable                     | Current consumer                   | Meaning                                                                |
+| ---------------------------- | ---------------------------------- | ---------------------------------------------------------------------- |
+| `SITE_URL`                   | `apps/web/lib/site.ts`             | Canonical origin; locally `http://localhost:8021`                      |
+| `API_URL`                    | `apps/web/lib/api.ts`, server-only | API origin; locally `http://127.0.0.1:8020`                            |
+| `API_HOST`, `API_PORT`       | `apps/api/src/config.ts`           | Bind; defaults to `127.0.0.1:8020`                                     |
+| `NODE_ENV`                   | API and Next.js                    | Production API refuses fixtures and requires PostgreSQL                |
+| `DEMO_CATALOG`               | API, Web and seed                  | `true` uses in-memory fixtures; `false` reads PostgreSQL               |
+| `DATABASE_URL`               | API, Prisma CLI, seed              | Private PostgreSQL connection string                                   |
+| `POSTGRES_PASSWORD`          | `infra/compose.dev.yaml`           | Container password; setup matches it to the template connection string |
+| `PUBLIC_INDEXING`            | Web                                | Defaults false; true requires public HTTPS and demo disabled           |
+| `REDIS_URL`                  | No runtime module yet              | Reserved; compose Redis is not connected to the app                    |
+| `ALLOW_YUMMY`, `ALLOW_KODIK` | Provider API                       | Environment denial overrides persisted switches                        |
+| `PAYMENTS_ENABLED`           | Not connected to runtime yet       | Reserved; toggling it does not implement billing                       |
+| `TEST_DATABASE_URL`          | `tests/database.test.mjs`          | Isolated local database with a name ending in `_test`                  |
 
 Root dev/build commands load `.env` into child processes. Running an app directly inside `apps/web`
 or `apps/api` requires equivalent environment configuration. The API does not enable arbitrary browser CORS;
@@ -76,7 +88,9 @@ Compose persists data in named volumes. Stop without deleting data:
 docker compose --env-file .env -f infra/compose.dev.yaml stop
 ```
 
-Docker is currently unavailable on this machine; see [migration status](../migration/STATUS.md).
+The full [Docker stack](DOCKER.md) runs here with PostgreSQL 18.
+`infra:up` belongs to the older separate infrastructure; do not run it alongside
+the full Compose configuration on port 54329.
 In demo mode `/api/health` returns 200 while `/api/ready` may return 503: fixtures do not prove PostgreSQL readiness.
 
 ## Commands and checks
@@ -98,12 +112,13 @@ In demo mode `/api/health` returns 200 while `/api/ready` may return 503: fixtur
 Use root `pnpm build`: it passes configuration to Next.js builds without inheriting `--env-file` in worker flags.
 HTML tests use isolated ports 18020–18022, preserving the visible preview.
 
-There are 9 tests: 8 do not need PostgreSQL; the integration test skips without `TEST_DATABASE_URL`.
+The local test suite grows with the implemented features. PostgreSQL integrations skip without `TEST_DATABASE_URL`; `pnpm db:verify` runs 26 checks against an isolated database and backup/restore without changing working data.
 Prepare a separate local `animesoul_test` database. In a separate terminal point both `DATABASE_URL`
 and `TEST_DATABASE_URL` to that test database, then run `pnpm db:migrate` and `pnpm check`.
 Never run the integration test against development data or production.
-[quality.yml](../../.github/workflows/quality.yml) provisions a PostgreSQL test-service, applies migrations
-and sets both variables; CI is expected to run the integration test.
+Automatic GitHub Actions tests have been removed. Run checks locally; image publication
+is manual: [GitHub/GHCR](GITHUB.md). Before committing, run `pnpm secrets:check` and then
+`pnpm secrets:check --staged` after staging.
 
 ## File placement
 
@@ -113,3 +128,14 @@ Local reports/screenshots/build outputs belong in ignored `artifacts`; secrets s
 `node_modules`, `.next`, `dist`, `generated` and `.idea` are local tooling outputs.
 Keep old code/databases out of the new root; recover separately through the
 [recovery procedure](../migration/STATUS.md#recovery).
+
+## Accounts
+
+Native Argon2id requires Node.js 24.7+ within 24.x. `pnpm setup` adds a private MFA key while retaining other settings.
+Set `ADMIN_URL=http://localhost:8022` alongside SITE_URL. `/account` supports registration/claim and `/library` stores personal data.
+`pnpm profiles:import` and `pnpm account:operator` are covered in [account operations](ACCOUNTS.md).
+`pnpm db:verify` includes account checks and library restoration.
+
+Catalog jobs: `CATALOG_WORKER=true` starts the worker with `pnpm dev`; manual launch is `pnpm catalog:worker`, enqueue is `pnpm catalog:sync`. Configured PostgreSQL is required and providers are disabled by default. [Full import/admin](CATALOG.md).
+
+Google/email: `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `MAIL_MODE=file|smtp|disabled` and SMTP fields are documented in [accounts](ACCOUNTS.md). `pnpm setup` adds absent local file mode; production forbids it. Never copy credentials into NEXT_PUBLIC fields.

@@ -1,0 +1,360 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { URLSearchParams } from "node:url";
+import { createDatabase } from "../packages/database/dist/src/index.js";
+import { createApplication } from "../apps/api/dist/app.js";
+import { readConfig } from "../apps/api/dist/config.js";
+import { csrfToken, digest, randomToken } from "../apps/api/dist/auth/security.js";
+const connection = process.env.TEST_DATABASE_URL;
+async function fixture() {
+  assert.match(new URL(connection).pathname, /_test$/);
+  const db = createDatabase(connection),
+    users = [],
+    animeId = randomUUID(),
+    episodeId = randomUUID(),
+    app = await createApplication(readConfig({ NODE_ENV: "test", DATABASE_URL: connection })),
+    server = app.getHttpAdapter().getInstance();
+  await db.anime.create({
+    data: {
+      id: animeId,
+      slug: "content-" + animeId,
+      title: "Тестовая история",
+      originalTitle: "Test",
+      aliases: [],
+      description: "Fixture",
+      year: 2026,
+      genres: [],
+      status: "released",
+      published: true,
+      episodes: { create: { id: episodeId, season: "1", number: "1", duration: 1400 } },
+    },
+  });
+  async function user() {
+    const id = randomUUID(),
+      token = randomToken();
+    users.push(id);
+    await db.user.create({
+      data: {
+        id,
+        email: id + "@example.invalid",
+        passwordHash: "fixture-hash",
+        profile: {
+          create: {
+            username: "c-" + id.slice(0, 25),
+            usernameKey: "c-" + id.slice(0, 25),
+            isPublic: true,
+            profileAccess: "public",
+            visibility: {
+              about: true,
+              favorites: true,
+              folders: true,
+              ratings: true,
+              statistics: true,
+              posts: "public",
+              reviews: "public",
+              comments: "public",
+            },
+            content: {},
+          },
+        },
+        sessions: {
+          create: { tokenHash: digest(token), expiresAt: new Date(Date.now() + 3600000) },
+        },
+      },
+    });
+    return { id, cookie: "animesoul_web_session=" + token, csrf: csrfToken(token) };
+  }
+  const get = (path, u) =>
+    server.inject({ method: "GET", url: path, headers: { cookie: u?.cookie ?? "" } });
+  const post = (path, body, u, overrides = {}) =>
+    server.inject({
+      method: "POST",
+      url: path,
+      payload: body,
+      headers: {
+        origin: "http://localhost:8021",
+        "x-animesoul-request": "1",
+        "x-csrf-token": u?.csrf ?? "",
+        cookie: u?.cookie ?? "",
+        ...overrides,
+      },
+    });
+  const write = (u, extra = {}) =>
+    post(
+      "/api/account/content/posts",
+      {
+        kind: "text",
+        title: "Что посмотреть вечером",
+        body: "Хочу обсудить музыку и темп повествования.",
+        audience: "public",
+        tags: ["обсуждение"],
+        labels: [],
+        ...extra,
+      },
+      u,
+    );
+  const comment = (u, target, extra = {}) =>
+    post(
+      "/api/account/content/comments",
+      {
+        body: "Мне тоже понравилось, как музыка поддерживает настроение.",
+        labels: [],
+        ...target,
+        ...extra,
+      },
+      u,
+    );
+  async function close() {
+    await db.auditEvent.deleteMany({ where: { actorId: { in: users } } });
+    await db.authThrottle.deleteMany({
+      where: { key: { in: users.map((id) => digest("content:" + id)) } },
+    });
+    await db.user.deleteMany({ where: { id: { in: users } } });
+    await db.episode.deleteMany({ where: { id: episodeId } });
+    await db.anime.delete({ where: { id: animeId } });
+    await app.close();
+    await db.$disconnect();
+  }
+  return { db, user, get, post, write, comment, close, animeId, episodeId };
+}
+test(
+  "content writes enforce actor/CSRF, target validity, timecodes and one active review",
+  { skip: !connection },
+  async () => {
+    const f = await fixture();
+    try {
+      const a = await f.user(),
+        b = await f.user();
+      assert.equal((await f.write()).statusCode, 401);
+      assert.equal((await f.write(a, { authorId: b.id })).statusCode, 400);
+      assert.equal(
+        (
+          await f.post(
+            "/api/account/content/posts",
+            {
+              kind: "text",
+              title: "Вечерний пост",
+              body: "Делюсь впечатлениями о музыке.",
+              audience: "public",
+              tags: [],
+              labels: [],
+            },
+            a,
+            {
+              origin: "https://evil.invalid",
+            },
+          )
+        ).statusCode,
+        403,
+      );
+      assert.equal(
+        (
+          await f.write(a, {
+            kind: "episode",
+            animeId: f.animeId,
+            episodeId: f.episodeId,
+            timestamp: 1500,
+          })
+        ).statusCode,
+        400,
+      );
+      assert.equal(
+        (
+          await f.write(a, {
+            kind: "episode",
+            animeId: f.animeId,
+            episodeId: f.episodeId,
+            timestamp: 125,
+          })
+        ).statusCode,
+        201,
+      );
+      const p = await f.write(a, { kind: "review", animeId: f.animeId, score: 8 });
+      assert.equal(p.statusCode, 201);
+      assert.equal((await f.write(a, { kind: "review", animeId: f.animeId })).statusCode, 409);
+      assert.equal(
+        (await f.post("/api/account/content/posts/delete", { id: p.json().id }, b)).statusCode,
+        404,
+      );
+    } finally {
+      await f.close();
+    }
+  },
+);
+test(
+  "post audiences and profile history are independent; blocking and unfriend revoke direct access",
+  { skip: !connection },
+  async () => {
+    const f = await fixture();
+    try {
+      const a = await f.user(),
+        b = await f.user(),
+        p = (await f.write(a, { audience: "friends" })).json().id;
+      assert.equal((await f.get("/api/account/content/posts/" + p)).statusCode, 404);
+      assert.equal((await f.get("/api/account/content/posts/" + p, b)).statusCode, 404);
+      const pair = a.id < b.id ? { lowId: a.id, highId: b.id } : { lowId: b.id, highId: a.id };
+      await f.db.friendship.create({ data: pair });
+      assert.equal((await f.get("/api/account/content/posts/" + p, b)).statusCode, 200);
+      await f.db.userProfile.update({
+        where: { userId: a.id },
+        data: {
+          visibility: {
+            about: true,
+            favorites: true,
+            folders: true,
+            ratings: true,
+            statistics: true,
+            posts: "private",
+            comments: "private",
+          },
+        },
+      });
+      assert.equal((await f.get("/api/account/content/posts?authorId=" + a.id, b)).statusCode, 404);
+      assert.equal((await f.get("/api/account/content/posts/" + p, b)).statusCode, 200);
+      await f.db.userBlock.create({ data: { blockerId: a.id, targetId: b.id } });
+      assert.equal((await f.get("/api/account/content/posts/" + p, b)).statusCode, 404);
+      assert.equal((await f.comment(b, { postId: p })).statusCode, 404);
+      await f.db.userBlock.deleteMany({ where: { blockerId: a.id, targetId: b.id } });
+      await f.db.friendship.delete({ where: { lowId_highId: pair } });
+      assert.equal((await f.get("/api/account/content/posts/" + p, b)).statusCode, 404);
+    } finally {
+      await f.close();
+    }
+  },
+);
+test(
+  "comments validate reply targets, inherit labels, preserve deletion stubs and hide adult text server-side",
+  { skip: !connection },
+  async () => {
+    const f = await fixture();
+    try {
+      const a = await f.user(),
+        b = await f.user(),
+        p = (await f.write(a)).json().id,
+        root = (await f.comment(a, { postId: p }, { labels: ["spoiler"] })).json().id;
+      assert.equal(
+        (await f.comment(b, { animeId: f.animeId }, { parentId: root })).statusCode,
+        404,
+      );
+      const reply = (await f.comment(b, { postId: p }, { parentId: root })).json().id;
+      const list = (await f.get("/api/account/content/comments?postId=" + p)).json();
+      assert.ok(list.items.find((c) => c.id === reply).labels.includes("spoiler"));
+      assert.equal((await f.comment(a, { postId: p }, { parentId: reply })).statusCode, 404);
+      assert.equal(
+        (await f.post("/api/account/content/comments/delete", { id: root }, a)).statusCode,
+        201,
+      );
+      assert.equal(
+        (await f.get("/api/account/content/comments?postId=" + p))
+          .json()
+          .items.find((c) => c.id === root).body,
+        "",
+      );
+      const adult = (
+        await f.write(a, { body: "ADULT_PRIVATE_TEXT", labels: ["18+", "nsfw"] })
+      ).json().id;
+      assert.equal((await f.get("/api/account/content/posts/" + adult, a)).statusCode, 404);
+      assert.equal(
+        (await f.post("/api/account/content/preferences", { enabled: true, confirmed18: false }, b))
+          .statusCode,
+        400,
+      );
+      await f.post("/api/account/content/preferences", { enabled: true, confirmed18: true }, b);
+      assert.equal((await f.get("/api/account/content/posts/" + adult, b)).statusCode, 200);
+      const mature = (
+        await f.comment(b, { animeId: f.animeId }, { labels: ["18+"], body: "MATURE_PARENT" })
+      ).json().id;
+      await f.comment(b, { animeId: f.animeId }, { parentId: mature, body: "MATURE_REPLY" });
+      assert.equal(
+        (await f.get("/api/account/content/comments?animeId=" + f.animeId)).body.includes(
+          "MATURE_",
+        ),
+        false,
+      );
+      await f.db.userProfile.update({
+        where: { userId: b.id },
+        data: { preferences: { adultContent: false } },
+      });
+      assert.equal((await f.get("/api/account/content/posts/" + adult, b)).statusCode, 404);
+    } finally {
+      await f.close();
+    }
+  },
+);
+test(
+  "content pagination is stable and unpublished/disabled/private records stay out of lists",
+  { skip: !connection },
+  async () => {
+    const f = await fixture();
+    try {
+      const a = await f.user();
+      await f.db.post.createMany({
+        data: Array.from({ length: 23 }, (_, i) => ({
+          authorId: a.id,
+          title: "Заметка " + i,
+          body: "Осмысленный текст",
+          audience: "public",
+          tags: [],
+          labels: [],
+          createdAt: new Date(1700000000000 + i * 1000),
+        })),
+      });
+      const one = (await f.get("/api/account/content/posts?authorId=" + a.id)).json();
+      assert.equal(one.items.length, 20);
+      const q = new URLSearchParams({ authorId: a.id, ...one.next });
+      const two = (await f.get("/api/account/content/posts?" + q)).json();
+      assert.equal(two.items.length, 3);
+      assert.equal(new Set([...one.items, ...two.items].map((p) => p.id)).size, 23);
+      await f.db.user.update({ where: { id: a.id }, data: { disabledAt: new Date() } });
+      assert.equal((await f.get("/api/account/content/posts/" + one.items[0].id)).statusCode, 404);
+    } finally {
+      await f.close();
+    }
+  },
+);
+test(
+  "anime community combines title, episode and post discussions while enforcing audiences and blocks",
+  { skip: !connection },
+  async () => {
+    const f = await fixture();
+    try {
+      const a = await f.user(),
+        b = await f.user();
+      const postId = (await f.write(a, { animeId: f.animeId })).json().id;
+      const privatePost = (await f.write(a, { animeId: f.animeId, audience: "private" })).json().id;
+      const title = (await f.comment(a, { animeId: f.animeId })).json().id;
+      const episode = (await f.comment(a, { episodeId: f.episodeId })).json().id;
+      const post = (await f.comment(a, { postId })).json().id;
+      const hidden = (
+        await f.comment(a, { postId: privatePost }, { body: "HIDDEN_POST_COMMENT" })
+      ).json().id;
+      const direct = (await f.get("/api/account/content/comments?animeId=" + f.animeId)).json()
+        .items;
+      assert.deepEqual(
+        direct.map((c) => c.id),
+        [title],
+      );
+      const route = `/api/account/content/comments?animeId=${f.animeId}&discussions=all`;
+      const combined = await f.get(route, b);
+      assert.equal(combined.statusCode, 200);
+      assert.deepEqual(
+        combined
+          .json()
+          .items.map((c) => c.id)
+          .sort(),
+        [title, episode, post].sort(),
+      );
+      assert.equal(combined.body.includes("HIDDEN_POST_COMMENT"), false);
+      assert.ok((await f.get(route, a)).json().items.some((c) => c.id === hidden));
+      assert.equal(
+        (await f.comment(b, { episodeId: f.episodeId }, { parentId: episode })).statusCode,
+        201,
+      );
+      await f.db.userBlock.create({ data: { blockerId: a.id, targetId: b.id } });
+      assert.equal((await f.get(route, b)).json().items.length, 0);
+    } finally {
+      await f.close();
+    }
+  },
+);

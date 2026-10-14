@@ -6,7 +6,7 @@
   "packageManager": "pnpm@11.25.0",
   "prettier": "./packages/config/prettier.json",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.7 <25"
   },
   "scripts": {
     "setup": "node scripts/workspace/setup.mjs",
@@ -16,13 +16,29 @@
     "lint": "eslint --config packages/config/eslint.config.mjs .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test packages/contracts/tests/*.test.mjs apps/api/tests/*.test.mjs tests/*.test.mjs",
+    "test": "node --test --test-concurrency=1 packages/contracts/tests/*.test.mjs apps/api/tests/*.test.mjs tests/*.test.mjs",
     "docs:check": "node scripts/quality/check-docs.mjs",
+    "secrets:check": "node scripts/quality/check-secrets.mjs",
     "check": "pnpm build && pnpm typecheck && pnpm lint && pnpm test && pnpm docs:check",
     "db:generate": "pnpm --filter @animesoul/database generate",
     "db:migrate": "pnpm --filter @animesoul/database migrate",
     "db:seed": "node --env-file=.env packages/database/dist/src/seed.js",
-    "infra:up": "docker compose --env-file .env -f infra/compose.dev.yaml up -d"
+    "db:local": "node --env-file=.env scripts/workspace/local-database.mjs",
+    "providers:credentials": "node scripts/workspace/import-provider-settings.mjs",
+    "providers:switch": "node --env-file=.env scripts/workspace/provider-switch.mjs",
+    "catalog:import": "node --env-file=.env apps/api/dist/providers/import-catalog.js",
+    "db:verify": "node --env-file=.env scripts/workspace/verify-database.mjs",
+    "demo:community": "node --env-file=.env scripts/workspace/demo-community.mjs",
+    "infra:up": "docker compose --env-file .env -f infra/compose.dev.yaml up -d",
+    "docker:up": "docker compose up -d --build --wait",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f --tail=100",
+    "profiles:import": "node --env-file=.env scripts/workspace/migrate-profiles.mjs",
+    "account:operator": "node --env-file=.env scripts/workspace/account-operator.mjs",
+    "catalog:sync": "node --env-file=.env apps/worker/main.mjs --enqueue",
+    "catalog:metadata": "node --env-file=.env scripts/workspace/refresh-catalog-metadata.mjs",
+    "catalog:characters": "node --env-file=.env scripts/workspace/refresh-catalog-characters.mjs",
+    "catalog:worker": "node --env-file=.env apps/worker/main.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

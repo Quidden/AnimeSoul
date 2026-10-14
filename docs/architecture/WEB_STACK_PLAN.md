@@ -2,7 +2,7 @@
 
 # AnimeSoul migration plan
 
-**2026-10-06. Status: implementation started; archive and foundation prepared. [Progress](../migration/STATUS.md).**
+**2026-10-07. Status: implementation started; archive and foundation prepared. [Progress](../migration/STATUS.md).**
 
 User decisions: discontinue desktop development, separate the mobile application, make the website discoverable by anime titles and public usernames, protect administration, expand statistics, and prepare payments. The merchant is based in Ukraine and the audience is international. This is the target roadmap; implemented source/dependencies are in the [project map](PROJECT_MAP.md), routes in the [site map](SITE_MAP.md). Migration remains incomplete; production and payment accounts have not been switched.
 
@@ -22,7 +22,11 @@ User decisions: discontinue desktop development, separate the mobile application
 
 Next.js renders pages and calls the API. Do not duplicate authentication, role, payment or profile rules in Server Actions. Proxy public `/api` requests to the backend on the same origin. The admin origin has separately constrained routing and cookies. Pin dependency versions when establishing the foundation. [Next.js server/client boundaries](https://nextjs.org/docs/app/getting-started/server-and-client-components), [NestJS/Fastify](https://docs.nestjs.com/techniques/performance).
 
-Start search with PostgreSQL full-text/trigram indexes for Russian, original and English titles, aliases and usernames. Introduce a dedicated search service after measuring relevance and load.
+Universal search is implemented in the shared website header and `/search`: anime titles/aliases,
+nicknames/UUIDs, actual settings, filter suggestions and keyboard completion. The API uses a bounded,
+briefly cached candidate index with typo/layout matching and fresh publication/privacy checks.
+See the [search guide](../operations/SEARCH.md). PostgreSQL full-text/trigram indexes or a dedicated
+search service remain possible next steps after measuring relevance and load.
 
 ## 2. Code organization and readability
 
@@ -37,8 +41,8 @@ See the [current data model](DATA_MODEL.md) for existing tables and limits.
 apps/
   web/                  # public pages and account area
   api/src/modules/      # auth, users, profiles, catalog, library,
-                        # playback, media, entitlements, billing,
-                        # analytics, administration, providers
+                        # playback, media, social, content, messaging,
+                        # watch-rooms, community, billing, administration
   admin/                # tables, forms, reports and management
   worker/               # background jobs
 packages/
@@ -60,19 +64,32 @@ Require strict TypeScript, runtime input validation, descriptive names, consiste
 
 ## 3. Stages and completion gates
 
-| Stage                  | Work                                                                                               | Completion gate                                                                                                   |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 0. Snapshot            | Archive commit/branch/tag; separate database, media and Android signing backups; feature inventory | Current version is reproducible, restore is verified and required untracked source is included                    |
-| 1. Foundation          | Workspace, applications, local infrastructure, CI, module boundaries and threat model              | Clean checkout starts; types, builds and migrations pass                                                          |
-| 2. Data/authentication | Users, sessions, roles, administrator MFA, profiles, privacy and data transfer                     | IDs/libraries preserved; account isolation, session revocation and migration of a database copy verified          |
-| 3. Catalog/providers   | Internal anime identity, imports, search, cache and provider controls                              | Catalog works with YummyAnime disabled; saved references do not depend on the active provider                     |
-| 4. Website/player/SEO  | Next.js pages, useful React components, sitemap, metadata and redirects                            | Content is in HTML without JS; privacy holds; playback and profile features work                                  |
-| 5. Administration      | Management, metrics, moderation, events and reports                                                | Role behavior is verified; numbers have definitions; changes are audited                                          |
-| 6. Payment preparation | Plans, orders, entitlements, adapter, sandbox, callbacks and reconciliation                        | Success, duplicate, failure, delay, cancellation and refund produce correct rights; live payments remain disabled |
-| 7. Infrastructure      | Cloudflare, origin/admin protection, anti-bot, backups and load checks                             | Application/perimeter defenses verified; search bots and payment callbacks work                                   |
-| 8. Cutover             | Final migration, DNS/deployment, Search Console, observation and rollback                          | New website on the domain, sitemap accepted, metrics/alerts available and recovery rehearsed                      |
+Expanded on October 7 to 14 stages (0–13). Numbers 0–4 remain; administration,
+payments, infrastructure and cutover (formerly 5–8) are now 10–13.
+Social features are part of the target website release. They are planned;
+their rules and checks are in the [social network plan](SOCIAL_NETWORK_PLAN.md).
 
-Security and SEO requirements start in stage 1. Cloudflare is a late infrastructure stage. Mobile API-client work follows stable contracts from stages 2–4 and does not block the website launch.
+| Stage                          | Work                                                                                                                      | Completion gate                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 0. Snapshot                    | Archive source, data, media and Android signing                                                                           | Reproduction and recovery verified                                                                                          |
+| 1. Foundation                  | Workspace, apps, CI, migrations and security boundaries                                                                   | Builds, types, migrations and backup/restore pass                                                                           |
+| 2. Accounts/profiles           | Data transfer, password and Google, email verification/change/recovery, privacy, media presets and admin MFA              | UUIDs/libraries preserved; isolation/revocation verified; real Google and email verified in a configured environment        |
+| 3. Catalog/providers           | Internal IDs, imports, search, mapping review and switches                                                                | Reserve-independent catalog; saved UUIDs/slugs unchanged                                                                    |
+| 4. Website/episodes/player/SEO | Stable episode IDs, episode/timestamp routes, custom player, progress, media, metadata and sitemap                        | Video decodes; position persists; episode/timestamp links are provider-independent; privacy holds                           |
+| 5. Friends/privacy             | Friend requests/acceptance, follows, blocks, public/private sections                                                      | Reciprocal requests, cancellation, blocking and access checked for both users                                               |
+| 6. Publications/discussions    | Text and episode/timestamp posts, reviews, comments, scores, hashtags, 18+/NSFW/spoilers; reports and baseline moderation | One record appears on profile and anime/episode; hidden content stays out of responses, search, notifications and SEO       |
+| 7. Messages/notifications      | Private dialogs, unread counts, notifications and settings                                                                | Participant/block checks in HTTP and real-time; redelivery is idempotent                                                    |
+| 8. Watch rooms                 | Rooms, invites, chat, play/pause/seek synchronization and reconnect                                                       | Two clients synchronize; separate access checks; no video or credential relay                                               |
+| 9. Community/votes             | Reddit-inspired up/down arrows, posts/comments/anime/profiles, hot/new/top and badges                                     | One changeable vote; upvotes lift and prolong visibility, downvotes lower rank; immutable publication time and abuse limits |
+| 10. Administration/moderation  | Management, reports, metrics, sanctions and audit                                                                         | Roles/actions checked; metric definitions documented                                                                        |
+| 11. Payment preparation        | Plans, orders, rights, sandbox, callbacks, refunds and reconciliation                                                     | Correct entitlements for every scenario; live acceptance enabled separately after verification                              |
+| 12. Infrastructure             | Deployment, Cloudflare, origin/admin, anti-bot, backups, real-time and load                                               | Protection, recovery, load, crawlers and callbacks verified                                                                 |
+| 13. Cutover                    | Final migration, domain, Search Console, observation and rollback                                                         | Website live; sitemap accepted; metrics, alerts and recovery verified                                                       |
+
+Security and SEO start in stage 1. Baseline moderation ships with the first social
+content in stage 6. Real Google/email complete stage 2; the player and stable episode
+identity follow, then social stages 5–9. Mobile API work follows stable shared
+contracts and does not block the website.
 
 ## 4. Git and preservation
 
@@ -82,7 +99,7 @@ The primary local `Documents/AnimeSoul` workspace is already on the new-stack `m
 2. Previous local source, databases, settings, dependencies and releases are preserved in `Documents/AnimeSoulArchive`, branch `codex/legacy-local-2026-10-06`. This is the preserved old `master` workspace, distinct from the committed migration snapshot.
 3. Private backup: `AnimeSoulArchive/artifacts/migration-backup/2026-10-06`; credentials, SQLite/JSON and Android signing material remain outside Git.
 4. Website work uses `main`; Android lives in independent `AnimeSoulMobile`. Neither adjacent directory is a website build dependency.
-5. Remote default branch and production are unchanged. Public cutover follows the stage gates; CI is configured, while local PostgreSQL migration/restore remains an open foundation gate.
+5. The GitHub default branch is `main`; production cutover follows separate stage gates. Automatic Actions tests are removed; images are published manually to GHCR. Local PostgreSQL migrations and backup/restore are verified.
 
 The archive supports recovery and comparison. Reuse verified contracts, data and useful components; do not copy the complete old backend into the new stack.
 
@@ -100,7 +117,11 @@ Anime receives an internal ID with `provider + external_id` mappings. Slugs, tit
 
 Anime pages use published local catalog metadata, so playback-provider downtime does not remove pages from search. Import through background jobs with timeouts, quotas and bounded retries. Distinguish disabled, missing credentials and upstream failure states.
 
-YummyAnime has a persistent administration setting and a higher-priority environment restriction. Disable it by default in production; enable explicitly for personal use. Apply one policy to catalog, fallback, trailers, background work and token checks. Tests must prove zero outgoing requests when disabled. Production metadata/playback providers must permit the intended use; this is a launch dependency. [YummyAnime terms](https://api.yani.tv/).
+Kodik is the primary metadata and playback provider. Its API refreshes the local metadata cache;
+video URLs are resolved separately on playback requests and never persisted. YummyAnime is only
+a playback reserve; disabling it does not stop catalog refresh or Kodik.
+
+YummyAnime has a persistent administration setting and a higher-priority environment restriction. Disable it by default in production; enable explicitly for personal use. Apply one policy to every reserve playback request; YummyAnime does not supply catalog jobs. Tests must prove zero outgoing requests when disabled. Production metadata/playback providers must permit the intended use; this is a launch dependency. [YummyAnime terms](https://api.yani.tv/).
 
 Preserve account UUIDs, email verification, Google links, roles, statuses, privacy, favorites, folders, progress and ratings. Support existing password hashes with verification and rehash on login, or a controlled reset. Cutover may revoke old sessions and require login again. Imports are repeatable, report row/relationship counts and never turn preview demo data into real accounts.
 

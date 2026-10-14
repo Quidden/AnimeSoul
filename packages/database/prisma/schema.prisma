@@ -21,15 +21,76 @@ enum OrderStatus {
 }
 model User {
   id String @id @default(uuid()) @db.Uuid
-  email String @unique
+  email String? @unique
   passwordHash String?
+  emailVerifiedAt DateTime?
+  googleSubject String? @unique
+  authVersion Int @default(0)
   createdAt DateTime @default(now())
   disabledAt DateTime?
+  lastActiveAt DateTime?
+  adminVersion Int @default(0)
   profile UserProfile?
   sessions Session[]
   roles UserRole[]
+  permissions UserPermission[]
   orders Order[]
   entitlements Entitlement[]
+  subscriptionTrial SubscriptionTrial?
+  library LibraryItem[]
+  folders LibraryFolder[]
+  episodeProgress EpisodeProgress[]
+  legacy LegacyProfile?
+  mfa MfaCredential?
+  accountTokens AccountToken[]
+  oauthAttempts OAuthAttempt[]
+  playbackSessions PlaybackSession[]
+  friendRequestsLow FriendRequest[] @relation("requestLow")
+  friendRequestsHigh FriendRequest[] @relation("requestHigh")
+  friendshipsLow Friendship[] @relation("friendLow")
+  friendshipsHigh Friendship[] @relation("friendHigh")
+  following Follow[] @relation("follower")
+  followers Follow[] @relation("followed")
+  blocks UserBlock[] @relation("blocker")
+  blockedBy UserBlock[] @relation("blocked")
+  posts Post[]
+  comments Comment[]
+  analyticsEvents AnalyticsEvent[]
+  notificationReceipts NotificationReceipt[]
+  notificationTargets NotificationCampaign[]
+  @@index([createdAt, id])
+  @@index([lastActiveAt, id])
+  @@index([disabledAt, createdAt])
+}
+enum AccountTokenPurpose {
+  verify
+  reset
+  change
+}
+model AccountToken {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose AccountTokenPurpose
+  tokenHash String @unique
+  targetEmail String
+  issuedVersion Int
+  expiresAt DateTime
+  consumedAt DateTime?
+  @@unique([userId, purpose])
+  @@index([expiresAt])
+}
+model OAuthAttempt {
+  stateHash String @id
+  browserHash String
+  nonce String
+  verifierEncrypted String
+  userId String? @db.Uuid
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionHash String?
+  expiresAt DateTime
+  consumedAt DateTime?
+  @@index([expiresAt])
 }
 model UserProfile {
   userId String @id @db.Uuid
@@ -44,10 +105,50 @@ model UserProfile {
   presence Presence @default(offline)
   about String @default("")
   visibility Json
-  // Baseline payload; normalization and legacy import follow in stage 2.
+  // Kept for old baseline records; new library data is normalized below.
   content Json
+  preferences Json @default("{}")
+  profileAccess String @default("private")
+  friendRequests String @default("everyone")
   updatedAt DateTime @updatedAt
   @@index([isPublic, indexable])
+}
+model FriendRequest {
+  lowId String @db.Uuid
+  highId String @db.Uuid
+  requestedBy String @db.Uuid
+  low User @relation("requestLow", fields: [lowId], references: [id], onDelete: Cascade)
+  high User @relation("requestHigh", fields: [highId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@id([lowId, highId])
+  @@index([highId])
+}
+model Friendship {
+  lowId String @db.Uuid
+  highId String @db.Uuid
+  low User @relation("friendLow", fields: [lowId], references: [id], onDelete: Cascade)
+  high User @relation("friendHigh", fields: [highId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@id([lowId, highId])
+  @@index([highId])
+}
+model Follow {
+  followerId String @db.Uuid
+  targetId String @db.Uuid
+  follower User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  target User @relation("followed", fields: [targetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@id([followerId, targetId])
+  @@index([targetId])
+}
+model UserBlock {
+  blockerId String @db.Uuid
+  targetId String @db.Uuid
+  blocker User @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  target User @relation("blocked", fields: [targetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@id([blockerId, targetId])
+  @@index([targetId])
 }
 model Session {
   id String @id @default(uuid()) @db.Uuid
@@ -57,6 +158,9 @@ model Session {
   expiresAt DateTime
   revokedAt DateTime?
   mfaVerifiedAt DateTime?
+  audience String @default("web")
+  developerAccessMode String @default("actual")
+  playbackSessions PlaybackSession[]
   @@index([userId, expiresAt])
 }
 model UserRole {
@@ -64,11 +168,23 @@ model UserRole {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   role String
   @@id([userId, role])
+  @@index([role, userId])
+}
+model UserPermission {
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+  grantedBy String @db.Uuid
+  createdAt DateTime @default(now())
+  @@id([userId, permission])
+  @@index([permission, userId])
 }
 model Anime {
   id String @id @default(uuid()) @db.Uuid
   slug String @unique
   title String
+  searchText String @default("")
+  metadataProvider String @default("manual")
   originalTitle String
   aliases String[]
   description String
@@ -76,11 +192,34 @@ model Anime {
   genres String[]
   poster String?
   status String
+  shikimoriScore Float?
+  shikimoriVotes Int?
+  popularity Int @default(0)
+  format String @default("unknown")
+  translations String[] @default([])
+  franchiseSize Int @default(1)
+  details Json @default("{}")
   published Boolean @default(false)
+  charactersFetchedAt DateTime?
+  characters AnimeCharacter[]
   isDevelopment Boolean @default(false)
   updatedAt DateTime @updatedAt
   providers AnimeProvider[]
+  library LibraryItem[]
+  folderEntries FolderEntry[]
+  episodeProgress EpisodeProgress[]
+  incomingConflicts ProviderMappingConflict[] @relation("incoming")
+  ownedConflicts ProviderMappingConflict[] @relation("existing")
+  mappingOverrides ProviderMappingOverride[]
+  kodikReleases KodikRelease[]
+  episodes Episode[]
+  posts Post[]
+  comments Comment[]
+  announcements Announcement[]
   @@index([published, title])
+  @@index([metadataProvider, published, title])
+  @@index([published, shikimoriScore])
+  @@index([published, status, popularity])
 }
 model AnimeProvider {
   animeId String @db.Uuid
@@ -90,10 +229,94 @@ model AnimeProvider {
   @@id([provider, externalId])
   @@unique([animeId, provider])
 }
+model Character {
+  id String @id
+  slug String @unique
+  provider String @default("shikimori")
+  externalId String
+  name String
+  originalName String
+  japaneseName String @default("")
+  aliases String[] @default([])
+  description String @default("")
+  image String?
+  sourceUrl String?
+  voiceActors Json @default("[]")
+  appearanceExternalIds String[] @default([])
+  detailsFetchedAt DateTime?
+  isDevelopment Boolean @default(false)
+  updatedAt DateTime @updatedAt
+  appearances AnimeCharacter[]
+  @@unique([provider, externalId])
+  @@index([name])
+}
+model AnimeCharacter {
+  animeId String @db.Uuid
+  characterId String
+  anime Anime @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  role String
+  position Int @default(0)
+  @@id([animeId, characterId])
+  @@index([characterId])
+}
 model ProviderSetting {
   key String @id
   enabled Boolean @default(false)
   updatedAt DateTime @updatedAt
+}
+model CatalogImportJob {
+  strategy String @default("kodik-cursor")
+  cursor String?
+  processedPages CatalogImportPage[]
+  upperBound Int?
+  id String @id @default(uuid()) @db.Uuid
+  provider String @default("kodik")
+  status String @default("queued")
+  offset Int @default(0)
+  pages Int @default(0)
+  imported Int @default(0)
+  rejected Int @default(0)
+  conflicts Int @default(0)
+  lastFingerprint String?
+  attempts Int @default(0)
+  nextRunAt DateTime @default(now())
+  leaseToken String? @db.Uuid
+  leaseExpiresAt DateTime?
+  lastError String?
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  finishedAt DateTime?
+  updatedAt DateTime @updatedAt
+  @@index([status, nextRunAt])
+}
+model ProviderMappingConflict {
+  id String @id @default(uuid()) @db.Uuid
+  provider String
+  externalId String
+  incomingAnimeId String @db.Uuid
+  incoming Anime @relation("incoming", fields: [incomingAnimeId], references: [id], onDelete: Cascade)
+  existingAnimeId String? @db.Uuid
+  existing Anime? @relation("existing", fields: [existingAnimeId], references: [id], onDelete: SetNull)
+  previousExternalId String?
+  version Int @default(1)
+  status String @default("open")
+  decision String?
+  reason String?
+  resolvedBy String? @db.Uuid
+  resolvedAt DateTime?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  @@unique([provider, externalId, incomingAnimeId])
+  @@index([status, lastSeenAt])
+}
+model ProviderMappingOverride {
+  provider String
+  externalId String
+  ignored Boolean @default(false)
+  animeId String @db.Uuid
+  anime Anime @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  @@id([provider, externalId])
 }
 model AuditEvent {
   id String @id @default(uuid()) @db.Uuid
@@ -101,8 +324,185 @@ model AuditEvent {
   action String
   objectId String?
   reason String?
+  details Json?
+  operationId String? @unique @db.Uuid
+  requestHash String?
   createdAt DateTime @default(now())
   @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([objectId, createdAt])
+  @@index([action, createdAt])
+}
+model LibraryItem {
+  userId String @db.Uuid
+  animeId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anime Anime @relation(fields: [animeId], references: [id], onDelete: Restrict)
+  favorite Boolean @default(false)
+  score Int?
+  lastEpisode String @default("")
+  dubbing String @default("")
+  season Int @default(1)
+  progressDetails Json @default("{}")
+  tracking Json @default("{}")
+  ratings LibraryRating[]
+  updatedAt DateTime @updatedAt
+  @@id([userId, animeId])
+}
+model LibraryRating {
+  userId String @db.Uuid
+  animeId String @db.Uuid
+  scope String
+  key String
+  score Int
+  library LibraryItem @relation(fields: [userId, animeId], references: [userId, animeId], onDelete: Cascade, map: "LibraryRating_library_fkey")
+  @@id([userId, animeId, scope, key])
+}
+model LibraryFolder {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name String
+  entries FolderEntry[]
+  @@unique([id, userId])
+  @@index([userId])
+}
+model FolderEntry {
+  folderId String @db.Uuid
+  userId String @db.Uuid
+  animeId String @db.Uuid
+  folder LibraryFolder @relation(fields: [folderId, userId], references: [id, userId], onDelete: Cascade)
+  anime Anime @relation(fields: [animeId], references: [id], onDelete: Restrict)
+  note String @default("")
+  @@id([folderId, animeId])
+}
+model EpisodeProgress {
+  userId String @db.Uuid
+  animeId String @db.Uuid
+  episodeKey String
+  episodeId String? @db.Uuid
+  episode Episode? @relation(fields: [episodeId, animeId], references: [id, animeId], onDelete: Restrict)
+  activePlaybackId String? @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anime Anime @relation(fields: [animeId], references: [id], onDelete: Restrict)
+  position Float @default(0)
+  duration Float @default(0)
+  watchedSeconds Float @default(0)
+  completed Boolean @default(false)
+  details Json @default("{}")
+  updatedAt DateTime @updatedAt
+  @@id([userId, animeId, episodeKey])
+}
+model Episode {
+  id String @id @db.Uuid
+  animeId String @db.Uuid
+  anime Anime @relation(fields: [animeId], references: [id], onDelete: Restrict)
+  season String
+  number String
+  duration Float?
+  providers EpisodeProvider[]
+  progress EpisodeProgress[]
+  playbackSessions PlaybackSession[]
+  posts Post[]
+  comments Comment[]
+  @@unique([animeId, season, number])
+  @@unique([id, animeId])
+}
+model EpisodeProvider {
+  provider String
+  animeId String @db.Uuid
+  externalId String
+  episodeId String @db.Uuid
+  episode Episode @relation(fields: [episodeId, animeId], references: [id, animeId], onDelete: Cascade)
+  @@id([provider, animeId, externalId])
+  @@index([episodeId])
+}
+model PlaybackSession {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authSessionId String @db.Uuid
+  authSession Session @relation(fields: [authSessionId], references: [id], onDelete: Cascade)
+  animeId String @db.Uuid
+  episodeId String @db.Uuid
+  episode Episode @relation(fields: [episodeId, animeId], references: [id, animeId], onDelete: Cascade)
+  sequence Int @default(0)
+  lastEventAt DateTime @default(now())
+  expiresAt DateTime
+  @@index([expiresAt])
+  @@index([userId])
+}
+model LegacyProfile {
+  legacyId String @id
+  userId String @unique @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceHash String
+  claimHash String? @unique
+  claimExpiresAt DateTime?
+  claimedAt DateTime?
+}
+model MfaCredential {
+  userId String @id @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secretEncrypted String?
+  pendingEncrypted String?
+  pendingExpiresAt DateTime?
+  lastCounter Int @default(-1)
+  recoveryHashes String[]
+  enabledAt DateTime?
+}
+model AuthThrottle {
+  key String @id
+  attempts Int @default(1)
+  windowStartedAt DateTime @default(now())
+}
+model Post {
+  id String @id @default(uuid()) @db.Uuid
+  authorId String @db.Uuid
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  kind String @default("text")
+  title String
+  body String
+  audience String @default("public")
+  tags String[]
+  labels String[]
+  animeId String? @db.Uuid
+  anime Anime? @relation(fields: [animeId], references: [id], onDelete: Restrict)
+  episodeId String? @db.Uuid
+  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: Restrict)
+  timestamp Int?
+  score Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  comments Comment[]
+  @@index([createdAt, id])
+  @@index([authorId, createdAt])
+  @@index([animeId, createdAt])
+  @@index([episodeId, createdAt])
+}
+model Comment {
+  id String @id @default(uuid()) @db.Uuid
+  authorId String @db.Uuid
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body String
+  labels String[]
+  animeId String? @db.Uuid
+  anime Anime? @relation(fields: [animeId], references: [id], onDelete: Restrict)
+  episodeId String? @db.Uuid
+  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: Restrict)
+  postId String? @db.Uuid
+  post Post? @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parentId String? @db.Uuid
+  parent Comment? @relation("replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("replies")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  @@index([animeId, createdAt])
+  @@index([episodeId, createdAt])
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
 }
 // Payment boundary only. No payment endpoint is enabled.
 model Order {
@@ -142,5 +542,152 @@ model Entitlement {
   source String
   expiresAt DateTime
   revokedAt DateTime?
+  planId String?
+  plan SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  createdAt DateTime?
+  amountMinor Int?
+  currency String? @db.Char(3)
   @@index([userId, permission, expiresAt])
+  @@index([planId, expiresAt])
+}
+
+model SubscriptionTrial {
+  userId String @id @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt DateTime
+  expiresAt DateTime
+  revokedAt DateTime?
+  discountRedeemedAt DateTime?
+}
+model SubscriptionPlan {
+  id String @id
+  version Int @default(0)
+  name String
+  description String @default("")
+  sortOrder Int @default(0)
+  permissions String[] @default(["player.native"])
+  months Int
+  amountMinor Int?
+  currency String @db.Char(3)
+  enabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  entitlements Entitlement[]
+  announcements Announcement[]
+  notifications NotificationCampaign[]
+}
+model SubscriptionPromotion {
+  id String @id @default(uuid()) @db.Uuid
+  version Int @default(0)
+  name String
+  description String @default("")
+  planIds String[] @default([])
+  percent Int
+  months Int[] @default([])
+  startsAt DateTime
+  endsAt DateTime
+  enabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  @@index([enabled, startsAt, endsAt])
+}
+
+model AnalyticsEvent {
+  id String @id @db.Uuid
+  userId String? @db.Uuid
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  visitorId String @db.VarChar(64)
+  visitId String @db.Uuid
+  kind String
+  feature String?
+  path String?
+  animeId String? @db.Uuid
+  episodeId String? @db.Uuid
+  season String?
+  episode String?
+  player String?
+  value Int?
+  limit Int?
+  createdAt DateTime @default(now())
+  @@index([createdAt, kind])
+  @@index([userId, createdAt])
+  @@index([animeId, createdAt])
+  @@index([kind, userId, createdAt])
+  @@index([visitId])
+}
+
+model Announcement {
+  id String @id @default(uuid()) @db.Uuid
+  title String
+  body String
+  kind String @default("info")
+  scope String @default("global")
+  animeId String? @db.Uuid
+  anime Anime? @relation(fields: [animeId], references: [id], onDelete: Restrict)
+  audience String @default("all")
+  role String?
+  planId String?
+  plan SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  link String?
+  dismissible Boolean @default(true)
+  priority Int @default(0)
+  enabled Boolean @default(false)
+  startsAt DateTime
+  endsAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+  @@index([enabled, startsAt, endsAt])
+  @@index([scope, animeId])
+}
+
+model NotificationCampaign {
+  id String @id @default(uuid()) @db.Uuid
+  title String
+  body String
+  kind String @default("info")
+  audience String @default("authenticated")
+  role String?
+  planId String?
+  plan SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  userId String? @db.Uuid
+  targetUser User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  link String?
+  enabled Boolean @default(false)
+  startsAt DateTime
+  endsAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+  receipts NotificationReceipt[]
+  @@index([enabled, startsAt, endsAt])
+}
+
+model NotificationReceipt {
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId String @db.Uuid
+  campaign NotificationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  readAt DateTime
+  dismissedAt DateTime?
+  @@id([userId, campaignId])
+  @@index([campaignId, readAt])
+}
+
+model SiteSetting {
+  key String @id
+  value Json
+  version Int @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model KodikRelease {
+  id String @id
+  animeId String @db.Uuid
+  anime Anime @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  @@index([animeId])
+}
+model CatalogImportPage {
+  jobId String @db.Uuid
+  cursorHash String
+  job CatalogImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@id([jobId, cursorHash])
 }

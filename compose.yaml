@@ -1,0 +1,152 @@
+name: animesoul
+
+x-server-environment: &server-environment
+  NODE_ENV: ${APP_ENV:-development}
+  API_HOST: 0.0.0.0
+  API_PORT: 8020
+  DATABASE_URL: postgresql://animesoul:${POSTGRES_PASSWORD:?Create .env with pnpm setup}@postgres:5432/animesoul
+  LOCAL_POSTGRES: "false"
+  DEMO_CATALOG: "false"
+  PROFILE_MEDIA_DIR: /app/artifacts/profile-media
+  DIAGNOSTICS_DIR: /app/artifacts/diagnostics
+  REDIS_URL: redis://redis:6379
+
+x-frontend-environment: &frontend-environment
+  NODE_ENV: production
+  API_URL: http://api:8020
+  DEMO_CATALOG: "false"
+  DIAGNOSTICS_DIR: /app/artifacts/diagnostics
+
+x-application: &application
+  restart: unless-stopped
+  init: true
+  env_file: ${ANIMESOUL_ENV_FILE:-.env}
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: animesoul
+      POSTGRES_DB: animesoul
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Create .env with pnpm setup}
+    volumes: ["postgres:/var/lib/postgresql"]
+    ports: ["127.0.0.1:54329:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U animesoul -d animesoul"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    <<: *application
+    image: animesoul-migrate:${ANIMESOUL_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: migrate
+    restart: "no"
+    environment: *server-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *application
+    image: animesoul-api:${ANIMESOUL_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: api
+    environment: *server-environment
+    ports: ["127.0.0.1:8020:8020"]
+    volumes:
+      - profile-media:/app/artifacts/profile-media
+      - diagnostics:/app/artifacts/diagnostics
+      - ./artifacts/dev-mail:/app/artifacts/dev-mail
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "/app/healthcheck.mjs", "http://127.0.0.1:8020/api/ready"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+
+  worker:
+    <<: *application
+    image: animesoul-api:${ANIMESOUL_IMAGE_TAG:-local}
+    command: ["node", "apps/worker/main.mjs"]
+    environment: *server-environment
+    volumes: ["diagnostics:/app/artifacts/diagnostics"]
+    stop_grace_period: 60s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    <<: *application
+    image: animesoul-web:${ANIMESOUL_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: web
+    environment: *frontend-environment
+    ports: ["127.0.0.1:8021:8021"]
+    volumes: ["diagnostics:/app/artifacts/diagnostics"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "/app/healthcheck.mjs", "http://127.0.0.1:8021/api/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 12
+
+  admin:
+    <<: *application
+    image: animesoul-admin:${ANIMESOUL_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: admin
+    environment: *frontend-environment
+    ports: ["127.0.0.1:8022:8022"]
+    volumes: ["diagnostics:/app/artifacts/diagnostics"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "/app/healthcheck.mjs", "http://127.0.0.1:8022/api/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 12
+
+  # Reserved for future cache/queues; no current application uses Redis.
+  redis:
+    profiles: ["cache"]
+    image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres:
+  profile-media:
+  diagnostics:
+  redis:

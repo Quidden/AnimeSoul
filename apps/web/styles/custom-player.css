@@ -1,0 +1,1501 @@
+/* Presentation retained from the archived AnimeSoul player. */
+.animesoul-player:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.animesoul-player.fit-cover > .animesoul-player-video {
+  object-fit: cover;
+}
+
+@media (max-width: 480px) {
+  .animesoul-player .animesoul-player-quick-picker {
+    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  }
+  .animesoul-player-control-row .animesoul-player-no-subs {
+    display: none;
+  }
+  .animesoul-player .animesoul-player-center-play {
+    width: 54px;
+    height: 54px;
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 360px) {
+  .animesoul-player-control-row .animesoul-player-pip-button {
+    display: none;
+  }
+  .animesoul-player .animesoul-player-control-row {
+    gap: 0;
+  }
+  .animesoul-player .animesoul-player-control-row button {
+    min-width: 26px;
+    padding: 0 3px;
+  }
+  .animesoul-player .animesoul-player-time {
+    font-size: 8px;
+  }
+  .animesoul-player .animesoul-player-center-play {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+}
+.animesoul-player {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 16% 12%,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      transparent 35%
+    ),
+    #050407;
+  color: #fff;
+  outline: 0;
+  isolation: isolate;
+}
+
+.animesoul-player:not(.controls-visible),
+.animesoul-player:not(.controls-visible) * {
+  cursor: none;
+}
+
+.animesoul-player video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+  object-fit: contain;
+}
+
+.animesoul-player::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 55% 0 0;
+  pointer-events: none;
+  background: linear-gradient(transparent, #050407d9);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.animesoul-player.controls-visible::after {
+  opacity: 1;
+}
+
+.animesoul-version-notice {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 8;
+  box-sizing: border-box;
+  width: min(360px, calc(100% - 24px));
+  padding: 8px 10px;
+  border: 1px solid #ffffff1f;
+  border-radius: 9px;
+  background: #171923e8;
+  color: #eeeaf2;
+  box-shadow: 0 6px 20px #0005;
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.animesoul-player-top-navigation {
+  opacity: 1;
+  pointer-events: auto;
+}
+.animesoul-cast-panel {
+  position: absolute;
+  z-index: 5;
+  inset: 64px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow-y: auto;
+  text-align: center;
+  font-size: 13px;
+}
+.animesoul-cast-device,
+.animesoul-cast-transport,
+.animesoul-cast-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.animesoul-cast-panel button,
+.animesoul-cast-session button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #ffffff26;
+  border-radius: 12px;
+  background: #ffffff12;
+  color: #fff;
+  cursor: pointer;
+}
+.animesoul-cast-panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.animesoul-cast-timeline {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  width: min(100%, 420px);
+}
+.animesoul-cast-timeline input {
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.animesoul-cast-error {
+  position: absolute;
+  z-index: 7;
+  left: 12px;
+  right: 12px;
+  top: 64px;
+  background: #391b26ed;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.animesoul-cast-session {
+  position: fixed;
+  z-index: 70;
+  left: 12px;
+  right: 12px;
+  bottom: calc(76px + var(--android-safe-bottom, 0px));
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #ffffff26;
+  border-radius: 16px;
+  background: #17131ef5;
+  box-shadow: 0 8px 32px #0006;
+}
+.animesoul-cast-session button:first-child {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}
+.animesoul-cast-session span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  .animesoul-cast-panel {
+    inset: 48px 8px 5px;
+    gap: 4px;
+    font-size: 11px;
+  }
+  .animesoul-cast-panel button {
+    min-height: 32px;
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+  .animesoul-cast-device {
+    display: none;
+  }
+}
+
+.animesoul-player video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+  object-fit: contain;
+}
+
+.animesoul-player-ambient {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: blur(28px) saturate(1.35) brightness(0.72);
+  opacity: 0.9;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+
+.animesoul-player.ambient-light::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: #05040724;
+  pointer-events: none;
+}
+
+.animesoul-player-video {
+  z-index: 2;
+}
+.animesoul-player-video {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.animesoul-player.ambient-light > .animesoul-player-video,
+.animesoul-player.ambient-light > .animesoul-player-burned-subtitles {
+  background: transparent;
+}
+.animesoul-player-burned-subtitles {
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+.animesoul-player-burned-subtitles.active {
+  opacity: 1;
+}
+.animesoul-player .animesoul-player-audio-carrier {
+  z-index: -1;
+  inset: auto auto 0 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0.001;
+  pointer-events: none;
+}
+
+.animesoul-player::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 55% 0 0;
+  pointer-events: none;
+  background: linear-gradient(transparent, #050407d9);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.animesoul-player.controls-visible::after {
+  opacity: 1;
+}
+
+.animesoul-version-notice {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 8;
+  box-sizing: border-box;
+  width: min(360px, calc(100% - 24px));
+  padding: 8px 10px;
+  border: 1px solid #ffffff1f;
+  border-radius: 9px;
+  background: #171923e8;
+  color: #eeeaf2;
+  box-shadow: 0 6px 20px #0005;
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.animesoul-player-top-navigation {
+  position: absolute;
+  z-index: 6;
+  top: 18px;
+  left: 20px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  max-width: calc(100% - 40px);
+  opacity: 0;
+  transform: translateY(-5px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  pointer-events: none;
+}
+
+.controls-visible .animesoul-player-top-navigation {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.animesoul-player.is-preparing .animesoul-player-top-navigation,
+.animesoul-player.is-preparing .animesoul-player-controls,
+.animesoul-player.is-preparing .animesoul-player-local-badge {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.animesoul-player-context {
+  min-width: 220px;
+  max-width: min(520px, 58vw);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid #ffffff17;
+  border-radius: 11px;
+  background: #08070baa;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 10px 35px #0007;
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+}
+
+.animesoul-player-context:hover,
+.animesoul-player-context[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  background: #14101ad9;
+}
+.animesoul-player-context-copy {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+.animesoul-player-context-copy strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.animesoul-player-context-copy > span {
+  overflow: hidden;
+  color: #a8a0ae;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.animesoul-player-context > i {
+  color: var(--accent);
+  font-size: 16px;
+  font-style: normal;
+  transition: transform 0.18s ease;
+}
+.animesoul-player-context[aria-expanded="true"] > i {
+  transform: rotate(180deg);
+}
+
+.animesoul-player-voice-pill {
+  min-width: 190px;
+  max-width: min(330px, 34vw);
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 7px 11px;
+  border: 1px solid #ffffff17;
+  border-radius: 11px;
+  background: #08070baa;
+  box-shadow: 0 10px 35px #0007;
+  backdrop-filter: blur(12px);
+}
+.animesoul-player-voice-pill > span {
+  color: #9f96a7;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.animesoul-player-voice-pill > span b {
+  margin-left: 7px;
+  color: #ffd76b;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.animesoul-player-voice-pill.warning {
+  border-color: #d8ac4d7a;
+}
+.animesoul-player-voice-pill select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.animesoul-player-voice-pill option,
+.animesoul-player-quick-picker option {
+  background: #17131b;
+  color: #fff;
+}
+
+.animesoul-player-quick-picker {
+  position: absolute;
+  z-index: 7;
+  top: 78px;
+  left: 20px;
+  width: min(430px, calc(100% - 40px));
+  display: grid;
+  grid-template-columns: minmax(120px, 0.75fr) minmax(170px, 1.25fr);
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #ffffff22;
+  border-radius: 13px;
+  background: #100d14eb;
+  box-shadow: 0 18px 50px #000b;
+  backdrop-filter: blur(20px);
+}
+.animesoul-player-quick-picker label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.animesoul-player-quick-picker label > span {
+  color: #9f96a7;
+  font-size: 9px;
+}
+.animesoul-player-quick-picker select {
+  width: 100%;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid #3b3344;
+  border-radius: 8px;
+  outline: 0;
+  background: #211c27;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.animesoul-player-quick-picker select:focus {
+  border-color: var(--accent);
+}
+
+.animesoul-player-loader,
+.animesoul-player[data-casting] > .animesoul-player-subtitle-status,
+.animesoul-player[data-casting] > .animesoul-player-error,
+.animesoul-player[data-casting] > .animesoul-player-video {
+  display: none;
+}
+.animesoul-player[data-casting] > .animesoul-player-top-navigation {
+  opacity: 1;
+  pointer-events: auto;
+}
+.animesoul-cast-panel {
+  position: absolute;
+  z-index: 5;
+  inset: 64px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow-y: auto;
+  text-align: center;
+  font-size: 13px;
+}
+.animesoul-cast-device,
+.animesoul-cast-transport,
+.animesoul-cast-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.animesoul-cast-panel button,
+.animesoul-cast-session button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #ffffff26;
+  border-radius: 12px;
+  background: #ffffff12;
+  color: #fff;
+  cursor: pointer;
+}
+.animesoul-cast-panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.animesoul-cast-timeline {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  width: min(100%, 420px);
+}
+.animesoul-cast-timeline input {
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.animesoul-cast-error {
+  position: absolute;
+  z-index: 7;
+  left: 12px;
+  right: 12px;
+  top: 64px;
+  background: #391b26ed;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.animesoul-cast-session {
+  position: fixed;
+  z-index: 70;
+  left: 12px;
+  right: 12px;
+  bottom: calc(76px + var(--android-safe-bottom, 0px));
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #ffffff26;
+  border-radius: 16px;
+  background: #17131ef5;
+  box-shadow: 0 8px 32px #0006;
+}
+.animesoul-cast-session button:first-child {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}
+.animesoul-cast-session span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  .animesoul-cast-panel {
+    inset: 48px 8px 5px;
+    gap: 4px;
+    font-size: 11px;
+  }
+  .animesoul-cast-panel button {
+    min-height: 32px;
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+  .animesoul-cast-device {
+    display: none;
+  }
+}
+
+.animesoul-player video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+  object-fit: contain;
+}
+
+.animesoul-player-ambient {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: blur(28px) saturate(1.35) brightness(0.72);
+  opacity: 0.9;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+
+.animesoul-player.ambient-light::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: #05040724;
+  pointer-events: none;
+}
+
+.animesoul-player-video {
+  z-index: 2;
+}
+.animesoul-player-video {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.animesoul-player.ambient-light > .animesoul-player-video,
+.animesoul-player.ambient-light > .animesoul-player-burned-subtitles {
+  background: transparent;
+}
+.animesoul-player-burned-subtitles {
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+.animesoul-player-burned-subtitles.active {
+  opacity: 1;
+}
+.animesoul-player .animesoul-player-audio-carrier {
+  z-index: -1;
+  inset: auto auto 0 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0.001;
+  pointer-events: none;
+}
+
+.animesoul-player::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 55% 0 0;
+  pointer-events: none;
+  background: linear-gradient(transparent, #050407d9);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.animesoul-player.controls-visible::after {
+  opacity: 1;
+}
+
+.animesoul-version-notice {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 8;
+  box-sizing: border-box;
+  width: min(360px, calc(100% - 24px));
+  padding: 8px 10px;
+  border: 1px solid #ffffff1f;
+  border-radius: 9px;
+  background: #171923e8;
+  color: #eeeaf2;
+  box-shadow: 0 6px 20px #0005;
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.animesoul-player-top-navigation {
+  position: absolute;
+  z-index: 6;
+  top: 18px;
+  left: 20px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  max-width: calc(100% - 40px);
+  opacity: 0;
+  transform: translateY(-5px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  pointer-events: none;
+}
+
+.controls-visible .animesoul-player-top-navigation {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.animesoul-player.is-preparing .animesoul-player-top-navigation,
+.animesoul-player.is-preparing .animesoul-player-controls,
+.animesoul-player.is-preparing .animesoul-player-local-badge {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.animesoul-player-gesture-feedback {
+  position: absolute;
+  z-index: 9;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  min-width: 78px;
+  min-height: 58px;
+  padding: 12px 16px;
+  border: 1px solid #ffffff26;
+  border-radius: 999px;
+  background: #08070bd9;
+  box-shadow: 0 12px 38px #0009;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 750;
+  pointer-events: none;
+  transform: translateY(-50%);
+  backdrop-filter: blur(16px);
+}
+.animesoul-player-gesture-feedback.left {
+  left: 12%;
+}
+.animesoul-player-gesture-feedback.center {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.animesoul-player-gesture-feedback.right {
+  right: 12%;
+}
+
+.animesoul-player.is-local .animesoul-player-top-navigation {
+  max-width: calc(100% - 230px);
+}
+.animesoul-player-local-badge {
+  position: absolute;
+  z-index: 6;
+  top: 18px;
+  right: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid #63d99366;
+  border-radius: 999px;
+  background: #07170fdb;
+  box-shadow: 0 10px 35px #0008;
+  color: #a8f2c4;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  transform: translateY(-5px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  pointer-events: none;
+}
+.animesoul-player.controls-visible:not(.is-loading) .animesoul-player-local-badge {
+  opacity: 1;
+  transform: translateY(0);
+}
+.animesoul-player-local-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #62e596;
+  box-shadow: 0 0 12px #62e596;
+}
+
+.animesoul-player-context {
+  min-width: 220px;
+  max-width: min(520px, 58vw);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid #ffffff17;
+  border-radius: 11px;
+  background: #08070baa;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 10px 35px #0007;
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+}
+
+.animesoul-player-context:hover,
+.animesoul-player-context[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  background: #14101ad9;
+}
+.animesoul-player-context-copy {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+.animesoul-player-context-copy strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.animesoul-player-context-copy > span {
+  overflow: hidden;
+  color: #a8a0ae;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.animesoul-player-context > i {
+  color: var(--accent);
+  font-size: 16px;
+  font-style: normal;
+  transition: transform 0.18s ease;
+}
+.animesoul-player-context[aria-expanded="true"] > i {
+  transform: rotate(180deg);
+}
+
+.animesoul-player-voice-pill {
+  min-width: 190px;
+  max-width: min(330px, 34vw);
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 7px 11px;
+  border: 1px solid #ffffff17;
+  border-radius: 11px;
+  background: #08070baa;
+  box-shadow: 0 10px 35px #0007;
+  backdrop-filter: blur(12px);
+}
+.animesoul-player-voice-pill > span {
+  color: #9f96a7;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.animesoul-player-voice-pill > span b {
+  margin-left: 7px;
+  color: #ffd76b;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.animesoul-player-voice-pill.warning {
+  border-color: #d8ac4d7a;
+}
+.animesoul-player-voice-pill select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.animesoul-player-voice-pill option,
+.animesoul-player-quick-picker option {
+  background: #17131b;
+  color: #fff;
+}
+
+.animesoul-player-quick-picker {
+  position: absolute;
+  z-index: 7;
+  top: 78px;
+  left: 20px;
+  width: min(430px, calc(100% - 40px));
+  display: grid;
+  grid-template-columns: minmax(120px, 0.75fr) minmax(170px, 1.25fr);
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #ffffff22;
+  border-radius: 13px;
+  background: #100d14eb;
+  box-shadow: 0 18px 50px #000b;
+  backdrop-filter: blur(20px);
+}
+.animesoul-player-quick-picker label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.animesoul-player-quick-picker label > span {
+  color: #9f96a7;
+  font-size: 9px;
+}
+.animesoul-player-quick-picker select {
+  width: 100%;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid #3b3344;
+  border-radius: 8px;
+  outline: 0;
+  background: #211c27;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.animesoul-player-quick-picker select:focus {
+  border-color: var(--accent);
+}
+
+.animesoul-player-loader,
+.animesoul-player-error {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 30px;
+  text-align: center;
+  background: #0504079c;
+  backdrop-filter: blur(4px);
+}
+
+.animesoul-player-loader i {
+  width: 42px;
+  height: 42px;
+  border: 3px solid #ffffff1c;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: animesoul-player-spin 0.8s linear infinite;
+}
+
+.animesoul-player-loader span {
+  color: #c7c0cc;
+  font-size: 12px;
+}
+.animesoul-player-loader.compact {
+  inset: 16px 16px auto auto;
+  grid-auto-flow: column;
+  place-content: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid #ffffff1f;
+  border-radius: 999px;
+  background: #08070bd6;
+  box-shadow: 0 10px 30px #0008;
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+.animesoul-player-loader.compact i {
+  width: 17px;
+  height: 17px;
+  border-width: 2px;
+}
+.animesoul-player-loader.compact span {
+  font-size: 9px;
+}
+
+.animesoul-player-center-play {
+  position: absolute;
+  z-index: 4;
+  inset: 50% auto auto 50%;
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  padding: 0 0 0 4px;
+  border: 1px solid #ffffff38;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 78%, #17131b);
+  box-shadow:
+    0 16px 50px #000a,
+    0 0 34px color-mix(in srgb, var(--accent) 32%, transparent);
+  color: #fff;
+  font-size: 24px;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.animesoul-player-controls {
+  position: absolute;
+  z-index: 4;
+  right: 16px;
+  bottom: 12px;
+  left: 16px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  pointer-events: none;
+}
+
+.controls-visible .animesoul-player-controls {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.animesoul-player.timeline-preview-visible .animesoul-player-controls {
+  z-index: 8;
+}
+
+.animesoul-player-timeline {
+  --player-progress: 0%;
+  --player-buffered: 0%;
+  --player-preview-position: 0%;
+  position: relative;
+  height: 24px;
+  display: grid;
+  align-items: center;
+}
+
+.animesoul-player-timeline-rail {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  left: 0;
+  top: 10px;
+  height: 5px;
+  border-radius: 999px;
+  background: #ffffff35;
+  pointer-events: none;
+  transition:
+    height 0.12s ease,
+    top 0.12s ease;
+}
+
+.animesoul-player-timeline:hover .animesoul-player-timeline-rail {
+  top: 8px;
+  height: 8px;
+}
+
+.animesoul-player-timeline-rail > span,
+.animesoul-player-timeline-rail > i,
+.animesoul-player-timeline-rail > b {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: block;
+  border-radius: 999px;
+}
+
+.animesoul-player-timeline-rail .buffered {
+  left: 0;
+  width: var(--player-buffered);
+  background: #ffffff5c;
+}
+.animesoul-player-timeline-rail .played {
+  z-index: 2;
+  left: 0;
+  width: var(--player-progress);
+  background: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 46%, transparent);
+}
+.animesoul-player-timeline-rail .opening-marker {
+  z-index: 3;
+  min-width: 2px;
+  background: #f0b44f;
+}
+.animesoul-player-timeline-rail .ending-marker {
+  z-index: 3;
+  min-width: 2px;
+  background: #66b9f0;
+}
+.animesoul-player-timeline-rail .thumb {
+  z-index: 4;
+  top: 50%;
+  bottom: auto;
+  left: var(--player-progress);
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  background: var(--accent);
+  box-shadow: 0 2px 10px #000c;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.12s ease;
+}
+
+.animesoul-player-timeline:hover .thumb,
+.animesoul-player-timeline:focus-within .thumb {
+  opacity: 1;
+}
+
+.animesoul-player-timeline input {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.animesoul-player-control-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.animesoul-player-control-row button,
+.animesoul-player-control-row label,
+.animesoul-player-no-subs {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+}
+
+.animesoul-player-control-row button {
+  min-width: 34px;
+  padding: 0 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.animesoul-player-control-row button:hover,
+.animesoul-player-control-row label:hover {
+  background: #ffffff13;
+}
+.animesoul-player-control-row label.subtitle-active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.animesoul-player-control-row label {
+  position: relative;
+  padding: 0 4px;
+}
+.animesoul-player-control-row label > span {
+  margin-right: 4px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 800;
+}
+.animesoul-player-control-row select {
+  max-width: 126px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.animesoul-player-control-row select option {
+  background: #17131b;
+  color: #fff;
+}
+
+.animesoul-player-volume {
+  width: 72px;
+  accent-color: var(--accent);
+}
+.animesoul-player-time {
+  color: #e1dbe5;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.animesoul-player-spacer {
+  flex: 1;
+}
+.animesoul-player-no-subs {
+  width: 34px;
+  color: #77717c;
+  font-size: 10px;
+  font-weight: 800;
+}
+.animesoul-player-settings-button.active {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: #fff;
+}
+
+.animesoul-player-settings {
+  position: absolute;
+  z-index: 8;
+  top: 14px;
+  right: 14px;
+  bottom: 66px;
+  width: min(330px, calc(100% - 28px));
+  overflow: hidden;
+  border: 1px solid #ffffff24;
+  border-radius: 16px;
+  background: #100d14ed;
+  box-shadow: 0 24px 70px #000c;
+  backdrop-filter: blur(22px);
+}
+
+.animesoul-player-settings > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 16px 12px;
+  border-bottom: 1px solid #ffffff14;
+}
+
+.animesoul-player-settings > header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.animesoul-player-settings > header strong {
+  font-size: 14px;
+}
+.animesoul-player-settings > header span {
+  overflow: hidden;
+  color: #9e96a5;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.animesoul-player-settings > header button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: #ffffff0d;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.animesoul-player-settings-content {
+  height: calc(100% - 58px);
+  display: grid;
+  align-content: start;
+  gap: 11px;
+  padding: 14px 16px 18px;
+  overflow: auto;
+}
+
+.animesoul-player-settings-content > label:not(.animesoul-player-toolbar-toggle) {
+  display: grid;
+  gap: 6px;
+}
+.animesoul-player-settings-content > label > span,
+.animesoul-player-stream-state > span {
+  color: #aaa2b0;
+  font-size: 10px;
+}
+.animesoul-player-settings-content select {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #3b3344;
+  border-radius: 9px;
+  outline: 0;
+  background: #211c27;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.animesoul-player-settings-content select:focus {
+  border-color: var(--accent);
+}
+.animesoul-player-settings-content option:disabled {
+  color: #706a74;
+}
+
+.animesoul-player-stream-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 11px;
+  border: 1px solid #ffffff14;
+  border-radius: 9px;
+  background: #ffffff08;
+}
+
+.animesoul-player-stream-state strong {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.animesoul-player:fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.animesoul-player.fit-cover:fullscreen > .animesoul-player-video,
+.animesoul-player.fit-cover:fullscreen > .animesoul-player-burned-subtitles {
+  object-fit: cover;
+  object-position: center;
+}
+
+.animesoul-player:fullscreen .animesoul-player-controls {
+  right: 28px;
+  bottom: 22px;
+  left: 28px;
+}
+
+@keyframes animesoul-player-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes animesoul-preview-loading {
+  to {
+    background-position: -240% 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .animesoul-player-controls {
+    right: 9px;
+    bottom: 7px;
+    left: 9px;
+  }
+  .animesoul-player-timeline-preview {
+    left: clamp(68px, var(--player-preview-position), calc(100% - 68px));
+    width: 128px;
+  }
+  .animesoul-player-volume {
+    display: none;
+  }
+  .animesoul-player-time {
+    font-size: 9px;
+  }
+  .animesoul-player-control-row {
+    gap: 2px;
+  }
+  .animesoul-player-control-row button {
+    min-width: 29px;
+    padding: 0 5px;
+  }
+  .animesoul-player-control-row label > span {
+    display: none;
+  }
+  .animesoul-player-control-row select {
+    max-width: 82px;
+    font-size: 9px;
+  }
+  .animesoul-player-skip {
+    right: 10px;
+    bottom: 66px;
+    font-size: 11px;
+  }
+  .animesoul-player-top-navigation {
+    top: 9px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+  .animesoul-player.is-local .animesoul-player-top-navigation {
+    top: 50px;
+    max-width: none;
+  }
+  .animesoul-player-local-badge {
+    top: 9px;
+    right: auto;
+    left: 10px;
+    min-height: 32px;
+  }
+  .animesoul-player-context {
+    min-width: 0;
+    max-width: none;
+    flex: 1;
+  }
+  .animesoul-player-voice-pill {
+    min-width: 132px;
+    max-width: 42%;
+  }
+  .animesoul-player-quick-picker {
+    top: 69px;
+    left: 10px;
+    width: min(430px, calc(100% - 20px));
+  }
+  .animesoul-player.is-local .animesoul-player-quick-picker {
+    top: 110px;
+  }
+  .animesoul-player-settings {
+    top: 8px;
+    right: 8px;
+    bottom: 54px;
+    width: min(310px, calc(100% - 16px));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .animesoul-player:fullscreen .animesoul-player-controls {
+    right: 12px;
+    bottom: 6px;
+    left: 12px;
+  }
+  .animesoul-player-volume {
+    display: none;
+  }
+  .animesoul-player-control-row {
+    gap: 1px;
+  }
+  .animesoul-player-control-row button {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 5px;
+  }
+  .animesoul-player-control-row label {
+    height: 30px;
+    padding-inline: 3px;
+  }
+  .animesoul-player-control-row select {
+    max-width: 88px;
+    font-size: 10px;
+  }
+  .animesoul-player-top-navigation {
+    top: 8px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+  .animesoul-player-context {
+    min-width: 0;
+    max-width: 42vw;
+  }
+  .animesoul-player-context-copy > span {
+    display: none;
+  }
+  .animesoul-player-voice-pill {
+    min-width: 0;
+    max-width: 44vw;
+  }
+  .animesoul-player-settings {
+    top: 8px;
+    right: 8px;
+    bottom: 48px;
+    width: min(360px, 48vw);
+  }
+  .animesoul-player-settings > header {
+    padding: 8px 10px;
+  }
+  .animesoul-player-settings-content {
+    gap: 7px;
+    padding: 8px 10px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animesoul-player-loader i {
+    animation-duration: 1.5s;
+  }
+  .animesoul-player-controls,
+  .animesoul-player-top-navigation,
+  .animesoul-player-context,
+  .animesoul-player-local-badge {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .animesoul-player-ambient {
+    filter: blur(22px) saturate(1.28) brightness(0.68);
+  }
+}

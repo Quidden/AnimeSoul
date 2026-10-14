@@ -1,0 +1,54 @@
+.poster-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 2s ease;
+}
+html[data-poster-ambient] .poster-ambient {
+  opacity: 1;
+}
+html[data-poster-ambient] .app {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+.poster-ambient i {
+  position: absolute;
+  width: min(1300px, 100vw);
+  height: max(750px, 105vh);
+  border-radius: 50%;
+  opacity: 0.21;
+  background: radial-gradient(ellipse, rgb(var(--poster-color-0)) 0%, transparent 65%);
+  top: -35%;
+  left: -28%;
+  animation: poster-flow 38s ease-in-out infinite alternate;
+}
+.poster-ambient i:nth-child(2) {
+  background: radial-gradient(ellipse, rgb(var(--poster-color-1)) 0%, transparent 65%);
+  left: auto;
+  right: -28%;
+  top: -10%;
+  opacity: 0.19;
+  animation-delay: -12s;
+}
+.poster-ambient i:nth-child(3) {
+  background: radial-gradient(ellipse, rgb(var(--poster-color-2)) 0%, transparent 65%);
+  top: auto;
+  bottom: -48%;
+  left: 12%;
+  opacity: 0.17;
+  animation-delay: -24s;
+}
+@keyframes poster-flow {
+  to {
+    transform: translate(8vw, 10vh) scale(1.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .poster-ambient i {
+    animation: none;
+  }
+}

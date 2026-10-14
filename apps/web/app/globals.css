@@ -1,6 +1,223 @@
 @import "../styles/base.css";
 @import "../styles/header.css";
+@import "../styles/universal-search.css";
+@import "../styles/frame-search.css";
 @import "../styles/home.css";
 @import "../styles/catalog.css";
+@import "../styles/catalog-discovery.css";
 @import "../styles/anime.css";
+@import "../styles/characters.css";
+@import "../styles/playback.css";
+@import "../styles/custom-player.css";
+@import "../styles/subscription.css";
+
+@import "../styles/player-features.css";
+@import "../styles/episode-player.css";
+@import "../styles/social.css";
+@import "../styles/content.css";
 @import "../styles/profile.css";
+@import "../styles/profile-media.css";
+@import "../styles/account.css";
+@import "../styles/theme.css";
+@import "../styles/ambient.css";
+@import "../styles/anime-interactions.css";
+@import "../styles/rail.css";
+@import "../styles/franchise-graph.css";
+/* Administrative publications and optional winter effects use the site's existing colors. */
+.site-announcements {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+.site-announcements:empty {
+  display: none;
+}
+.site-announcement {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+  background: var(--panel, #1a1723);
+  border: 1px solid #9f83df40;
+  border-left: 3px solid #ac91ed;
+  border-radius: 10px;
+}
+.site-announcement.message-warning {
+  border-left-color: #dfa647;
+}
+.site-announcement.message-error {
+  border-left-color: #ec7382;
+}
+.site-announcement.message-important {
+  border-left-color: #65c7a2;
+}
+.site-announcement p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 5px 0;
+  font-size: 14px;
+}
+.site-announcement > button {
+  align-self: start;
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 23px;
+  cursor: pointer;
+}
+.site-winter-snow {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 40;
+  pointer-events: none;
+}
+.site-winter-garlands {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 41;
+  display: flex;
+  justify-content: space-around;
+  pointer-events: none;
+  border-top: 1px solid #758475;
+}
+.site-winter-garlands i {
+  display: block;
+  width: 6px;
+  height: 10px;
+  border-radius: 0 0 50% 50%;
+  background: #e8bd57;
+  box-shadow: 0 0 10px #e8bd5766;
+  transform: rotate(8deg);
+}
+.site-winter-garlands i:nth-child(3n) {
+  background: #ae88df;
+  box-shadow: 0 0 10px #ae88df66;
+}
+.site-winter-garlands i:nth-child(3n + 1) {
+  background: #74c6a0;
+  box-shadow: 0 0 10px #74c6a066;
+}
+.winter-toggle {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  z-index: 42;
+  padding: 6px 10px;
+  font-size: 11px;
+  border: 1px solid #a493d755;
+  background: #181521;
+  color: #e9e1fa;
+  border-radius: 20px;
+  cursor: pointer;
+}
+.notification-center {
+  position: relative;
+}
+.notification-toggle {
+  position: relative;
+  color: inherit;
+  background: none;
+  border: 1px solid #a493d733;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  font-size: 20px;
+  cursor: pointer;
+}
+.notification-toggle b {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  min-width: 17px;
+  border-radius: 12px;
+  background: #9b76de;
+  color: white;
+  padding: 1px 4px;
+  font: 10px sans-serif;
+}
+.notification-panel {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  width: 380px;
+  max-width: calc(100vw - 24px);
+  max-height: 70dvh;
+  overflow: auto;
+  padding: 16px;
+  background: #171420;
+  border: 1px solid #9f83df55;
+  border-radius: 12px;
+  box-shadow: 0 15px 60px #0008;
+  z-index: 80;
+}
+.notification-panel header,
+.notification-panel footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notification-panel button {
+  background: #a78bf019;
+  border: 1px solid #a78bf033;
+  color: inherit;
+  padding: 5px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.notification-panel article {
+  border-top: 1px solid #9f83df30;
+  padding: 14px 0;
+}
+.notification-panel p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  margin: 6px 0;
+}
+.notification-panel .unread strong {
+  color: #bb9fff;
+}
+.notification-panel article > div {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.notification-panel > p {
+  padding: 16px 0;
+}
+@media (max-width: 760px) {
+  .notification-panel {
+    position: fixed;
+    right: 12px;
+    top: 72px;
+  }
+  .notification-toggle {
+    width: 32px;
+    height: 32px;
+  }
+  .site-announcement {
+    padding: 12px;
+  }
+  .winter-toggle {
+    font-size: 10px;
+    bottom: 8px;
+  }
+}
+
+/* Global notices must clear the homepage hero's intentional header overlap. */
+#main-content:has(> .site-announcements:not(:empty)) .home-cinema-hero {
+  margin-top: 0;
+}
+.site-announcements {
+  position: relative;
+  z-index: 2;
+  width: min(1520px, calc(100% - 32px));
+  margin-inline: auto;
+}

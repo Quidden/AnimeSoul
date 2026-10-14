@@ -6,7 +6,16 @@
   --ink: #f5f1fa;
   --muted: #9a94a2;
   --accent: #9a78ff;
+  --accent-soft: #ac8cff;
+  --panel-strong: #211a30;
+  --field-bg: #0e0c13;
+  --ambient: #2c2142;
+  --primary-start: #a98aff;
+  --primary-end: #7659df;
   --header-height: 70px;
+  --anime-navigation-height: 58px;
+  --navigation-bg: color-mix(in srgb, var(--panel) 84%, transparent);
+  --navigation-backdrop: blur(24px) saturate(155%);
   color-scheme: dark;
 }
 * {

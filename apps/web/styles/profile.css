@@ -27,6 +27,8 @@ body:has(.user-profile-page) .app {
   font-weight: 760;
   letter-spacing: -0.65px;
   white-space: nowrap;
+  position: relative;
+  min-width: 0;
 }
 .profile-brand img {
   height: 31px;
@@ -240,15 +242,15 @@ body:has(.profile-hero[data-compact="true"]) .profile-site-navigation {
   gap: 12px;
   align-items: center;
   justify-content: center;
-  position: fixed;
-  z-index: 60;
+  position: absolute;
   top: 0;
-  left: 50%;
-  height: var(--header-height);
-  transform: translate(-50%, calc(14px * (1 - var(--profile-collapse))));
+  left: 0;
+  height: 100%;
+  transform: translateY(calc(8px * (1 - var(--profile-collapse))));
   opacity: var(--profile-collapse);
   pointer-events: none;
-  max-width: 50%;
+  max-width: 100%;
+  justify-content: flex-start;
   transition:
     opacity 0.16s,
     transform 0.16s;
@@ -662,11 +664,9 @@ body:has(.user-profile-page) .site-footer {
     grid-template-columns: 1fr;
     gap: 0;
   }
-  .profile-mini {
-    left: auto;
-    right: 60px;
-    max-width: calc(100% - 140px);
-    transform: translateY(calc(14px * (1 - var(--profile-collapse))));
+  .profile-mini strong,
+  .profile-mini .profile-badge {
+    display: none;
   }
 }
 @media (max-width: 460px) {

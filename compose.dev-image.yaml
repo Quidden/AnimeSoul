@@ -1,0 +1,34 @@
+name: animesoul-dev-image
+services:
+  dev:
+    image: ${DEV_IMAGE:-quiddens/animesoul-dev:dev}
+    container_name: animesoul-dev
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 60s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    ports:
+      - "127.0.0.1:18020:8020"
+      - "127.0.0.1:18021:8021"
+      - "127.0.0.1:18022:8022"
+    environment:
+      SITE_URL: http://localhost:18021
+      ADMIN_URL: http://localhost:18022
+      ALLOW_KODIK: ${ALLOW_KODIK:-false}
+      KODIK_TOKEN: ${KODIK_TOKEN:-}
+      ALLOW_KODIK_DIRECT: ${ALLOW_KODIK_DIRECT:-false}
+      KODIK_PRIVATE_KEY: ${KODIK_PRIVATE_KEY:-}
+      KODIK_MEDIA_HOSTS: ${KODIK_MEDIA_HOSTS:-}
+      KODIK_VIEWER_IP: ${KODIK_VIEWER_IP:-}
+      ALLOW_YUMMY: ${ALLOW_YUMMY:-false}
+      YUMMY_TOKEN: ${YUMMY_TOKEN:-}
+      TRACE_MOE_API_KEY: ${TRACE_MOE_API_KEY:-}
+    volumes: ["dev-data:/var/lib/postgresql"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  dev-data:

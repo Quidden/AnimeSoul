@@ -8,6 +8,8 @@ export function SiteFooter({ preview }: { preview: boolean }) {
           <h2>Основное</h2>
           <Link href="/">Главная</Link>
           <Link href="/catalog">Каталог</Link>
+          <Link href="/search/frame">Поиск аниме по кадру</Link>
+          <Link href="/subscription">AnimeSoul Plus</Link>
         </div>
         {preview && (
           <div className="footer-sitemap-group">
@@ -30,7 +32,7 @@ export function SiteFooter({ preview }: { preview: boolean }) {
       </div>
       {preview && (
         <p className="preview-note">
-          Предпросмотр переноса · тестовые данные · вход, сохранения и плеер ещё переносятся
+          Тестовый каталог · вход и синхронизация библиотеки ещё переносятся
         </p>
       )}
     </footer>
