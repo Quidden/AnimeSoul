@@ -36,10 +36,10 @@
 .social-search input {
   width: 100%;
   min-width: 0;
-  background: #131019;
-  border: 1px solid #ffffff18;
+  background: var(--night-2);
+  border: 1px solid var(--white-10);
   color: var(--text);
-  border-radius: 9px;
+  border-radius: var(--radius-10);
   padding: 12px;
 }
 .social-tabs {
@@ -63,7 +63,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 14px 0;
-  border-bottom: 1px solid #ffffff0c;
+  border-bottom: 1px solid var(--white-4);
 }
 .social-person {
   display: flex;
@@ -142,7 +142,7 @@
 }
 .friends-nav {
   display: grid;
-  gap: 5px;
+  border-left: 1px solid var(--white-12);
 }
 .friends-nav button {
   display: flex;
@@ -150,9 +150,11 @@
   gap: 11px;
   min-height: 44px;
   text-align: left;
+  margin-left: -1px;
   padding: 11px 12px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--friends-muted);
   font-size: 13px;
@@ -164,13 +166,11 @@
   opacity: 0.8;
 }
 .friends-nav button:hover {
-  background: color-mix(in srgb, var(--ink) 4%, var(--panel));
   color: var(--ink);
 }
 .friends-nav button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
-  color: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
   font-weight: 650;
 }
 .friends-nav button[aria-pressed="true"] svg {
@@ -201,10 +201,8 @@
 .friends-search-panel,
 .friends-list-panel,
 .friends-guest {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 24px;
+  border-top: 1px solid var(--white-8);
+  padding: 24px 0;
   min-width: 0;
 }
 .friends-search-panel h2 {
@@ -244,7 +242,7 @@
   min-width: 0;
   height: 44px;
   padding: 10px 13px 10px 40px;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: var(--field-bg);
   color: var(--ink);
   font-size: 14px;
@@ -257,7 +255,7 @@
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
 }
 .friends-search input[aria-invalid="true"] {
-  border-color: #b1747f;
+  border-color: var(--dusty-rose);
 }
 .friends-page .primary,
 .friends-page .outline,
@@ -272,7 +270,7 @@
   line-height: 1.3;
   font-weight: 600;
   white-space: nowrap;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
 }
 .account-page.friends-page .primary {
   border: 1px solid var(--accent);
@@ -339,9 +337,9 @@
   min-width: 27px;
   padding: 4px 7px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-6);
   color: var(--friends-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
   font-weight: 600;
   letter-spacing: 0;
@@ -361,7 +359,7 @@
   place-items: center;
   width: 56px;
   height: 56px;
-  border-radius: 16px;
+  border-radius: var(--radius-16);
   background: color-mix(in srgb, var(--accent) 8%, var(--field-bg));
   border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
   color: var(--accent-soft);
@@ -382,14 +380,14 @@
 .friends-feedback {
   margin: 16px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: color-mix(in srgb, var(--accent) 7%, var(--field-bg));
   color: var(--accent-soft);
   font-size: 13px;
   line-height: 1.55;
 }
 .friends-page .friends-error-text {
-  color: #f0adb8;
+  color: var(--rose);
 }
 .friends-list {
   display: grid;
@@ -435,7 +433,7 @@
 .friends-person-row .social-person-name > small {
   display: block;
   color: var(--friends-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   line-height: 1.55;
 }
@@ -473,7 +471,7 @@
   max-width: min(280px, 80vw);
   padding: 6px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   background: var(--panel);
   box-shadow: 0 12px 24px color-mix(in srgb, var(--bg) 65%, transparent);
 }
@@ -484,11 +482,11 @@
   text-align: left;
   border: 0;
   min-height: 38px;
-  border-radius: 6px;
+  border-radius: var(--radius-6);
 }
 .friends-page [data-social-action="block"],
 .friends-page [data-social-action="unfriend"] {
-  color: #f0adb8;
+  color: var(--rose);
 }
 .friends-more {
   margin-top: 20px;
@@ -527,7 +525,7 @@
   gap: 8px;
 }
 .friends-person-row .profile-social-actions .social-notice {
-  font-size: 11px;
+  font-size: 12px;
   margin: 3px 0;
 }
 .friends-list-loading {
@@ -543,7 +541,7 @@
   width: 42px;
   height: 42px;
   flex: 0 0 auto;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--panel-strong);
 }
 .friends-skeleton > div {
@@ -553,7 +551,7 @@
 }
 .friends-skeleton i {
   height: 9px;
-  border-radius: 4px;
+  border-radius: var(--radius-4);
   background: var(--panel-strong);
 }
 .friends-skeleton i:last-child {
@@ -572,7 +570,7 @@
 }
 .friends-session-loading {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-12);
   background: var(--panel);
   max-width: 720px;
   padding: 24px;
@@ -673,19 +671,34 @@
     padding: 0 0 14px;
     margin-bottom: 12px;
   }
+  /* The section menu becomes one swipeable row so the content starts on the first screen. */
   .friends-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
     gap: 6px;
+    margin-inline: -18px;
+    padding: 2px 18px 0;
+    border-left: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .friends-nav::-webkit-scrollbar {
+    display: none;
   }
   .friends-nav button {
-    min-width: 0;
-    padding: 10px;
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 8px 14px;
     gap: 8px;
+    margin: 0;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
     font-size: 12px;
+    white-space: nowrap;
   }
   .friends-privacy {
-    margin: 12px 0 0;
-    padding-top: 12px;
+    margin: 4px 0 0;
+    padding-top: 0;
+    border-top: 0;
   }
   .friends-main {
     gap: 16px;

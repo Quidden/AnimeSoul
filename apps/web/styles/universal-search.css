@@ -1,3 +1,4 @@
+/* Universal search: header trigger, dialog, results page sections (people, settings, anime progress). */
 .global-search-trigger {
   display: flex;
   align-items: center;
@@ -7,8 +8,8 @@
   height: 42px;
   padding: 0 14px;
   text-align: left;
-  border: 1px solid #ffffff14;
-  border-radius: 10px;
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-10);
   background: var(--field-bg);
   color: var(--muted);
   transition:
@@ -32,36 +33,37 @@
 .global-search-trigger kbd,
 .global-search-dialog kbd {
   padding: 2px 5px;
-  border: 1px solid #ffffff18;
-  border-radius: 4px;
+  border: 1px solid var(--white-10);
+  border-radius: var(--radius-4);
   font-family: inherit;
-  font-size: 10px;
-  color: #bab1c7;
+  font-size: 12px;
+  color: var(--text-3);
+  background: var(--white-4);
+  border-bottom-width: 2px;
 }
 .global-search-dialog {
   position: fixed;
   inset: 0;
-  margin: 24px auto auto;
-  width: min(1180px, calc(100% - 48px));
+  /* A compact command-palette: it is as tall as its content, up to --search-height. */
+  --search-height: min(640px, 80dvh);
+  margin: 10vh auto auto;
+  width: min(720px, calc(100% - 32px));
   max-width: none;
-  height: min(900px, calc(100dvh - 48px));
-  max-height: calc(100dvh - 48px);
+  height: auto;
+  max-height: var(--search-height);
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  border-radius: 17px;
-  background: var(--panel);
+  border: 1px solid var(--white-12);
+  border-radius: var(--radius-16);
+  background: color-mix(in srgb, var(--panel) 94%, var(--night-0));
   color: var(--ink);
   overflow: hidden;
-  box-shadow:
-    0 0 0 5px color-mix(in srgb, var(--accent) 4%, transparent),
-    0 0 65px color-mix(in srgb, var(--accent) 13%, transparent),
-    0 30px 100px #000a;
+  box-shadow: 0 24px 80px var(--black-60);
 }
 .global-search-dialog[open] {
   animation: search-unfold 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 .global-search-dialog::backdrop {
-  background: #05030a99;
+  background: color-mix(in srgb, var(--night-0) 60%, transparent);
   backdrop-filter: blur(3px);
   animation: search-dim 0.25s ease both;
 }
@@ -74,43 +76,38 @@
 .global-search-surface {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  max-height: var(--search-height);
   min-height: 0;
 }
 .global-search-form {
   display: flex;
   align-items: center;
   gap: 13px;
-  padding: 18px 20px;
-  border-bottom: 1px solid #ffffff0e;
-  background: linear-gradient(
-    110deg,
-    color-mix(in srgb, var(--accent) 15%, var(--panel)),
-    var(--panel)
-  );
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--white-6);
   flex-shrink: 0;
 }
 .global-search-form > svg {
-  color: var(--accent-soft);
+  color: var(--text-5);
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 .search-input-wrap {
   position: relative;
   min-width: 0;
   flex: 1;
-  height: 32px;
+  height: 34px;
   overflow: hidden;
-  font-size: 17px;
-  line-height: 32px;
+  font-size: 18px;
+  line-height: 34px;
 }
 .global-search-form input {
   position: relative;
   display: block;
   width: 100%;
   min-width: 0;
-  height: 32px;
+  height: 34px;
   padding: 0;
   color: var(--ink);
   background: transparent;
@@ -133,7 +130,7 @@
   color: transparent;
 }
 .search-hint-suffix {
-  color: #817b89;
+  color: var(--text-7);
 }
 .global-search-form input::placeholder {
   color: var(--muted);
@@ -151,9 +148,9 @@
   min-height: 30px;
   padding: 5px 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-6);
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
 }
 .search-clear svg {
   width: 15px;
@@ -163,38 +160,48 @@
   width: 32px;
   height: 32px;
   padding: 6px;
-  border: 1px solid #ffffff20;
-  border-radius: 9px;
-  background: #ffffff05;
+  border: 1px solid var(--white-12);
+  border-radius: var(--radius-10);
+  background: var(--white-4);
 }
 .search-clear:hover,
 .search-close:hover {
   color: white;
-  background: #ffffff0c;
+  background: var(--white-4);
 }
 .search-filter-shortcuts {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  padding: 13px 18px;
-  border-bottom: 1px solid #ffffff0a;
+  gap: 6px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--white-4);
   flex-shrink: 0;
+  /* One quiet row that scrolls sideways instead of wrapping into several lines. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .search-filter-shortcuts button {
-  border: 1px solid #ffffff12;
-  background: #ffffff04;
-  border-radius: 7px;
-  padding: 6px 9px;
-  color: #ada1bb;
-  font-size: 11px;
+  flex-shrink: 0;
+  border: 1px solid var(--white-8);
+  background: transparent;
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  color: var(--text-4);
+  font-size: 12px;
+  white-space: nowrap;
 }
 .search-filter-shortcuts button:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
+/* The filter key (tag:, year: ...) stays visible but quiet, so the label reads first. */
 .search-filter-shortcuts b {
-  color: var(--accent-soft);
-  font-weight: 600;
+  margin-right: 2px;
+  color: var(--text-6);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
 }
 .global-search-scroll {
   display: flex;
@@ -206,12 +213,12 @@
   scrollbar-width: thin;
   scrollbar-color: var(--line) var(--panel);
   scrollbar-gutter: stable;
-  padding: 16px;
+  padding: 6px 10px 10px;
 }
 .search-sections {
   display: grid;
   align-items: start;
-  gap: 18px;
+  gap: 8px;
 }
 .search-section {
   min-width: 0;
@@ -219,14 +226,15 @@
   flex-direction: column;
 }
 .search-section + .search-section {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--white-6);
+  padding-top: 4px;
 }
 .search-section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 10px 8px;
+  padding: 8px 10px 4px;
   flex-shrink: 0;
 }
 .search-section-heading p {
@@ -234,21 +242,18 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 650;
+  color: var(--text-4);
+  font-size: 12px;
+  font-weight: 600;
 }
 .search-section-heading p > span {
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--muted);
-  font-size: 10px;
+  color: var(--text-6);
+  font-size: 12px;
   font-weight: 400;
 }
 .search-section-heading small {
-  color: var(--muted);
-  font-size: 10px;
+  color: var(--text-6);
+  font-size: 12px;
   text-align: right;
 }
 .search-section-scroll {
@@ -257,17 +262,18 @@
 .search-section-empty {
   margin: 10px 8px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
+/* ── Result rows ───────────────────────────────────────────────────── */
 .search-result {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 12px 10px;
+  padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   background: transparent;
   text-align: left;
   transition:
@@ -276,17 +282,18 @@
 }
 .search-result:hover,
 .search-result[aria-selected="true"] {
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  background: var(--white-6);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 .search-result-art {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 76px;
+  width: 40px;
+  height: 58px;
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--radius-6);
   background: var(--panel-strong);
   color: var(--accent-soft);
 }
@@ -296,18 +303,18 @@
   object-fit: cover;
 }
 .search-person .search-result-art {
-  height: 52px;
-  border-radius: 50%;
+  height: 40px;
+  border-radius: var(--radius-round);
 }
 .search-character .search-result-art {
-  width: 52px;
-  height: 72px;
+  width: 40px;
+  height: 56px;
 }
 .search-result-copy {
   flex: 1;
   min-width: 0;
   display: grid;
-  gap: 5px;
+  gap: 3px;
 }
 .search-result-copy strong {
   overflow-wrap: anywhere;
@@ -320,8 +327,9 @@
   overflow-wrap: anywhere;
   line-height: 1.5;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
+/* ── Watch progress inside results ─────────────────────────────────── */
 .search-anime-progress {
   --watch-accent: var(--accent);
   display: grid;
@@ -334,7 +342,7 @@
   flex-wrap: wrap;
   column-gap: 12px;
   row-gap: 3px;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 .search-episode-count {
@@ -347,7 +355,7 @@
   color: var(--muted);
 }
 .search-anime-progress[data-watch-status="completed"] {
-  --watch-accent: #8ad6a5;
+  --watch-accent: var(--teal);
 }
 .search-anime-progress[data-watch-status="completed"] .search-watch-state {
   color: var(--watch-accent);
@@ -358,7 +366,7 @@
   width: 100%;
   height: 4px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-4);
   overflow: hidden;
   color: var(--watch-accent);
   background: var(--line);
@@ -369,11 +377,11 @@
 }
 .search-anime-progress progress::-webkit-progress-value {
   background: var(--watch-accent);
-  border-radius: 4px;
+  border-radius: var(--radius-4);
 }
 .search-anime-progress progress::-moz-progress-bar {
   background: var(--watch-accent);
-  border-radius: 4px;
+  border-radius: var(--radius-4);
 }
 .anime-card > .search-anime-progress {
   margin: 10px 0;
@@ -393,12 +401,12 @@
 }
 .search-result-badge {
   color: var(--accent-soft);
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 .search-result-action {
-  color: #796b89;
-  font-size: 11px;
+  color: var(--text-7);
+  font-size: 12px;
   min-width: 23px;
   text-align: right;
 }
@@ -410,10 +418,10 @@
   z-index: 5;
   padding: 20px;
   border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
-  border-radius: 14px;
+  border-radius: var(--radius-14);
   background: var(--panel);
   color: var(--ink);
-  box-shadow: 0 16px 60px #0009;
+  box-shadow: 0 16px 60px var(--black-60);
   overflow: hidden;
   cursor: pointer;
   animation: search-preview-in 0.16s ease-out;
@@ -429,7 +437,7 @@
   flex: 0 0 136px;
   width: 136px;
   height: 204px;
-  border-radius: 9px;
+  border-radius: var(--radius-10);
   overflow: hidden;
   background: var(--panel-strong);
   color: var(--accent-soft);
@@ -445,7 +453,7 @@
 }
 .search-preview-person .search-preview-art {
   height: 136px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
 }
 .search-preview-setting .search-preview-art,
 .search-preview-filter .search-preview-art {
@@ -459,7 +467,7 @@
 }
 .search-preview-kind {
   color: var(--accent-soft);
-  font-size: 11px;
+  font-size: 12px;
 }
 .search-preview h2 {
   margin: 7px 0 10px;
@@ -502,7 +510,7 @@
 }
 .search-preview-stats dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .search-preview-stats dd {
   margin: 5px 0 0;
@@ -523,7 +531,7 @@
 }
 .search-preview-appearances small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .search-preview-query {
   display: block;
@@ -576,33 +584,16 @@
     display: none;
   }
 }
-@media (min-width: 960px) {
-  .search-sections[data-divided="true"][data-has-anime="true"] {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    column-gap: 22px;
-  }
-  .search-sections[data-divided="true"][data-has-anime="true"] > .search-section-anime {
-    grid-column: 1;
-    grid-row: 1 / span 3;
-  }
-  .search-sections[data-divided="true"][data-has-anime="true"]
-    > .search-section:not(.search-section-anime) {
-    grid-column: 2;
-  }
-  .search-sections[data-has-anime="true"] > .search-section:nth-child(2) {
-    border-top: 0;
-  }
-}
 .global-search-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 15px;
-  padding: 13px 18px;
-  background: var(--panel-strong);
-  border-top: 1px solid #ffffff10;
-  font-size: 10px;
-  color: #9e90af;
+  padding: 10px 18px;
+  background: transparent;
+  border-top: 1px solid var(--white-6);
+  font-size: 12px;
+  color: var(--text-5);
   flex-shrink: 0;
 }
 .global-search-footer kbd {
@@ -629,11 +620,12 @@
   margin: 12px 10px;
   font-size: 12px;
   line-height: 1.6;
-  color: #a99bb9;
+  color: var(--text-4);
 }
 .search-notice {
-  color: #f1be9d;
+  color: var(--peach);
 }
+/* ── Loading states ────────────────────────────────────────────────── */
 .search-loading {
   margin-block: 2px 8px;
 }
@@ -675,19 +667,19 @@
   align-items: center;
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #ffffff03;
+  border-radius: var(--radius-12);
+  background: var(--white-4);
 }
 .search-page-people a:hover,
 .search-page-settings a:hover {
-  border-color: #9a78ff60;
-  background: #9a78ff09;
+  border-color: color-mix(in srgb, var(--violet-400) 38%, transparent);
+  background: color-mix(in srgb, var(--violet-400) 4%, transparent);
 }
 .search-page-people img {
   height: 42px;
   width: 42px;
   object-fit: cover;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
 }
 .search-page-people span,
 .search-page-settings span {
@@ -697,7 +689,7 @@
 }
 .search-page-people small,
 .search-page-settings small {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -721,13 +713,13 @@
 }
 @keyframes search-dim {
   from {
-    background: #05030a00;
+    background: color-mix(in srgb, var(--night-0) 0%, transparent);
     backdrop-filter: blur(0);
   }
 }
 @keyframes search-undim {
   to {
-    background: #05030a00;
+    background: color-mix(in srgb, var(--night-0) 0%, transparent);
     backdrop-filter: blur(0);
   }
 }
@@ -743,11 +735,12 @@
     display: none;
   }
   .global-search-dialog {
+    --search-height: calc(100dvh - 20px);
     width: calc(100% - 18px);
     margin-top: 10px;
-    height: calc(100dvh - 20px);
-    max-height: calc(100dvh - 20px);
-    border-radius: 13px;
+    height: var(--search-height);
+    max-height: var(--search-height);
+    border-radius: var(--radius-12);
   }
   .global-search-form {
     padding: 15px 12px;
@@ -769,14 +762,14 @@
   }
   .search-filter-shortcuts button {
     padding: 6px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .search-result {
     gap: 10px;
     padding: 9px 7px;
   }
   .search-result-badge {
-    font-size: 10px;
+    font-size: 12px;
   }
   .search-result-copy strong {
     font-size: 13px;

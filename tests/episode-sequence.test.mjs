@@ -139,7 +139,8 @@ test("only the destination consumes an entrance animation, exactly once across r
   };
   assert.equal(consumePlaybackIntent(storage, "season-one", undefined, 2000), null);
   assert.equal(removals, 0);
-  assert.deepEqual(consumePlaybackIntent(storage, intent.slug, intent.episodeId, 2000), intent);
+  // Crossing a part boundary opens the season URL and restores the episode locally.
+  assert.deepEqual(consumePlaybackIntent(storage, intent.slug, undefined, 2000), intent);
   assert.equal(consumePlaybackIntent(storage, intent.slug, intent.episodeId, 2000), null);
   assert.equal(removals, 1);
 });

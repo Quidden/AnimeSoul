@@ -19,6 +19,16 @@ import {
 import { z } from "zod";
 import { diagnosticPath } from "@animesoul/diagnostics/sanitize";
 import { reportServerError } from "./diagnostics-server";
+import { rateLimitWait } from "./rate-limit";
+// A 429 from the API, with the wait it asked for, so pages can say "try again in N s".
+export class RateLimitedError extends Error {
+  constructor(
+    message: string,
+    readonly retryAfter: number,
+  ) {
+    super(message);
+  }
+}
 async function request(path: string, personalized = false) {
   const base = process.env.API_URL ?? "http://127.0.0.1:8020";
   const options: RequestInit = {
@@ -53,6 +63,11 @@ async function request(path: string, personalized = false) {
     return failed(new Error(`Content request failed: GET ${diagnosticPath(path)}`, { cause }));
   }
   if (response.status === 404) return null;
+  if (response.status === 429) {
+    const body: unknown = await response.json().catch(() => null);
+    const seconds = Number(response.headers.get("retry-after")) || rateLimitWait(body) || 60;
+    throw new RateLimitedError(`Content request limited: GET ${diagnosticPath(path)}`, seconds);
+  }
   if (!response.ok) {
     const error = new Error(
       `Content request failed: GET ${diagnosticPath(path)} (HTTP ${response.status})`,

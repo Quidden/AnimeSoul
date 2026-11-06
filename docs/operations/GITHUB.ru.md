@@ -65,6 +65,11 @@ docker compose --env-file .env.server -f compose.yaml -f compose.server.yaml -f 
 
 ## Перед коммитом
 
+Для нового сервера используйте отдельную [инструкцию самостоятельной установки](SELF_HOSTING.ru.md).
+Образы приложения публикуются в GHCR; приватный dev-box с каталогом остаётся на Docker Hub.
+`pnpm check` включает проверку секретов. Сканер также распознаёт PAT Docker Hub и встроенные
+доступы внутреннего proxy; вложенные `.env*` исключены из Docker-контекста.
+
 ```sh
 pnpm secrets:check
 pnpm secrets:check --history

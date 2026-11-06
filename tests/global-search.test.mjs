@@ -388,6 +388,17 @@ async function fixture(t) {
       popularity: 900000,
       metadataProvider: "legacy",
     },
+    {
+      id: randomUUID(),
+      title: "Independent fixture " + randomUUID(),
+      aliases: [],
+      genres: [],
+      year: 2020,
+      status: "released",
+      format: "tv",
+      shikimoriScore: 6,
+      popularity: 1,
+    },
   ].map((record) => ({
     slug: "search-" + record.id,
     originalTitle: record.title,

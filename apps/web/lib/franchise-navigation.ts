@@ -41,6 +41,8 @@ export function choosePlaybackSource(
     sources.find(
       (source) => source.season === previous.season && source.episode === previous.episode,
     ) ??
+    // Season "0" holds specials: open the story itself first when it exists.
+    sources.find((source) => source.season !== "0") ??
     sources[0]
   );
 }

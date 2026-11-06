@@ -2,17 +2,19 @@
 
 # AnimeSoul documentation
 
-[Private test Docker image](operations/DEV_IMAGE.md): full catalog, one owner account, build and publication.
+[Private Docker image](operations/DEV_IMAGE.md): full catalog, bootstrap owner, regular registration, runtime integrations and publication.
 
 [Publications and discussions](operations/CONTENT.md) · [100 fictional users](operations/DEMO_COMMUNITY.md).
 
-GitHub/Docker delivery updated against `main` on 2026-10-14. This repository contains the new website stack;
+Documentation updated against the current website changes on 2026-11-06. This repository contains the new website stack;
 Android lives separately and desktop development is discontinued. Legacy source/data is preserved
 outside this workspace; feature migration remains incomplete.
 
 [GitHub: default branch, manual GHCR publication and secret checks](operations/GITHUB.md).
 
 ## Start here
+
+[Self-host your own site](operations/SELF_HOSTING.md): domains, HTTPS, private `.env`, GHCR/source builds, backups and updates.
 
 Full-stack launch and future server deployment: [Docker and HTTPS](operations/DOCKER.md).
 

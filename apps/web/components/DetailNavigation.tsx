@@ -1,8 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 
+// Section tabs live under the page title; once they reach the header they move into it,
+// and the search field there shrinks to an icon. Separate pages show them in the header.
 export function DetailNavigation({
   base,
   sections,
@@ -22,96 +25,140 @@ export function DetailNavigation({
     .filter((section) => section.href.startsWith("#"))
     .map((section) => section.href.slice(1))
     .join("|");
-  const marker = useRef<HTMLDivElement>(null);
-  const island = useRef<HTMLDivElement>(null);
-  const [docked, setDocked] = useState(false);
+  const bar = useRef<HTMLDivElement>(null);
+  const headerNav = useRef<HTMLElement>(null);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const [docked, setDocked] = useState(separatePage);
   const [active, setActive] = useState("");
+  const [pill, setPill] = useState<CSSProperties>({ opacity: 0 });
+  const [edgeClass, setEdgeClass] = useState("");
+
+  useEffect(() => setSlot(document.getElementById("header-context")), []);
+
   useEffect(() => {
+    const root = document.documentElement;
     let frame = 0;
-    const glass = document.querySelector<HTMLElement>(".site-navigation-glass");
-    const measure = () => {
-      const bounds = island.current?.getBoundingClientRect();
-      if (!bounds) return;
-      document.documentElement.style.setProperty("--anime-navigation-height", `${bounds.height}px`);
-      // The shared background retains its last geometry while collapsing after
-      // navigation unmounts. A new page replaces these values on its first measure.
-      glass?.style.setProperty("--anime-navigation-height", `${bounds.height}px`);
-      glass?.style.setProperty("--anime-island-width", `${bounds.width}px`);
-      glass?.style.setProperty("--anime-island-left", `${bounds.left}px`);
-    };
+    // The tabs no longer add height under the header, so offsets elsewhere drop to zero.
+    root.style.setProperty("--anime-navigation-height", "0px");
     const update = () => {
+      frame = 0;
       const header = document.querySelector(".app-header")?.getBoundingClientRect().height ?? 70;
       const value =
-        separatePage || (marker.current?.getBoundingClientRect().top ?? Infinity) <= header;
+        separatePage || (bar.current?.getBoundingClientRect().top ?? Infinity) <= header - 1;
       setDocked(value);
-      document.documentElement.toggleAttribute("data-anime-docked", value);
+      root.toggleAttribute("data-header-tabs", value);
       const positions = sectionIds
         .split("|")
         .map((id) => ({
           id,
           top: document.getElementById(id)?.getBoundingClientRect().top ?? Infinity,
         }))
-        .filter(
-          (p) => p.top <= header + (island.current?.getBoundingClientRect().height ?? 58) + 40,
-        )
+        .filter((position) => position.top <= header + 48)
         .sort((a, b) => b.top - a.top);
       setActive(positions[0]?.id ?? "");
     };
-    const scroll = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(update);
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
     };
-    const resize = new ResizeObserver(measure);
-    const viewportResize = () => {
-      measure();
-      scroll();
-    };
-    if (island.current) resize.observe(island.current);
-    measure();
     update();
-    window.addEventListener("scroll", scroll, { passive: true });
-    window.addEventListener("resize", viewportResize);
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
     return () => {
       cancelAnimationFrame(frame);
-      resize.disconnect();
-      window.removeEventListener("scroll", scroll);
-      window.removeEventListener("resize", viewportResize);
-      document.documentElement.removeAttribute("data-anime-docked");
-      document.documentElement.style.removeProperty("--anime-navigation-height");
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      root.removeAttribute("data-header-tabs");
+      root.style.removeProperty("--anime-navigation-height");
     };
   }, [base, sectionIds, separatePage]);
+
+  // A pill slides under the current tab in the header copy, which keeps that tab in view.
+  useLayoutEffect(() => {
+    const nav = headerNav.current;
+    const current = nav?.querySelector<HTMLElement>("[aria-current]");
+    setPill(
+      current
+        ? { width: current.offsetWidth, transform: `translateX(${current.offsetLeft}px)` }
+        : { opacity: 0 },
+    );
+    if (nav && current && docked)
+      nav.scrollTo({
+        left: current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
+      });
+  }, [active, pathname, docked, slot]);
+
+  useEffect(() => {
+    const nav = headerNav.current;
+    if (!nav) return;
+    const edges = () => {
+      const overflow = nav.scrollWidth > nav.clientWidth + 2;
+      const next = [
+        overflow ? " is-overflowing" : "",
+        overflow && nav.scrollLeft > 2 ? " is-scrolled" : "",
+        overflow && nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 2 ? " is-end" : "",
+      ].join("");
+      setEdgeClass((previous) => (previous === next ? previous : next));
+    };
+    const resize = new ResizeObserver(edges);
+    resize.observe(nav);
+    nav.addEventListener("scroll", edges, { passive: true });
+    edges();
+    return () => {
+      resize.disconnect();
+      nav.removeEventListener("scroll", edges);
+    };
+  }, [slot]);
+
+  const links = (inHeader: boolean) =>
+    sections.map(({ href, label: name }, index) => {
+      const anchor = href.startsWith("#");
+      const current = anchor ? !separatePage && active === href.slice(1) : pathname === href;
+      const style = inHeader ? ({ "--tab-index": index } as CSSProperties) : undefined;
+      return anchor && !separatePage ? (
+        <a key={href} href={href} style={style} aria-current={current ? "location" : undefined}>
+          {name}
+        </a>
+      ) : (
+        <Link
+          key={href}
+          href={anchor ? base + href : href}
+          prefetch={false}
+          style={style}
+          aria-current={current ? "page" : undefined}
+        >
+          {name}
+        </Link>
+      );
+    });
+
   return (
     <>
+      {/* Server-rendered for every page; separate pages keep it collapsed and use the header copy. */}
       <div
-        ref={marker}
-        className={`anime-navigation-marker${board ? " board" : attached ? " attached" : ""}`}
-        aria-hidden="true"
-      />
-      <div
-        ref={island}
-        className={`anime-navigation-island${docked || separatePage ? " docked" : ""}${separatePage ? " attached" : ""}`}
+        ref={bar}
+        className={`anime-navigation-island${docked ? " docked" : ""}${separatePage ? " is-separate" : ""}`}
+        inert={docked}
       >
         <nav className="anime-detail-navigation" aria-label={label}>
-          {sections.map(({ href, label }) => {
-            const anchor = href.startsWith("#");
-            const current = anchor ? !separatePage && active === href.slice(1) : pathname === href;
-            return anchor && !separatePage ? (
-              <a key={href} href={href} aria-current={current ? "location" : undefined}>
-                {label}
-              </a>
-            ) : (
-              <Link
-                key={href}
-                href={anchor ? base + href : href}
-                prefetch={false}
-                aria-current={current ? "page" : undefined}
-              >
-                {label}
-              </Link>
-            );
-          })}
+          {links(false)}
         </nav>
       </div>
+      {slot &&
+        createPortal(
+          <nav
+            ref={headerNav}
+            className={`header-tabs${docked ? " is-shown" : ""}${edgeClass}`}
+            aria-label={label}
+            inert={!docked}
+          >
+            <span className="header-tabs-pill" style={pill} aria-hidden="true" />
+            {links(true)}
+          </nav>,
+          slot,
+        )}
     </>
   );
 }

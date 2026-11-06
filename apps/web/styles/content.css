@@ -1,32 +1,74 @@
-.community-page {
-  max-width: 1000px;
-}
+/* User content: comments, discussions, suggestions and the reference picker that links titles and episodes. */
 .content-section {
-  margin: 32px 0;
+  margin: 28px 0;
   max-width: 900px;
+}
+.community-page .content-section {
+  max-width: none;
 }
 .content-compose {
   margin: 18px 0;
 }
 .content-compose > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px dashed var(--white-20);
+  border-radius: var(--radius-14);
+  color: var(--muted);
+  background: var(--white-4);
   cursor: pointer;
-  color: var(--accent);
-  padding: 12px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  list-style: none;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.content-compose > summary::-webkit-details-marker {
+  display: none;
+}
+.content-compose > summary::before {
+  content: "+";
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-round);
+  color: var(--white);
+  background: color-mix(in srgb, var(--violet-500) 70%, transparent);
+  font-size: 18px;
+  line-height: 1;
+}
+.content-compose > summary:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.content-compose[open] > summary {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.content-compose[open] > summary::before {
+  content: "−";
 }
 .content-card,
 .content-form {
-  padding: 24px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--panel);
-  margin: 18px 0;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--white-12);
+  margin: 0;
   min-width: 0;
+}
+.content-card {
+  position: relative;
+}
+.content-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .content-card h3 {
   margin: 14px 0;
-  font-size: 22px;
+  font-size: 20px;
+  line-height: 1.35;
 }
 .content-card h3 a {
   color: var(--ink);
@@ -46,14 +88,27 @@
   font-size: 13px;
 }
 .content-author img {
-  border-radius: 50%;
+  border-radius: var(--radius-round);
 }
 .content-author {
   color: var(--ink);
 }
-.content-context,
-.content-tags a {
+.content-context {
   color: var(--accent);
+}
+.content-tags {
+  gap: 8px;
+}
+.content-tags a {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  color: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 12px;
+  transition: background-color 0.15s ease;
+}
+.content-tags a:hover {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 .content-context {
   display: block;
@@ -68,7 +123,7 @@
   color: var(--accent-soft);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-4);
   padding: 1px 4px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -91,7 +146,7 @@
   padding: 14px;
   background: var(--field-bg);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   font-size: 14px;
   line-height: 1.8;
   overflow-wrap: anywhere;
@@ -139,7 +194,7 @@
 }
 .content-editor .content-editor-notice {
   margin: 0;
-  color: #f0b3bf;
+  color: var(--rose);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -147,7 +202,7 @@
 .content-reference-picker {
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: 12px;
+  border-radius: var(--radius-12);
   background: var(--panel-strong);
   min-width: 0;
 }
@@ -165,7 +220,7 @@
   margin-bottom: 8px !important;
 }
 .content-suggestions-caption span {
-  font-size: 11px;
+  font-size: 12px;
 }
 .content-suggestions [role="listbox"],
 .content-reference-results {
@@ -180,7 +235,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: transparent;
   padding: 8px;
   color: var(--ink);
@@ -189,14 +244,14 @@
 }
 .content-suggestions [role="option"] img {
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-4);
   flex-shrink: 0;
 }
 .content-suggestions [role="option"] small,
 .content-reference-results button small {
   margin-left: auto;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 .content-suggestions [role="option"]:hover,
@@ -232,7 +287,7 @@
   padding: 8px 12px;
   min-height: 36px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: var(--field-bg);
   color: var(--muted);
   font-size: 12px;
@@ -249,7 +304,7 @@
   align-items: end;
 }
 .content-reference-fields label small {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .content-reference-fields select,
@@ -326,7 +381,7 @@
 }
 .content-badges span {
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-6);
   padding: 4px 8px;
   font-size: 12px;
   color: var(--muted);
@@ -334,7 +389,7 @@
 .content-spoiler {
   margin: 16px 0;
   background: var(--panel-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   padding: 12px;
 }
 .content-spoiler summary {
@@ -356,7 +411,7 @@
   width: 100%;
   background: var(--field-bg);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   color: var(--ink);
   font: inherit;
   padding: 10px 12px;
@@ -370,15 +425,14 @@
   gap: 16px;
   border: 1px solid var(--line);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
 }
 .content-labels label {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.content-labels input,
-.content-adult input {
+.content-labels input {
   width: 16px;
   height: 16px;
   min-height: 0;
@@ -386,6 +440,24 @@
 .content-adult {
   margin: 20px 0;
   color: var(--muted);
+}
+/* The 18+ opt-in is a switch row, not a bare checkbox. */
+.content-adult label {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 560px;
+  padding: 12px 14px;
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-12);
+  background: var(--white-4);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.content-adult label:hover {
+  border-color: var(--white-20);
 }
 .content-reply {
   margin-left: 24px;
@@ -399,10 +471,10 @@
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: color-mix(in srgb, var(--accent) 16%, var(--panel));
   color: var(--accent-soft);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -425,7 +497,7 @@
   margin: 8px 0 0;
 }
 .content-comments-heading .eyebrow {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 1.5px;
   margin: 0;
   color: var(--accent-soft);
@@ -440,7 +512,7 @@
   gap: 16px;
   padding: 22px;
   background: color-mix(in srgb, var(--panel) 75%, transparent);
-  border-radius: 14px;
+  border-radius: var(--radius-14);
 }
 .content-composer-caption {
   grid-column: 1 / -1;
@@ -465,7 +537,7 @@
   line-height: 1.7;
   min-height: 100px;
   padding: 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
 }
 .content-comment-composer textarea:focus {
   outline: 0;
@@ -482,7 +554,7 @@
   display: none;
 }
 .content-comment-composer .content-labels label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .content-comment-composer .content-labels input {
@@ -501,7 +573,7 @@
 }
 .content-comment .content-meta {
   gap: 14px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .content-comment .content-author {
   gap: 9px;
@@ -525,7 +597,7 @@
 .content-comment .content-actions button {
   padding: 4px 0;
   min-height: 28px;
-  font-size: 11px;
+  font-size: 12px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -569,7 +641,7 @@
 @media (max-width: 600px) {
   .content-card,
   .content-form {
-    padding: 16px;
+    padding: 18px 0;
   }
   .content-reply {
     margin-left: 12px;

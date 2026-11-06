@@ -11,6 +11,9 @@ The previous local application, settings, databases and releases are preserved i
 Primary Kodik and optional YummyAnime reserve embeds, accounts, private libraries and MFA-protected admin access are connected.
 Episode pages, timestamps, new progress and custom HLS with embed fallback are implemented.
 Profile uploads/GIPHY, character pages, universal/frame search, subscriptions and administrative analytics are implemented.
+The current interface includes release schedules, franchise navigation, a community feed,
+updated catalog/library/player controls and shared visual tokens. Frame search uses bounded
+provider budgets and a signed internal visitor channel; public catalog responses use an isolated cache.
 See [migration status](docs/migration/STATUS.md), [playback](docs/operations/PLAYBACK.md),
 [accounts](docs/operations/ACCOUNTS.md) and [administration](docs/operations/ADMINISTRATION.md).
 Production rollout and real payments remain separate milestones.
@@ -28,6 +31,8 @@ Production rollout and real payments remain separate milestones.
 `apps` contains Web/API/Admin; `packages` holds shared contracts, persistence and configuration;
 `scripts` groups utilities by purpose; `infra` holds local services; `tests` checks cross-application behavior.
 Maps describe current implementation; the roadmap describes future work.
+
+For installation on your own server, see the [self-hosting guide](docs/operations/SELF_HOSTING.md).
 
 ## Run locally
 
@@ -80,6 +85,9 @@ without a database; playback requires imported catalog records and enabled provi
 `main` contains the website; the previous application remains in `master`. Automated GitHub
 test runs have been removed. Manually publish API/Web/Admin/migration images with
 **Actions → Publish containers → Run workflow**. [GHCR publication and launch](docs/operations/GITHUB.md).
+The separate private test image is `quiddens/animesoul-dev` on Docker Hub;
+see [test image](docs/operations/DEV_IMAGE.md). [Deploy your own site](docs/operations/SELF_HOSTING.md)
+covers domains, private settings, launch, backups and updates.
 The Dockerfile remains in `infra/docker/`; images contain source/build output and receive secrets at runtime.
 
 ## Check

@@ -168,9 +168,11 @@ export function AccountIdentity({
       ) : (
         <>
           {account && (
-            <p>
-              {account.email} ·{" "}
-              {account.emailVerified ? "Почта подтверждена" : "Почта не подтверждена"}
+            <p className="account-identity-email">
+              <strong>{account.email}</strong>
+              <span className={"account-status " + (account.emailVerified ? "is-on" : "is-warn")}>
+                {account.emailVerified ? "Почта подтверждена" : "Почта не подтверждена"}
+              </span>
             </p>
           )}
           {account && options?.email && !account.emailVerified && (
@@ -192,7 +194,9 @@ export function AccountIdentity({
               Войти через Google
             </button>
           )}
-          {account?.googleLinked && <p>Google привязан. Его можно использовать для входа.</p>}
+          {account?.googleLinked && (
+            <p className="account-status is-on">Google привязан — им можно входить</p>
+          )}
           {options?.google && account?.hasPassword && !account.googleLinked && (
             <form
               className="account-form"
@@ -249,7 +253,7 @@ export function AccountIdentity({
                   autoComplete="current-password"
                 />
               </label>
-              <button className="outline" disabled={busy}>
+              <button className="primary" disabled={busy}>
                 Отправить подтверждение
               </button>
             </form>

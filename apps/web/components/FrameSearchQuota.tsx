@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { frameSearchQuotaSchema, type FrameSearchQuota } from "@animesoul/contracts";
+import { waitLabel } from "../lib/rate-limit";
 const eventName = "animesoul:frame-quota";
 let value: FrameSearchQuota | null = null;
 let request: Promise<void> | null = null;
@@ -56,26 +57,40 @@ export function FrameSearchQuota() {
       window.removeEventListener(eventName, update);
     };
   }, []);
+  // The member's own allowance is what blocks them first, so it leads; the shared server cap follows.
+  const own = quota?.personal;
+  const shared = quota?.global;
+  const primary = own ?? quota;
+  const exhausted = own?.remaining === 0 || shared?.remaining === 0 || quota?.remaining === 0;
+  const blocking = own?.remaining === 0 ? own : shared?.remaining === 0 ? shared : null;
   return (
-    <div className="frame-quota" data-empty={quota?.remaining === 0} role="status">
+    <div className="frame-quota" data-empty={exhausted} role="status">
       <div>
-        <span>Лимит сервера</span>
+        <span>
+          {own ? (own.scope === "user" ? "Ваш лимит" : "Лимит с вашего адреса") : "Лимит сервера"}
+        </span>
         <strong>
-          {quota
-            ? `${quota.remaining} из ${quota.total} поисков осталось`
+          {primary
+            ? `${primary.remaining} из ${primary.total} поисков осталось`
             : loaded
               ? "Остаток временно недоступен"
               : "Проверяем лимит…"}
         </strong>
       </div>
-      {quota && (
+      {primary && (
         <>
           <progress
-            max={quota.total}
-            value={quota.remaining}
+            max={primary.total}
+            value={primary.remaining}
             aria-label="Оставшаяся квота поиска"
           />
-          <span className="frame-help">Общий для всех посетителей · за последние 24 часа</span>
+          <span className="frame-help">
+            {blocking
+              ? `Лимит исчерпан, обновится ${waitLabel(blocking.resetAfter)}.`
+              : shared
+                ? `Общий лимит сервера: ${shared.remaining} из ${shared.total} · за 24 часа`
+                : "Общий для всех посетителей · за последние 24 часа"}
+          </span>
         </>
       )}
       {!quota && loaded && (

@@ -1,0 +1,810 @@
+/* Anime page: the player right after the title, the franchise and episodes under it. */
+.anime-watch .anime-playback {
+  position: relative;
+}
+.anime-about {
+  display: grid;
+  gap: 24px;
+  margin: 8px 0 40px;
+}
+
+/* Why the AnimeSoul player: offered in place, over the blurred episode. */
+.player-plus-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: -6px 0 16px;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  font-size: 13px;
+}
+.player-plus-hint > span:nth-child(2) {
+  flex: 1;
+  min-width: 220px;
+  color: color-mix(in srgb, var(--ink) 85%, transparent);
+}
+.player-plus-hint button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-soft);
+  font-weight: 600;
+}
+.player-plus-tag {
+  padding: 2px 7px;
+  border-radius: var(--radius-6);
+  background: linear-gradient(135deg, var(--accent-soft), var(--primary-end));
+  color: var(--white);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+/* ── Player engine comparison ──────────────────────────────────────── */
+.player-comparison {
+  display: grid;
+  gap: clamp(16px, 2vw, 26px);
+  margin-bottom: 16px;
+  padding: clamp(16px, 2.4vw, 30px);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: var(--radius-16);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  animation: player-comparison-in 450ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes player-comparison-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.player-comparison-head {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.player-comparison-head h3 {
+  margin: 0;
+  font-size: clamp(20px, 2vw, 28px);
+  line-height: 1.15;
+  outline: none;
+}
+.player-comparison-head p {
+  margin: 0;
+  color: var(--muted);
+}
+.demo-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.demo-card {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.demo-card figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.demo-card figcaption strong {
+  font-size: 15px;
+}
+.demo-card figcaption span:not(.player-plus-tag) {
+  color: var(--muted);
+  font-size: 13px;
+}
+.demo-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-14);
+  background: var(--night-0);
+  isolation: isolate;
+}
+.demo-screen:has(:fullscreen) {
+  overflow: visible;
+}
+.demo-card.is-plus .demo-screen {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 14px 50px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.demo-screen video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.demo-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+.demo-card > p {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.demo-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.player-comparison-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.player-comparison-list li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+.player-comparison-list li > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--radius-round);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+.player-comparison-list strong {
+  font-size: 13.5px;
+}
+.player-comparison-list p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.player-comparison-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+.player-comparison-actions small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Franchise: accordion for small franchises, colored cards for large ones, or a map. */
+.anime-franchise-browser {
+  grid-template-columns: minmax(0, 1fr);
+}
+.franchise-parts {
+  min-width: 0;
+}
+.franchise-parts-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 14px;
+}
+.franchise-parts-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+.franchise-parts-title h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.franchise-parts-title > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.franchise-view {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.franchise-view button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-8);
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.franchise-view button[aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 2px 8px var(--black-30);
+}
+.franchise-accordion,
+.franchise-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.franchise-accordion {
+  --row: 172px;
+  display: flex;
+  gap: 8px;
+  height: var(--row);
+}
+.franchise-accordion > li {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-14);
+  background: var(--panel);
+  transition:
+    flex-grow 650ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 300ms ease;
+}
+.franchise-accordion > li.is-open {
+  flex-grow: 3.4;
+}
+.franchise-accordion > li::before,
+.franchise-grid > li::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 3px;
+  background: var(--part-color);
+  content: "";
+}
+.franchise-accordion a,
+.franchise-grid a {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.franchise-accordion a[aria-current="page"],
+.franchise-grid a[aria-current="page"] {
+  outline: 1px solid color-mix(in srgb, var(--part-color) 75%, transparent);
+  outline-offset: -1px;
+  border-radius: inherit;
+}
+.franchise-accordion img,
+.franchise-accordion .franchise-part-poster {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.7) brightness(0.5);
+  transition:
+    width 650ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 400ms ease;
+}
+.franchise-accordion > li:hover img {
+  filter: saturate(0.9) brightness(0.65);
+}
+.franchise-accordion > li.is-open img,
+.franchise-accordion > li.is-open .franchise-part-poster {
+  width: calc(var(--row) * 2 / 3);
+  filter: none;
+}
+.franchise-part-short {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  left: 14px;
+  z-index: 1;
+  display: grid;
+  gap: 2px;
+  transition: opacity 250ms ease;
+}
+.franchise-part-short strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 8px var(--black);
+  white-space: nowrap;
+}
+.franchise-accordion > li.is-open .franchise-part-short {
+  opacity: 0;
+}
+.franchise-part-type {
+  color: var(--part-color);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.franchise-part-info {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: calc(var(--row) * 2 / 3);
+  display: flex;
+  min-width: 190px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--part-color) 7%, var(--panel));
+  opacity: 0;
+  transform: translateX(10px);
+  transition:
+    opacity 250ms ease,
+    transform 450ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.franchise-accordion > li.is-open .franchise-part-info {
+  opacity: 1;
+  transform: none;
+  transition-delay: 200ms;
+}
+.franchise-part-info strong {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.franchise-part-info small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.franchise-part-now {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--part-color);
+  color: var(--night-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+.franchise-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.franchise-grid > li {
+  position: relative;
+  height: 96px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-12);
+  background: var(--panel);
+}
+.franchise-grid img,
+.franchise-grid .franchise-part-poster {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 100%;
+  object-fit: cover;
+}
+.franchise-grid .franchise-part-short {
+  top: 0;
+  left: 78px;
+  align-content: center;
+}
+.franchise-grid .franchise-part-short strong {
+  text-shadow: none;
+}
+.franchise-more {
+  margin-top: 12px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+}
+.franchise-mini-map {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-16);
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+}
+.franchise-mini-map-scroll {
+  overflow-x: auto;
+  padding: 6px 8px;
+}
+.franchise-mini-map svg {
+  display: block;
+  max-width: none;
+  height: auto;
+}
+.franchise-mini-map path {
+  fill: none;
+  stroke: var(--part-color);
+  stroke-dasharray: 5 5;
+  stroke-width: 1.6;
+  opacity: 0.75;
+}
+.franchise-mini-map path.is-main {
+  stroke: var(--accent-soft);
+  stroke-dasharray: none;
+  stroke-width: 3;
+  opacity: 1;
+}
+/* ── Franchise map ─────────────────────────────────────────────────── */
+.franchise-map-node {
+  cursor: pointer;
+  outline: none;
+}
+.franchise-map-card {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 350ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.franchise-map-node:hover .franchise-map-card,
+.franchise-map-node:focus-visible .franchise-map-card {
+  transform: translateY(-4px) scale(1.05);
+}
+.franchise-map-fill {
+  fill: var(--panel-strong);
+}
+.franchise-map-ring {
+  fill: none;
+  stroke: var(--part-color);
+  stroke-width: 2;
+  opacity: 0.7;
+}
+.franchise-map-node.is-current .franchise-map-ring {
+  stroke-width: 3.5;
+  opacity: 1;
+  filter: drop-shadow(0 0 8px var(--part-color));
+}
+.franchise-map-node:focus-visible .franchise-map-ring {
+  stroke: var(--ink);
+  opacity: 1;
+}
+.franchise-map-year {
+  fill: var(--muted);
+  font-size: 12px;
+}
+.franchise-map-title {
+  fill: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.franchise-map-type {
+  fill: var(--part-color);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.franchise-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  padding: 4px 14px 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.franchise-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.franchise-map-legend i {
+  display: inline-block;
+  width: 26px;
+  border-top: 2px dashed var(--muted);
+}
+.franchise-map-legend i.is-main {
+  border-top: 3px solid var(--accent-soft);
+}
+.franchise-map-legend a {
+  margin-left: auto;
+  color: var(--accent-soft);
+  font-size: 13px;
+}
+
+/* Episodes: one row of larger cards, a watched toggle on each */
+.anime-franchise-series .anime-episode-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.anime-episode-tile {
+  border-radius: var(--radius-14);
+}
+.anime-episode-tile > a {
+  gap: 4px;
+  min-height: 118px;
+  padding: 14px 54px 16px 16px;
+}
+.anime-episode-number {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.anime-episode-heading {
+  font-size: 13px;
+}
+.anime-episode-status,
+.anime-episode-duration {
+  font-size: 12px;
+}
+.anime-episode-tile.completed .anime-episode-number {
+  color: var(--muted);
+}
+.anime-episode-tile > .rating-slider-control {
+  top: auto;
+  bottom: 10px;
+}
+.anime-episode-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  border-radius: var(--radius-round);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  font-size: 15px;
+  font-weight: 700;
+  transition:
+    background 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.anime-episode-check:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.anime-episode-check[aria-pressed="true"] {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: var(--night-slate);
+}
+.anime-episode-check:active {
+  transform: scale(0.9);
+}
+/* ── Episodes: list and watched marks ──────────────────────────────── */
+.anime-mark-all {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+.anime-mark-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--teal) 27%, transparent);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--teal) 7%, var(--panel));
+  font-size: 13px;
+}
+.anime-mark-offer span {
+  flex: 1;
+  min-width: 200px;
+}
+.anime-mark-offer .primary,
+.anime-mark-offer .outline {
+  min-height: 34px;
+  padding: 6px 14px;
+}
+.anime-episode-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+}
+.anime-episode-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.anime-episode-range button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-round);
+  background: none;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+}
+.anime-episode-range button:disabled {
+  opacity: 0.35;
+}
+.anime-episode-toggle {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .player-comparison-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .demo-pair,
+  .player-comparison-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .franchise-accordion {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+  }
+  .franchise-accordion > li {
+    height: 110px;
+  }
+  .franchise-accordion > li.is-open img {
+    width: 100%;
+    filter: saturate(0.9) brightness(0.6);
+  }
+  .franchise-part-info {
+    display: none;
+  }
+  .franchise-accordion > li.is-open .franchise-part-short {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-comparison {
+    animation: none;
+  }
+  .franchise-accordion > li,
+  .franchise-accordion img,
+  .franchise-part-info,
+  .franchise-map-card {
+    transition: none;
+  }
+}
+
+/* Player panel: a segmented switch between players, the AnimeSoul one glows. */
+.anime-watch .playback-heading {
+  align-items: baseline;
+  gap: 4px 14px;
+}
+.anime-watch .player-engines {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 0 14px;
+}
+.player-engine-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius-14);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.anime-watch .player-engines button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-12);
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  animation: none;
+  transition:
+    background 200ms ease,
+    color 200ms ease;
+}
+.anime-watch .player-engines button:hover {
+  color: var(--ink);
+}
+.anime-watch .player-engines button[aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 2px 10px var(--black-40);
+}
+.anime-watch .player-engines .player-engine-native span {
+  margin: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-6);
+  background: linear-gradient(135deg, var(--accent-soft), var(--primary-end));
+  color: var(--white);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+.anime-watch .player-engines p {
+  flex: 1 1 200px;
+  margin: 0;
+}
+
+/* A soft backdrop from the anime's own frame lifts the title block, like the home stage. */
+.anime-page-layout {
+  overflow-x: clip;
+}
+.anime-detail-page {
+  position: relative;
+}
+.anime-backdrop {
+  position: absolute;
+  top: calc(-1 * var(--header-height));
+  left: 50%;
+  z-index: -1;
+  width: 100vw;
+  height: clamp(380px, 62svh, 640px);
+  margin-left: -50vw;
+  overflow: hidden;
+  pointer-events: none;
+  mask-image: linear-gradient(var(--black) 40%, transparent 98%);
+}
+.anime-backdrop img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(6px) brightness(0.42) saturate(0.85);
+  transform: scale(1.04);
+}
+.anime-backdrop::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg) 75%, transparent),
+    transparent 60%
+  );
+}
+
+/* On a phone the player is small; keep its play button clear of the episode and voice pickers. */
+@media (max-width: 600px) {
+  .anime-playback .animesoul-player-center-play {
+    top: calc(50% + 18px);
+  }
+}

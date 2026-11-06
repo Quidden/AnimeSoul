@@ -15,8 +15,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 export default async function AnimePage({ params }: Props) {
   const { slug } = await params;
-  const [anime, cast] = await Promise.all([getAnime(slug), getAnimeCharacters(slug)]);
-  const franchise = await getFranchise(slug);
+  const [anime, cast, franchise] = await Promise.all([
+    getAnime(slug),
+    getAnimeCharacters(slug),
+    getFranchise(slug),
+  ]);
   if (!anime || !franchise) notFound();
   if (franchise.currentAnimeId !== anime.id) {
     const current = franchise.items.find((part) => part.anime.id === franchise.currentAnimeId);

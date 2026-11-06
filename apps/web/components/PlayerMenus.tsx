@@ -1,5 +1,6 @@
 "use client";
 import { PlayerSelect, type PlayerOption } from "./PlayerSelect";
+import { seasonLabel } from "../lib/season-label";
 import { AnimePartSwitches, type PartFilter } from "./AnimePartSwitches";
 export type { PlayerOption } from "./PlayerSelect";
 export type PlayerMenu = {
@@ -148,7 +149,9 @@ export function PlayerTopNavigation({
           onClick={onToggle}
         >
           <span className="animesoul-player-context-copy">
-            <strong>{menu.contextLabel ?? `Сезон ${menu.season} · Серия ${menu.episode}`}</strong>
+            <strong>
+              {menu.contextLabel ?? `${seasonLabel(menu.season)} · Серия ${menu.episode}`}
+            </strong>
             <span>{title}</span>
           </span>
           <i aria-hidden="true">⌄</i>

@@ -3,6 +3,7 @@ import {
   adultPreferenceSchema,
   commentInputSchema,
   contentQuerySchema,
+  contentTagsQuerySchema,
   deleteContentSchema,
   postInputSchema,
 } from "@animesoul/contracts";
@@ -13,6 +14,9 @@ import { ContentService } from "./content.service.js";
 @Controller("api/account/content")
 export class ContentController {
   constructor(@Inject(ContentService) private readonly content: ContentService) {}
+  @Get("tags") tags(@Req() req: AuthRequest, @Query() q: unknown) {
+    return this.content.tags(req, parse(contentTagsQuerySchema, q));
+  }
   @Get("posts") posts(@Req() req: AuthRequest, @Query() q: unknown) {
     return this.content.posts(req, parse(contentQuerySchema, q));
   }

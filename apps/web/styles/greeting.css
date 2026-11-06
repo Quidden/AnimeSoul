@@ -1,0 +1,153 @@
+/* First-visit greeting: hand-written "hello" in three languages, then a welcome. */
+@property --greeting-hue {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 262;
+}
+html[data-greeting] .app {
+  visibility: hidden;
+}
+.first-greeting {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-greeting);
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: radial-gradient(
+    60% 60% at 50% 45%,
+    hsl(var(--greeting-hue) 55% 16%),
+    var(--night-0) 78%
+  );
+  color: var(--ink);
+  transition:
+    opacity 900ms ease,
+    transform 1200ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 900ms ease,
+    --greeting-hue 1400ms ease;
+}
+.first-greeting.is-closing {
+  opacity: 0;
+  pointer-events: none;
+  filter: blur(12px);
+  transform: scale(1.12);
+}
+.first-greeting-word {
+  width: min(92vw, 960px);
+  height: auto;
+  overflow: visible;
+  transition:
+    opacity 600ms ease,
+    filter 600ms ease,
+    transform 800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.first-greeting.is-fading .first-greeting-word {
+  opacity: 0;
+  filter: blur(8px);
+  transform: scale(0.97);
+}
+.first-greeting-word text {
+  fill: url(#first-greeting-ink);
+  fill-opacity: 0;
+  stroke: url(#first-greeting-ink);
+  stroke-width: 1.4;
+  stroke-dasharray: 1700;
+  stroke-dashoffset: 1700;
+  font-size: 168px;
+  animation:
+    greeting-write 2s cubic-bezier(0.55, 0, 0.3, 1) forwards,
+    greeting-fill 0.9s ease 1.35s forwards;
+}
+@keyframes greeting-write {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes greeting-fill {
+  to {
+    fill-opacity: 1;
+  }
+}
+.first-greeting-final {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+}
+.first-greeting-final > * {
+  margin: 0;
+  animation: greeting-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.first-greeting-final > :nth-child(2) {
+  animation-delay: 0.08s;
+}
+.first-greeting-final > :nth-child(3) {
+  animation-delay: 0.16s;
+}
+.first-greeting-final > :nth-child(n + 4) {
+  animation-delay: 0.24s;
+}
+@keyframes greeting-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+.first-greeting-final img {
+  border-radius: var(--radius-16);
+}
+.first-greeting-final h2 {
+  font-size: clamp(26px, 3.2vw, 42px);
+  letter-spacing: -0.03em;
+}
+.first-greeting-final p {
+  max-width: 44ch;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.first-greeting-final .first-greeting-note {
+  font-size: 12px;
+}
+.first-greeting-skip {
+  position: absolute;
+  right: max(24px, env(safe-area-inset-right, 0px));
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--radius-10);
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+}
+.first-greeting-skip:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.first-greeting-announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .first-greeting,
+  .first-greeting-word {
+    transition: opacity 300ms ease;
+  }
+  .first-greeting.is-closing {
+    filter: none;
+    transform: none;
+  }
+  .first-greeting-word text {
+    animation: none;
+    fill-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+  .first-greeting-final > * {
+    animation: none;
+  }
+}

@@ -4,7 +4,9 @@ import {
   type AnnouncementEdit,
   type NotificationEdit,
   type WinterSettings,
+  type adminPostPinSchema,
 } from "@animesoul/contracts";
+import type { z } from "zod";
 import type { DatabaseTransaction, Prisma } from "@animesoul/database";
 import { AuthService } from "../auth/auth.service.js";
 import { operation, version, type Write } from "./operations.js";
@@ -18,6 +20,19 @@ type Message = AnnouncementEdit | NotificationEdit;
 export class AdministrationContentService {
   private graph: { time: number; rows: FranchiseGraphRow[] } | undefined;
   constructor(@Inject(AuthService) private readonly auth: AuthService) {}
+  async pinPost(actorId: string, id: string, input: z.infer<typeof adminPostPinSchema>) {
+    const change = { ...input, id };
+    await operation(this.auth.db, actorId, "admin.community.post.pinned", change, async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Post" WHERE "id" = ${id}::uuid FOR UPDATE`;
+      const row = await tx.post.findFirst({ where: { id, deletedAt: null } });
+      if (!row) throw new NotFoundException();
+      if (input.pinned && row.audience !== "public")
+        throw new BadRequestException("Закрепить можно только публичную запись.");
+      await tx.post.update({ where: { id }, data: { pinned: input.pinned } });
+      return { objectId: id, details: { before: row.pinned, after: input.pinned } };
+    });
+    return { ok: true };
+  }
   async list(kind: "announcements" | "notifications", page = 1, q = "", scope = "all") {
     const where = {
       ...(q

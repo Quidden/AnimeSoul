@@ -1,8 +1,40 @@
 import { z } from "zod";
+import { isIP } from "node:net";
+const list = (value: string) =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+const ip = (value: string) => isIP(value) !== 0 && !value.includes("%");
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(8020),
   API_HOST: z.string().default("127.0.0.1"),
+  INTERNAL_PROXY_SECRET: z
+    .string()
+    .regex(/^(?:[A-Za-z0-9_-]{32,256})?$/)
+    .default(""),
+  INTERNAL_PROXY_TRUSTED_IPS: z
+    .string()
+    .max(2048)
+    .default("")
+    .transform(list)
+    .pipe(z.array(z.string().refine(ip, "An exact proxy IP address is required.")).max(32)),
+  INTERNAL_PROXY_TRUSTED_HOSTS: z
+    .string()
+    .max(2048)
+    .default("")
+    .transform(list)
+    .pipe(
+      z
+        .array(
+          z
+            .string()
+            .max(253)
+            .regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$/),
+        )
+        .max(8),
+    ),
   SITE_URL: z.url().default("http://localhost:8021"),
   ADMIN_URL: z.url().default("http://localhost:8022"),
   PROFILE_MEDIA_DIR: z.string().max(4096).default(""),
@@ -40,6 +72,12 @@ const schema = z.object({
 });
 export function readConfig(env: NodeJS.ProcessEnv = process.env) {
   const config = schema.parse(env);
+  if (
+    config.INTERNAL_PROXY_SECRET &&
+    !config.INTERNAL_PROXY_TRUSTED_IPS.length &&
+    !config.INTERNAL_PROXY_TRUSTED_HOSTS.length
+  )
+    throw new Error("INTERNAL_PROXY_SECRET requires explicitly trusted proxy IPs or hostnames.");
   if (config.NODE_ENV === "production" && config.KODIK_VIEWER_IP)
     throw new Error("A fixed viewer IP is forbidden in production.");
   if (Boolean(config.GOOGLE_CLIENT_ID) !== Boolean(config.GOOGLE_CLIENT_SECRET))

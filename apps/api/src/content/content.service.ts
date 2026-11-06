@@ -14,14 +14,19 @@ import {
   type ContentQuery,
   type postInputSchema,
   type commentInputSchema,
+  type contentTagsQuerySchema,
 } from "@animesoul/contracts";
 import type { DatabaseTransaction, Prisma } from "@animesoul/database";
 import type { z } from "zod";
 import { AuthService, cookieToken, type AuthRequest } from "../auth/auth.service.js";
 import { digest } from "../auth/security.js";
 import { blocked, friends, person, personSelect } from "../social/access.js";
+import { popularTags, rankedPosts } from "./community-queries.js";
 const adultLabels = ["18+", "nsfw"];
 type Viewer = { id?: string; adult: boolean };
+function searchText(value: string) {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
 function preferences(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -180,7 +185,34 @@ export class ContentService {
     const v = await this.viewer(request);
     return this.auth.db.$transaction(
       async (tx) => {
-        await this.section(tx, v, q, q.section === "reviews" ? "reviews" : "posts");
+        await this.section(
+          tx,
+          v,
+          q,
+          q.section === "reviews" || q.kind === "review" ? "reviews" : "posts",
+        );
+        if (q.sort === "discussed" || q.sort === "top") {
+          const ranked = await rankedPosts(tx, v, q),
+            result = page(ranked, 20),
+            rows = await tx.post.findMany({ where: { id: { in: result.items.map((p) => p.id) } } }),
+            last = result.items.at(-1);
+          return {
+            items: await this.postDtos(
+              tx,
+              result.items.map((p) => rows.find((row) => row.id === p.id)!),
+              v,
+            ),
+            next:
+              result.next && last
+                ? {
+                    ...result.next,
+                    ...(q.sort === "top"
+                      ? { beforeCount: last.commentCount }
+                      : { beforeActivity: last.activity.toISOString() }),
+                  }
+                : null,
+          };
+        }
         const rows = await tx.post.findMany({
           where: {
             AND: [
@@ -190,9 +222,21 @@ export class ContentService {
               ...(q.animeId ? [{ animeId: q.animeId }] : []),
               ...(q.episodeId ? [{ episodeId: q.episodeId }] : []),
               ...(q.tag ? [{ tags: { has: q.tag.toLowerCase() } }] : []),
+              ...(q.kind ? [{ kind: q.kind }] : []),
+              ...(q.pinned ? [{ pinned: q.pinned === "true" }] : []),
+              ...(q.q
+                ? [
+                    {
+                      OR: [
+                        { title: { contains: searchText(q.q), mode: "insensitive" as const } },
+                        { body: { contains: searchText(q.q), mode: "insensitive" as const } },
+                      ],
+                    },
+                  ]
+                : []),
               ...(q.section === "reviews"
                 ? [{ kind: "review" }]
-                : q.authorId
+                : q.section === "posts" || (q.authorId && !q.kind)
                   ? [{ kind: { not: "review" } }]
                   : []),
             ],
@@ -201,12 +245,26 @@ export class ContentService {
           take: 21,
         });
         const result = page(rows, 20);
-        return { ...result, items: await this.postDtos(tx, result.items) };
+        return { ...result, items: await this.postDtos(tx, result.items, v) };
       },
       { isolationLevel: "RepeatableRead" },
     );
   }
-  private async postDtos(tx: DatabaseTransaction, rows: Prisma.PostGetPayload<object>[]) {
+  async tags(request: AuthRequest, q: z.infer<typeof contentTagsQuerySchema>) {
+    const v = await this.viewer(request),
+      until = new Date(),
+      days = { day: 1, week: 7, month: 30 }[q.period],
+      since = new Date(until.getTime() - days * 86400000);
+    const items = await this.auth.db.$transaction((tx) =>
+      popularTags(tx, v, since, until, q.limit),
+    );
+    return { items, period: q.period, since: since.toISOString(), until: until.toISOString() };
+  }
+  private async postDtos(
+    tx: DatabaseTransaction,
+    rows: Prisma.PostGetPayload<object>[],
+    v: Viewer,
+  ) {
     // Load related records in batches, sequentially on the transaction's single connection.
     const authors = await tx.userProfile.findMany({
       where: { userId: { in: rows.map((p) => p.authorId) } },
@@ -219,6 +277,13 @@ export class ContentService {
     const episodes = await tx.episode.findMany({
       where: { id: { in: rows.flatMap((p) => (p.episodeId ? [p.episodeId] : [])) } },
       select: { id: true, season: true, number: true },
+    });
+    const counts = await tx.comment.groupBy({
+      by: ["postId"],
+      where: {
+        AND: [this.commentsWhere(v), { postId: { in: rows.map((p) => p.id) }, deletedAt: null }],
+      },
+      _count: { _all: true },
     });
     return rows.map((p) => ({
       id: p.id,
@@ -233,6 +298,8 @@ export class ContentService {
       episode: episodes.find((e) => e.id === p.episodeId) ?? null,
       timestamp: p.timestamp,
       score: p.score,
+      pinned: p.pinned,
+      commentCount: counts.find((c) => c.postId === p.id)?._count._all ?? 0,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     }));
@@ -245,14 +312,15 @@ export class ContentService {
           where: { id, ...this.postsWhere(v) },
         });
         if (!p) throw new NotFoundException();
-        return (await this.postDtos(tx, [p]))[0]!;
+        return (await this.postDtos(tx, [p], v))[0]!;
       },
       { isolationLevel: "RepeatableRead" },
     );
   }
   async comments(request: AuthRequest, q: ContentQuery) {
-    if (!q.authorId && !q.animeId && !q.episodeId && !q.postId)
-      throw new BadRequestException("Choose a discussion.");
+    if (q.sort || q.kind || q.pinned || q.tag || q.beforeActivity || q.beforeCount !== undefined)
+      throw new BadRequestException("Post filters are not supported for comments.");
+    const global = !q.authorId && !q.animeId && !q.episodeId && !q.postId;
     const v = await this.viewer(request);
     return this.auth.db.$transaction(
       async (tx) => {
@@ -264,6 +332,12 @@ export class ContentService {
               AND: [
                 this.commentsWhere(v),
                 pageWhere(q),
+                ...(global
+                  ? [{ deletedAt: null, OR: [{ postId: null }, { post: { audience: "public" } }] }]
+                  : []),
+                ...(q.q
+                  ? [{ body: { contains: searchText(q.q), mode: "insensitive" as const } }]
+                  : []),
                 ...(q.authorId ? [{ authorId: q.authorId }] : []),
                 ...(q.animeId
                   ? [
@@ -369,7 +443,8 @@ export class ContentService {
           if (!ep || (ep.duration && (input.timestamp ?? 0) > ep.duration))
             throw new BadRequestException("Invalid episode or timestamp.");
         }
-        const { id, ...data } = input;
+        const { id, ...fields } = input,
+          data = { ...fields, ...(fields.audience !== "public" ? { pinned: false } : {}) };
         const row = id
           ? await tx.post.update({ where: { id }, data })
           : await tx.post.create({ data: { ...data, authorId: userId } });

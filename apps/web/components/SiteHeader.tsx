@@ -15,6 +15,8 @@ export function SiteHeader({ preview }: { preview: boolean }) {
   const pathname = usePathname();
   const menu = useRef<HTMLDetailsElement>(null);
   const [account, setAccount] = useState<Account | null>(null);
+  // The account pill stays invisible until the first answer, so signed-in readers never see "Войти".
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     let active = true;
     let version = 0;
@@ -22,10 +24,16 @@ export function SiteHeader({ preview }: { preview: boolean }) {
       const current = ++version;
       void loadAccount()
         .then((value) => {
-          if (active && current === version) setAccount(value);
+          if (active && current === version) {
+            setAccount(value);
+            setReady(true);
+          }
         })
         .catch(() => {
-          if (active && current === version) setAccount(null);
+          if (active && current === version) {
+            setAccount(null);
+            setReady(true);
+          }
         });
     };
     refresh();
@@ -53,7 +61,11 @@ export function SiteHeader({ preview }: { preview: boolean }) {
           Anime<span>Soul</span>
         </span>
       </Link>
-      <UniversalSearch />
+      <div className="header-center">
+        <UniversalSearch />
+        {/* Detail pages move their section tabs here once the page scrolls past them. */}
+        <div className="header-context" id="header-context" />
+      </div>
       <div className="header-end">
         <DeveloperAccessSwitch />
         {account && <NotificationCenter account={account} />}
@@ -62,6 +74,7 @@ export function SiteHeader({ preview }: { preview: boolean }) {
             href={account ? "/users/" + encodeURIComponent(account.username) : "/account"}
             className="account-button"
             aria-label={account ? `Открыть мой профиль ${account.username}` : "Войти в аккаунт"}
+            style={ready ? undefined : { visibility: "hidden" }}
           >
             {account ? (
               <span className="account-avatar">
@@ -76,7 +89,7 @@ export function SiteHeader({ preview }: { preview: boolean }) {
             ) : (
               <Icon name="user" />
             )}
-            <span>{account?.username ?? "Аккаунт"}</span>
+            <span>{account?.username ?? "Войти"}</span>
           </Link>
         )}
         {preview && !account && (
@@ -90,50 +103,50 @@ export function SiteHeader({ preview }: { preview: boolean }) {
             <Icon name="menu" />
           </summary>
           <nav className="header-menu-panel" aria-label="Разделы сайта">
-            <Link href="/friends">
-              <Icon name="user" />
-              Друзья и подписки
-            </Link>
-            <Link href="/community">
-              <Icon name="user" />
-              Сообщество
-            </Link>
-            <Link href="/library">
-              <Icon name="catalog" />
-              Моя библиотека
-            </Link>
-            <Link href="/account">
-              <Icon name="user" />
-              Аккаунт
-            </Link>
-            {account && (
-              <Link href={"/users/" + encodeURIComponent(account.username)}>
-                <Icon name="user" />
-                Мой профиль
-              </Link>
-            )}
-            <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
-              <Icon name="home" />
-              Главная
-            </Link>
             <Link href="/catalog" aria-current={pathname === "/catalog" ? "page" : undefined}>
               <Icon name="catalog" />
               Каталог
+            </Link>
+            <Link href="/library" aria-current={pathname === "/library" ? "page" : undefined}>
+              <Icon name="folder" />
+              Моя библиотека
             </Link>
             <Link
               href="/search/frame"
               aria-current={pathname === "/search/frame" ? "page" : undefined}
             >
               <Icon name="image" />
-              Поиск аниме по кадру
+              Поиск по кадру
             </Link>
-            {isProfile && <Link href="#profile-favorites">Любимое аниме</Link>}
-            {preview && !account && (
-              <Link href="/users/soul" aria-current={isProfile ? "page" : undefined}>
+            <hr />
+            <Link href="/friends" aria-current={pathname === "/friends" ? "page" : undefined}>
+              <Icon name="users" />
+              Друзья и подписки
+            </Link>
+            <Link href="/community" aria-current={pathname === "/community" ? "page" : undefined}>
+              <Icon name="chat" />
+              Сообщество
+            </Link>
+            <hr />
+            {(account || (preview && !account)) && (
+              <Link
+                href={"/users/" + encodeURIComponent(account?.username ?? "soul")}
+                aria-current={isProfile ? "page" : undefined}
+              >
                 <Icon name="user" />
-                Профиль
+                Мой профиль
               </Link>
             )}
+            {isProfile && (
+              <Link href="#profile-favorites">
+                <Icon name="check" />
+                Любимое аниме
+              </Link>
+            )}
+            <Link href="/account" aria-current={pathname === "/account" ? "page" : undefined}>
+              <Icon name="settings" />
+              {account ? "Настройки" : "Войти"}
+            </Link>
           </nav>
         </details>
       </div>

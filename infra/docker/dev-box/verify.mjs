@@ -13,7 +13,7 @@ const api = "http://127.0.0.1:8020";
 const siteOrigin = new URL(process.env.SITE_URL ?? "http://localhost:18021").origin;
 const adminOrigin = new URL(process.env.ADMIN_URL ?? "http://localhost:18022").origin;
 const credentials = { email: state.account.email, password: state.account.password };
-async function request(route, { body, cookie, admin = false, frontend = false } = {}) {
+async function request(route, { body, cookie, csrf, admin = false, frontend = false } = {}) {
   const base = frontend ? `http://127.0.0.1:${admin ? 8022 : 8021}` : api;
   const response = await fetch(base + route, {
     method: body ? "POST" : "GET",
@@ -23,6 +23,7 @@ async function request(route, { body, cookie, admin = false, frontend = false } 
       Origin: admin ? adminOrigin : siteOrigin,
       "x-animesoul-request": "1",
       ...(cookie ? { Cookie: cookie } : {}),
+      ...(csrf ? { "x-csrf-token": csrf } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
@@ -38,12 +39,12 @@ async function request(route, { body, cookie, admin = false, frontend = false } 
 }
 try {
   const users = await db.user.findMany({ include: { roles: true, mfa: true, profile: true } });
-  assert.equal(users.length, 1, "Exactly one test account must exist");
-  assert.equal(users[0].id, state.account.id);
-  assert.equal(users[0].email, "dev-owner@example.test");
-  assert(users[0].roles.some(({ role }) => role === "owner"));
-  assert(users[0].roles.some(({ role }) => role === "admin"));
-  assert(users[0].mfa.enabledAt);
+  const owner = users.find(({ id }) => id === state.account.id);
+  assert(owner, "The bootstrap owner must survive upgrades and restarts");
+  assert.equal(owner.email, "dev-owner@example.test");
+  assert(owner.roles.some(({ role }) => role === "owner"));
+  assert(owner.roles.some(({ role }) => role === "admin"));
+  assert(owner.mfa.enabledAt);
   for (const table of snapshot.tables) {
     const [row] = await db.$queryRawUnsafe(`SELECT count(*)::int AS count FROM public."${table}"`);
     assert.equal(row.count, snapshot.counts[table], `${table}: full snapshot restored`);
@@ -68,15 +69,70 @@ try {
   const subscription = await request("/api/subscription", { cookie: login.cookie });
   assert.equal(subscription.value.nativeAccess, true);
   assert.equal(subscription.value.source, "staff");
-  const register = await request("/api/auth/register", {
+  const memberEmail = "release-check@example.test";
+  const existingMember = await db.user.findUnique({ where: { email: memberEmail } });
+  const member = await request(existingMember ? "/api/auth/login" : "/api/auth/register", {
+    frontend: true,
     body: {
-      email: "second-user@example.test",
+      email: memberEmail,
       password: "AnotherTestPassword123!",
-      username: "AnotherUser",
+      ...(!existingMember ? { username: "ReleaseCheck" } : {}),
     },
   });
-  assert.equal(register.response.status, 409, "A second account must not be created");
-  assert.equal(await db.user.count(), 1);
+  assert.equal(member.response.status, 201, "Additional accounts must register and log in");
+  const memberMe = await request("/api/auth/me", { cookie: member.cookie, frontend: true });
+  assert.equal(memberMe.response.status, 200);
+  assert.deepEqual(memberMe.value.roles, [], "New accounts must not inherit administrator rights");
+  const memberOptions = { cookie: member.cookie, csrf: memberMe.value.csrfToken, frontend: true };
+  const profile = await request("/api/account/profile", memberOptions);
+  const edited = await request("/api/account/profile", {
+    ...memberOptions,
+    body: { ...profile.value, isPublic: true, profileAccess: "public", friendRequests: "everyone" },
+  });
+  assert.equal(edited.response.status, 201);
+  const relation = await request("/api/account/social/" + state.account.id, memberOptions);
+  if (relation.value.state !== "friends") {
+    const invitation = await request("/api/account/social", {
+      cookie: login.cookie,
+      csrf: me.value.csrfToken,
+      frontend: true,
+      body: { targetId: memberMe.value.id, action: "request" },
+    });
+    assert.equal(invitation.response.status, 201);
+    const accepted = await request("/api/account/social", {
+      ...memberOptions,
+      body: { targetId: state.account.id, action: "accept" },
+    });
+    assert.equal(accepted.response.status, 201);
+  }
+  assert.equal(
+    (await request("/api/account/social/" + state.account.id, memberOptions)).value.state,
+    "friends",
+  );
+  const post = await request("/api/account/content/posts", {
+    ...memberOptions,
+    body: {
+      kind: "text",
+      title: "Private image verification",
+      body: "Additional members can publish and discuss anime.",
+      audience: "public",
+      tags: ["release_check"],
+      labels: [],
+    },
+  });
+  assert.equal(post.response.status, 201, "Registered members can publish community posts");
+  const comment = await request("/api/account/content/comments", {
+    cookie: login.cookie,
+    csrf: me.value.csrfToken,
+    frontend: true,
+    body: { postId: post.value.id, body: "Other members can reply to this post.", labels: [] },
+  });
+  assert.equal(comment.response.status, 201, "Other members can discuss published posts");
+  const options = await request("/api/auth/options", { frontend: true });
+  assert.equal(options.value.google, Boolean(process.env.GOOGLE_CLIENT_ID));
+  assert.equal(options.value.email, (process.env.MAIL_MODE || "disabled") !== "disabled");
+  const giphy = await request("/api/profile-giphy/config", { frontend: true });
+  assert.equal(giphy.value.apiKey, process.env.GIPHY_API_KEY || "");
   const counter = Math.floor(Date.now() / 30000);
   const lastCounter = (await db.mfaCredential.findUnique({ where: { userId: state.account.id } }))
     .lastCounter;
@@ -122,12 +178,17 @@ try {
         anime: snapshot.counts.Anime,
         characters: snapshot.counts.Character,
         characterLinks: snapshot.counts.AnimeCharacter,
-        accounts: 1,
+        accounts: await db.user.count(),
         roles: ["owner", "admin"],
         webLogin: true,
         adminLoginWithMfa: true,
         nativeAccess: true,
-        secondAccountBlocked: true,
+        additionalAccounts: true,
+        newAccountsUnprivileged: true,
+        friendship: true,
+        communityPublishing: true,
+        communityComments: true,
+        runtimeIntegrations: true,
       },
       null,
       2,

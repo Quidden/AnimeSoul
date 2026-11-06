@@ -1,16 +1,19 @@
 "use client";
 import Link from "next/link";
+import { seasonLabel } from "../lib/season-label";
 import { useEffect, useState, type FormEvent } from "react";
 import type { Library } from "@animesoul/contracts";
 import { resumeEpisodeHref } from "@animesoul/contracts";
 import { accountRequest, loadLibrary } from "../lib/account-client";
 import { useAccountSession } from "./useAccountSession";
+import { Icon } from "./Icon";
 export function LibraryPanel() {
-  const { account } = useAccountSession();
+  const { account, ready } = useAccountSession();
   const [library, setLibrary] = useState<Library | null>(null);
   const [folder, setFolder] = useState("all");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
   useEffect(() => {
     let active = true;
     setLibrary(null);
@@ -46,6 +49,7 @@ export function LibraryPanel() {
     const form = event.currentTarget;
     await mutate("/api/account/folders", { name: new FormData(form).get("name") });
     form.reset();
+    setAdding(false);
   }
   const selected = library?.folders.find((f) => f.id === folder);
   const items =
@@ -56,6 +60,8 @@ export function LibraryPanel() {
           ? true
           : !!selected?.entries.some((e) => e.animeId === item.animeId),
     ) ?? [];
+  const favorites = library?.items.filter((item) => item.favorite).length ?? 0;
+  const rated = library?.items.filter((item) => item.score).length ?? 0;
   return (
     <>
       <div className="account-heading">
@@ -71,80 +77,155 @@ export function LibraryPanel() {
           {notice}
         </p>
       )}
-      {!account ? (
-        <Link className="primary" href="/account">
-          Войти в аккаунт
-        </Link>
+      {!ready ? (
+        // Until the session answers, a signed-in reader must not see the guest invitation.
+        <p className="account-help" role="status">
+          Загружаем библиотеку…
+        </p>
+      ) : !account ? (
+        <>
+          <Link className="primary" href="/account">
+            Войти в аккаунт
+          </Link>
+          <ul className="library-guest-preview" aria-label="Что есть в библиотеке">
+            <li>
+              <strong>Смотрю сейчас</strong>
+              <span>Серия и минута, на которой остановился, на любом устройстве.</span>
+            </li>
+            <li>
+              <strong>Папки и избранное</strong>
+              <span>Запланировано, любимое, брошено — свои списки под рукой.</span>
+            </li>
+            <li>
+              <strong>Оценки</strong>
+              <span>Ставь оценки и находи похожие тайтлы по вкусу.</span>
+            </li>
+          </ul>
+          <Link className="text-link" href="/catalog">
+            Пока просто посмотреть каталог →
+          </Link>
+        </>
       ) : !library ? (
         <p role="status">Загружаем библиотеку…</p>
       ) : (
         <>
-          <div className="library-toolbar">
-            <label>
-              Показать
-              <select value={folder} onChange={(e) => setFolder(e.target.value)}>
-                <option value="all">Всё ({library.items.length})</option>
-                <option value="favorites">Любимое</option>
-                {library.folders.map((f) => (
-                  <option value={f.id} key={f.id}>
-                    {f.name} ({f.entries.length})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <form onSubmit={addFolder}>
-              <input
-                name="name"
-                aria-label="Название новой папки"
-                placeholder="Новая папка"
-                required
-                maxLength={100}
-              />
-              <button className="outline" disabled={busy}>
-                Создать
-              </button>
-            </form>
-          </div>
-          {selected && (
-            <div className="account-actions">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void mutate("/api/account/folders", {
-                    id: selected.id,
-                    name: new FormData(e.currentTarget).get("name"),
-                  });
-                }}
+          {library.items.length > 0 && (
+            <ul className="library-summary" aria-label="Сводка библиотеки">
+              <li>
+                <strong>{library.items.length}</strong> в библиотеке
+              </li>
+              <li>
+                <strong>{favorites}</strong> в любимом
+              </li>
+              <li>
+                <strong>{rated}</strong> с оценкой
+              </li>
+            </ul>
+          )}
+          <div className="library-folders" role="group" aria-label="Папки">
+            {[
+              { id: "all", name: "Всё", count: library.items.length },
+              { id: "favorites", name: "♥ Любимое", count: favorites },
+              ...library.folders.map((f) => ({ id: f.id, name: f.name, count: f.entries.length })),
+            ].map((tab) => (
+              <button
+                type="button"
+                className="library-folder"
+                key={tab.id}
+                aria-pressed={folder === tab.id}
+                onClick={() => setFolder(tab.id)}
               >
+                {tab.name}
+                <span>{tab.count}</span>
+              </button>
+            ))}
+            {adding ? (
+              <form className="library-folder-add" onSubmit={addFolder}>
                 <input
                   name="name"
-                  key={selected.id}
-                  defaultValue={selected.name}
-                  maxLength={100}
+                  aria-label="Название новой папки"
+                  placeholder="Название папки"
                   required
-                  aria-label="Переименовать папку"
+                  autoFocus
+                  maxLength={100}
                 />
-                <button className="outline" disabled={busy}>
-                  Переименовать
+                <button className="primary" disabled={busy}>
+                  Создать
+                </button>
+                <button type="button" className="outline" onClick={() => setAdding(false)}>
+                  Отмена
                 </button>
               </form>
+            ) : (
               <button
-                className="outline"
-                disabled={busy}
-                onClick={() => {
-                  void mutate("/api/account/folders/delete", { id: selected.id }).then(() =>
-                    setFolder("all"),
-                  );
-                }}
+                type="button"
+                className="library-folder is-add"
+                onClick={() => setAdding(true)}
               >
-                Удалить папку
+                + Папка
               </button>
-            </div>
+            )}
+          </div>
+          {selected && (
+            <details className="library-manage">
+              <summary>Управление папкой «{selected.name}»</summary>
+              <div className="account-actions">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void mutate("/api/account/folders", {
+                      id: selected.id,
+                      name: new FormData(e.currentTarget).get("name"),
+                    });
+                  }}
+                >
+                  <input
+                    name="name"
+                    key={selected.id}
+                    defaultValue={selected.name}
+                    maxLength={100}
+                    required
+                    aria-label="Переименовать папку"
+                  />
+                  <button className="outline" disabled={busy}>
+                    Переименовать
+                  </button>
+                </form>
+                <button
+                  className="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    void mutate("/api/account/folders/delete", { id: selected.id }).then(() =>
+                      setFolder("all"),
+                    );
+                  }}
+                >
+                  Удалить папку
+                </button>
+              </div>
+            </details>
           )}
           {items.length === 0 && (
-            <p className="empty-state">
-              Здесь пока пусто. Добавляйте аниме из каталога или перенесите прежний профиль.
-            </p>
+            <div className="library-empty">
+              <Icon name="folder" aria-hidden="true" />
+              <strong>
+                {folder === "all" ? "Библиотека пока пуста" : "Здесь пока ничего нет"}
+              </strong>
+              <p>
+                {folder === "all"
+                  ? "Добавляйте аниме кнопкой «+» на карточке в каталоге — прогресс и оценки соберутся здесь."
+                  : "Добавьте тайтлы в эту папку кнопкой «Добавить в папку» на карточке из раздела «Всё»."}
+              </p>
+              {folder === "all" ? (
+                <Link className="primary" href="/catalog">
+                  Открыть каталог
+                </Link>
+              ) : (
+                <button type="button" className="primary" onClick={() => setFolder("all")}>
+                  Показать всё
+                </button>
+              )}
+            </div>
           )}
           <div className="library-list">
             {items.map((item) => {
@@ -157,13 +238,33 @@ export function LibraryPanel() {
                     {item.anime.poster && <img src={item.anime.poster} alt="" loading="lazy" />}
                   </div>
                   <div className="library-item-body">
-                    <h2>
-                      {item.anime.published ? (
-                        <Link href={"/anime/" + item.anime.slug}>{item.anime.title}</Link>
-                      ) : (
-                        item.anime.title
-                      )}
-                    </h2>
+                    <div className="library-item-head">
+                      <h2>
+                        {item.anime.published ? (
+                          <Link href={"/anime/" + item.anime.slug}>{item.anime.title}</Link>
+                        ) : (
+                          item.anime.title
+                        )}
+                      </h2>
+                      <button
+                        type="button"
+                        className="library-heart"
+                        disabled={busy}
+                        aria-pressed={item.favorite}
+                        aria-label={
+                          (item.favorite ? "Убрать из любимого: " : "В любимое: ") +
+                          item.anime.title
+                        }
+                        onClick={() =>
+                          void mutate("/api/account/library", {
+                            animeId: item.animeId,
+                            favorite: !item.favorite,
+                          })
+                        }
+                      >
+                        {item.favorite ? "♥" : "♡"}
+                      </button>
+                    </div>
                     {!item.anime.published && (
                       <p className="account-help">
                         Запись перенесена; страница появится после обновления каталога.
@@ -174,7 +275,8 @@ export function LibraryPanel() {
                         Последняя серия:{" "}
                         {episode?.episode ? (
                           <Link href={resumeEpisodeHref(item.anime.slug, episode.episode.id)}>
-                            {episode.episode.number} · сезон {episode.episode.season}
+                            {episode.episode.number} ·{" "}
+                            {seasonLabel(episode.episode.season).toLowerCase()}
                           </Link>
                         ) : (
                           item.lastEpisode
@@ -186,20 +288,15 @@ export function LibraryPanel() {
                         {episode?.completed && " · просмотрено"}
                       </p>
                     )}
+                    {episode && episode.duration > 0 && !episode.completed && (
+                      <progress
+                        className="library-item-progress"
+                        max={episode.duration}
+                        value={Math.min(episode.position, episode.duration)}
+                        aria-label="Прогресс последней серии"
+                      />
+                    )}
                     <div className="library-item-controls">
-                      <button
-                        className="outline"
-                        disabled={busy}
-                        aria-pressed={item.favorite}
-                        onClick={() =>
-                          void mutate("/api/account/library", {
-                            animeId: item.animeId,
-                            favorite: !item.favorite,
-                          })
-                        }
-                      >
-                        {item.favorite ? "♥ В любимом" : "♡ В любимое"}
-                      </button>
                       <label>
                         Оценка
                         <select
@@ -269,7 +366,8 @@ export function LibraryPanel() {
                                 <span>
                                   {p.episode && item.anime.published ? (
                                     <Link href={resumeEpisodeHref(item.anime.slug, p.episode.id)}>
-                                      Серия {p.episode.number} · сезон {p.episode.season}
+                                      Серия {p.episode.number} ·{" "}
+                                      {seasonLabel(p.episode.season).toLowerCase()}
                                     </Link>
                                   ) : (
                                     `Серия ${p.episodeKey}`

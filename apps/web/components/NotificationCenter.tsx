@@ -1,7 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { Account, PublicMessage } from "@animesoul/contracts";
+import { episodeListSchema, resumeEpisodeHref } from "@animesoul/contracts";
+import type { Account, Episode, PublicMessage } from "@animesoul/contracts";
 import { accountRequest } from "../lib/account-client";
+import { useCardLibrary } from "./CardLibrary";
+import { alertsDismissedKey, newEpisodeAlerts, trackedSlugs } from "../lib/new-episodes";
 type Inbox = {
   items: (PublicMessage & { read: boolean })[];
   unread: number;
@@ -14,6 +17,59 @@ export function NotificationCenter({ account }: { account: Account }) {
   const [data, setData] = useState<Inbox | null>(null),
     [open, setOpen] = useState(false),
     [error, setError] = useState("");
+  // New episodes of titles you are watching come from your own library, not the inbox.
+  const { library } = useCardLibrary();
+  const [episodes, setEpisodes] = useState<Record<string, Episode[]>>({});
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const slugs = library ? trackedSlugs(library).join(",") : "";
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(alertsDismissedKey) ?? "[]");
+      if (Array.isArray(saved))
+        setDismissed(saved.filter((id): id is string => typeof id === "string"));
+    } catch {
+      /* Alerts simply reappear if storage is unavailable. */
+    }
+  }, []);
+  useEffect(() => {
+    if (!slugs) return setEpisodes({});
+    const controller = new AbortController();
+    const refresh = () =>
+      void Promise.all(
+        slugs.split(",").map(async (slug) => {
+          try {
+            const response = await fetch(`/api/anime/${slug}/episodes`, {
+              cache: "no-store",
+              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
+            });
+            if (!response.ok) return null;
+            return [slug, episodeListSchema.parse(await response.json()).episodes] as const;
+          } catch {
+            return null;
+          }
+        }),
+      ).then((results) => {
+        if (!controller.signal.aborted)
+          setEpisodes(Object.fromEntries(results.filter((entry) => entry !== null)));
+      });
+    refresh();
+    const timer = setInterval(refresh, 300000);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [slugs]);
+  const alerts = library ? newEpisodeAlerts(library, episodes, new Set(dismissed)) : [];
+  function dismissAlert(episodeId: string) {
+    const next = [episodeId, ...dismissed.filter((id) => id !== episodeId)].slice(0, 200);
+    setDismissed(next);
+    try {
+      localStorage.setItem(alertsDismissedKey, JSON.stringify(next));
+    } catch {
+      /* Optional persistence. */
+    }
+  }
+  const unread = (data?.unread ?? 0) + alerts.length;
   useEffect(() => {
     if (!open) return;
     const outside = (event: MouseEvent) => {
@@ -65,7 +121,7 @@ export function NotificationCenter({ account }: { account: Account }) {
           if (!open) void load();
         }}
         aria-expanded={open}
-        aria-label={`Уведомления${data?.unread ? ": непрочитано " + data.unread : ""}`}
+        aria-label={`Уведомления${unread ? ": непрочитано " + unread : ""}`}
       >
         <svg
           width="18"
@@ -79,16 +135,51 @@ export function NotificationCenter({ account }: { account: Account }) {
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
           <path d="M10 21h4M12 2V1" />
         </svg>
-        {Boolean(data?.unread) && <b>{data!.unread}</b>}
+        {unread > 0 && <b>{unread}</b>}
       </button>
       {open && (
         <section className="notification-panel" aria-label="Уведомления">
           <header>
-            <strong>Уведомления</strong>
-            <button onClick={() => setOpen(false)} aria-label="Закрыть уведомления">
+            <strong>
+              Уведомления
+              {unread > 0 && <span className="notification-count">{unread}</span>}
+            </strong>
+            <button
+              className="notification-close"
+              onClick={() => setOpen(false)}
+              aria-label="Закрыть уведомления"
+            >
               ×
             </button>
           </header>
+          {alerts.length > 0 && (
+            <div className="notification-episodes">
+              <h3>Новые серии</h3>
+              {alerts.map((alert) => (
+                <article key={alert.episode.id} className="notification-episode unread">
+                  {alert.poster ? (
+                    <img src={alert.poster} alt="" width={42} height={60} loading="lazy" />
+                  ) : (
+                    <span aria-hidden="true" />
+                  )}
+                  <div>
+                    <strong>Доступна серия {alert.episode.number}</strong>
+                    <p>{alert.title}</p>
+                    <div>
+                      <a
+                        className="notification-watch"
+                        href={resumeEpisodeHref(alert.slug, alert.episode.id)}
+                        onClick={() => dismissAlert(alert.episode.id)}
+                      >
+                        Смотреть
+                      </a>
+                      <button onClick={() => dismissAlert(alert.episode.id)}>Убрать</button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
           {error ? (
             <p role="alert">
               {error}
@@ -112,7 +203,7 @@ export function NotificationCenter({ account }: { account: Account }) {
                 </div>
               </article>
             ))
-          ) : (
+          ) : alerts.length ? null : (
             <p>Уведомлений пока нет.</p>
           )}
           {data && data.total > data.pageSize && (

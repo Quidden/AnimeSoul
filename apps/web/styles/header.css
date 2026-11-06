@@ -2,7 +2,7 @@
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--layer-header);
   display: grid;
   grid-template-columns: minmax(160px, 1fr) minmax(180px, 680px) minmax(160px, 1fr);
   align-items: center;
@@ -11,7 +11,12 @@
   padding: 10px clamp(16px, 3vw, 48px);
   border-bottom: 1px solid transparent;
   background: transparent;
-  box-shadow: 0 12px 32px #0003;
+  transition: box-shadow 240ms ease;
+}
+/* At the top of a page the header is fully transparent; the glass and shadow appear on scroll
+   (data-header-solid, see HeaderScrollState) or when the anime tabs dock into the header. */
+html[data-header-solid] .app-header {
+  box-shadow: 0 12px 32px var(--black-20);
 }
 .site-navigation-glass {
   position: fixed;
@@ -24,20 +29,24 @@
   background: var(--navigation-bg);
   -webkit-backdrop-filter: var(--navigation-backdrop);
   backdrop-filter: var(--navigation-backdrop);
-  transition: height 360ms ease;
+  opacity: 0;
+  transition:
+    height 360ms ease,
+    opacity 240ms ease;
   /* Keep the island mask during collapse: removing it mid-transition reveals
      a full-width rectangle below the header. */
   --island-corner: 22px;
-  --navigation-line: #ffffff14;
+  --navigation-line: var(--white-8);
   --island-bottom: calc(
     var(--header-height) + var(--anime-navigation-height) - var(--island-corner)
   );
   --island-width: var(--anime-island-width, min(980px, 100vw));
   --island-left: var(--anime-island-left, max(0px, calc((100vw - 980px) / 2)));
   mask-image:
-    linear-gradient(#000 0 0), linear-gradient(#000 0 0), linear-gradient(#000 0 0),
-    radial-gradient(circle at right top, #000 22px, transparent 22.5px),
-    radial-gradient(circle at left top, #000 22px, transparent 22.5px);
+    linear-gradient(var(--black) 0 0), linear-gradient(var(--black) 0 0),
+    linear-gradient(var(--black) 0 0),
+    radial-gradient(circle at right top, var(--black) 22px, transparent 22.5px),
+    radial-gradient(circle at left top, var(--black) 22px, transparent 22.5px);
   mask-size:
     100% var(--header-height),
     var(--island-width) calc(var(--anime-navigation-height) - var(--island-corner)),
@@ -75,6 +84,10 @@
   border-top: 0;
   border-radius: 0 0 var(--island-corner) var(--island-corner);
 }
+html[data-header-solid] .site-navigation-glass,
+html[data-anime-docked] .site-navigation-glass {
+  opacity: 1;
+}
 html[data-anime-docked] .site-navigation-glass {
   height: calc(var(--header-height) + var(--anime-navigation-height));
 }
@@ -90,19 +103,19 @@ html[data-anime-docked] .site-navigation-glass {
 .brand img {
   width: 34px;
   height: 34px;
-  border-radius: 11px;
+  border-radius: var(--radius-12);
   object-fit: cover;
 }
 .header-search {
   display: flex;
   width: 100%;
-  background: #15121980;
-  border: 1px solid #ffffff12;
-  border-radius: 9px;
+  background: color-mix(in srgb, var(--night-2) 50%, transparent);
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-10);
   overflow: hidden;
 }
 .header-search:focus-within {
-  border-color: #9a78ff80;
+  border-color: color-mix(in srgb, var(--violet-400) 50%, transparent);
 }
 .header-search input {
   flex: 1;
@@ -139,25 +152,25 @@ html[data-anime-docked] .site-navigation-glass {
   gap: 7px;
   min-height: 34px;
   padding: 6px 10px;
-  border: 1px solid #9a78ff45;
-  border-radius: 8px;
-  background: #9a78ff12;
+  border: 1px solid color-mix(in srgb, var(--violet-400) 27%, transparent);
+  border-radius: var(--radius-8);
+  background: color-mix(in srgb, var(--violet-400) 7%, transparent);
   color: var(--ink);
   font-size: 12px;
   cursor: pointer;
 }
 .developer-access-toggle > span:first-child {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: #c7acff;
+  color: var(--violet-200);
 }
 .developer-access.is-simulated .developer-access-toggle {
-  border-color: #e7b77170;
-  background: #e7b77114;
+  border-color: color-mix(in srgb, var(--amber) 44%, transparent);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
 }
 .developer-access.is-simulated .developer-access-toggle > span:first-child {
-  color: #e7b771;
+  color: var(--amber);
 }
 .developer-access-panel {
   position: absolute;
@@ -167,10 +180,10 @@ html[data-anime-docked] .site-navigation-glass {
   width: 310px;
   max-width: calc(100vw - 24px);
   padding: 16px;
-  border: 1px solid #ffffff20;
-  border-radius: 12px;
-  background: #141218fa;
-  box-shadow: 0 16px 48px #0007;
+  border: 1px solid var(--white-12);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--night-2) 98%, transparent);
+  box-shadow: 0 16px 48px var(--black-50);
   backdrop-filter: blur(22px);
 }
 .developer-access-heading {
@@ -183,8 +196,8 @@ html[data-anime-docked] .site-navigation-glass {
   font-size: 14px;
 }
 .developer-access-heading > span {
-  color: #c7acff;
-  font-size: 11px;
+  color: var(--violet-200);
+  font-size: 12px;
 }
 .developer-access-panel p {
   margin: 10px 0;
@@ -204,17 +217,17 @@ html[data-anime-docked] .site-navigation-glass {
   gap: 3px;
   padding: 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: transparent;
   color: var(--ink);
   text-align: left;
 }
 .developer-access-panel [role="group"] button:hover {
-  background: #ffffff08;
+  background: var(--white-4);
 }
 .developer-access-panel [role="group"] button[aria-pressed="true"] {
-  border-color: #9a78ff66;
-  background: #9a78ff18;
+  border-color: color-mix(in srgb, var(--violet-400) 40%, transparent);
+  background: color-mix(in srgb, var(--violet-400) 9%, transparent);
 }
 .developer-access-panel [role="group"] button span {
   font-size: 13px;
@@ -222,16 +235,16 @@ html[data-anime-docked] .site-navigation-glass {
 }
 .developer-access-panel small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .developer-access-restore {
   width: 100%;
   margin-top: 12px;
   padding: 10px;
-  border: 1px solid #9a78ff55;
-  border-radius: 8px;
-  background: #9a78ff18;
+  border: 1px solid color-mix(in srgb, var(--violet-400) 33%, transparent);
+  border-radius: var(--radius-8);
+  background: color-mix(in srgb, var(--violet-400) 9%, transparent);
   color: var(--ink);
   font-size: 12px;
 }
@@ -257,9 +270,9 @@ html[data-anime-docked] .site-navigation-glass {
   align-items: center;
   gap: 10px;
   padding: 5px 12px 5px 5px;
-  border: 1px solid #ffffff12;
-  border-radius: 999px;
-  background: #ffffff03;
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-pill);
+  background: var(--white-4);
   font-weight: 650;
   font-size: 14px;
   min-width: 0;
@@ -271,7 +284,7 @@ html[data-anime-docked] .site-navigation-glass {
   white-space: nowrap;
 }
 .account-button:hover {
-  border-color: #9a78ff66;
+  border-color: color-mix(in srgb, var(--violet-400) 40%, transparent);
 }
 .account-avatar {
   display: grid;
@@ -279,9 +292,9 @@ html[data-anime-docked] .site-navigation-glass {
   width: 32px;
   height: 32px;
   flex-shrink: 0;
-  border-radius: 50%;
-  background: #5b4876;
-  color: #e1cff9;
+  border-radius: var(--radius-round);
+  background: var(--mauve-1);
+  color: var(--violet-100);
 }
 .header-menu {
   position: relative;
@@ -291,7 +304,7 @@ html[data-anime-docked] .site-navigation-glass {
   place-items: center;
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   list-style: none;
   color: var(--muted);
   cursor: pointer;
@@ -301,7 +314,7 @@ html[data-anime-docked] .site-navigation-glass {
 }
 .header-menu summary:hover {
   color: var(--ink);
-  background: #ffffff06;
+  background: var(--white-4);
 }
 .header-menu-panel {
   position: absolute;
@@ -311,10 +324,10 @@ html[data-anime-docked] .site-navigation-glass {
   gap: 4px;
   width: 230px;
   padding: 8px;
-  border: 1px solid #ffffff17;
-  border-radius: 12px;
-  background: #141218f5;
-  box-shadow: 0 16px 48px #0007;
+  border: 1px solid var(--white-10);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--night-2) 96%, transparent);
+  box-shadow: 0 16px 48px var(--black-50);
   backdrop-filter: blur(22px);
 }
 .header-menu-panel a {
@@ -323,13 +336,18 @@ html[data-anime-docked] .site-navigation-glass {
   gap: 12px;
   padding: 12px;
   font-size: 14px;
-  border-radius: 7px;
+  border-radius: var(--radius-8);
   color: var(--muted);
+}
+.header-menu-panel hr {
+  margin: 4px 6px;
+  border: 0;
+  border-top: 1px solid var(--line);
 }
 .header-menu-panel a:hover,
 .header-menu-panel a[aria-current="page"] {
   color: var(--ink);
-  background: #9a78ff14;
+  background: color-mix(in srgb, var(--violet-400) 8%, transparent);
 }
 @media (max-width: 720px) {
   .app-header {
@@ -363,7 +381,7 @@ html[data-anime-docked] .site-navigation-glass {
 }
 @supports not (backdrop-filter: blur(1px)) {
   .site-navigation-glass {
-    background: #100e16f5;
+    background: color-mix(in srgb, var(--night-1) 96%, transparent);
   }
 }
 @media (prefers-reduced-transparency: reduce) {

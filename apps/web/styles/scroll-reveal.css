@@ -1,0 +1,53 @@
+/* Keep server HTML visible. Only the observer arms below-the-fold content.
+   Motion intensity 4/10: preserve the existing layout, palette and density. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-scroll-reveal] {
+    --scroll-reveal-distance: 20px;
+    --scroll-reveal-duration: 540ms;
+    --scroll-reveal-delay: 0ms;
+    --scroll-reveal-scale: 1;
+  }
+  [data-scroll-reveal="card"] {
+    --scroll-reveal-distance: 14px;
+    --scroll-reveal-duration: 440ms;
+  }
+  [data-scroll-reveal="card"]:nth-child(6n + 2) {
+    --scroll-reveal-delay: 35ms;
+  }
+  [data-scroll-reveal="card"]:nth-child(6n + 3) {
+    --scroll-reveal-delay: 70ms;
+  }
+  [data-scroll-reveal="card"]:nth-child(6n + 4) {
+    --scroll-reveal-delay: 105ms;
+  }
+  [data-scroll-reveal="card"]:nth-child(6n + 5) {
+    --scroll-reveal-delay: 140ms;
+  }
+  [data-scroll-reveal="card"]:nth-child(6n + 6) {
+    --scroll-reveal-delay: 175ms;
+  }
+  .rail-shell [data-scroll-reveal="card"],
+  .anime-screenshot-track > [data-scroll-reveal="card"] {
+    /* Shrink within the rail instead of extending its scrollable bounds. */
+    --scroll-reveal-distance: 0px;
+    --scroll-reveal-scale: 0.985;
+  }
+  [data-scroll-reveal-state="pending"] {
+    opacity: 0;
+  }
+  [data-scroll-reveal-state="entering"] {
+    animation: scroll-reveal-rise var(--scroll-reveal-duration) cubic-bezier(0.16, 1, 0.3, 1)
+      var(--scroll-reveal-delay) both;
+    will-change: transform, opacity;
+  }
+  @keyframes scroll-reveal-rise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, var(--scroll-reveal-distance), 0) scale(var(--scroll-reveal-scale));
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+}

@@ -1,12 +1,12 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { seasonLabel } from "../lib/season-label";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   playbackRevisionSchema,
   reconcilePlayback,
   type Playback,
   type PlaybackSource,
-  episodeHref,
   streamSchema,
   type Stream,
   episodeLabel,
@@ -18,6 +18,7 @@ import { trackPlayerStart } from "../lib/analytics-client";
 import { EmbeddedPlayer } from "./EmbeddedPlayer";
 import { useSubscription } from "./useSubscription";
 import { SubscriptionPreview } from "./SubscriptionPreview";
+import { PlayerComparison } from "./PlayerComparison";
 import { NativePlayer } from "./NativePlayer";
 import { PlayerTopNavigation, type PlayerMenu } from "./PlayerMenus";
 import { usePlaybackProgress } from "./usePlaybackProgress";
@@ -42,6 +43,7 @@ import { accountRequest } from "../lib/account-client";
 import { reportClientError } from "../lib/diagnostics-client";
 import type { PartFilter } from "./AnimePartSwitches";
 import { mainStoryIds, partType, partTypes } from "../lib/franchise-graph";
+import { PlayerLoadingHint } from "./PlayerLoadingHint";
 
 function ordered(values: string[]) {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b, "ru", { numeric: true }));
@@ -64,6 +66,7 @@ export function AnimePlayer({
   franchise,
   allowedPartIds,
   seasonRequest,
+  episodeRequest,
   onSelectionChange,
   partFilters,
   resumeRequested = false,
@@ -76,6 +79,7 @@ export function AnimePlayer({
   franchise?: AnimeFranchise;
   allowedPartIds?: string[];
   seasonRequest?: { season: string; revision: number };
+  episodeRequest?: { episodeId: string; revision: number };
   onSelectionChange?: (selection: { season: string; episodeId: string }) => void;
   partFilters?: PartFilter[];
   resumeRequested?: boolean;
@@ -106,8 +110,12 @@ export function AnimePlayer({
   const playingState = useRef(false);
   const nativeAutoplay = useRef(true);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
   useEffect(() => {
-    if (subscription.value?.nativeAccess) setSubscriptionOpen(false);
+    if (subscription.value?.nativeAccess) {
+      setSubscriptionOpen(false);
+      setComparisonOpen(false);
+    }
   }, [subscription.value?.nativeAccess]);
   const wantsNative = Boolean(
     subscription.value?.nativeAccess && subscription.value.directEnabled && engine !== "kodik",
@@ -603,6 +611,10 @@ export function AnimePlayer({
     if (!seasonRequest || !playback) return;
     select(playback.sources.find((source) => source.season === seasonRequest.season));
   }, [seasonRequest?.revision, playback?.animeId]);
+  useEffect(() => {
+    if (!episodeRequest || !playback) return;
+    select(choosePlaybackSource(playback.sources, episodeRequest.episodeId, { choice }));
+  }, [episodeRequest?.revision, playback?.animeId]);
   const revision = playback?.revision;
   useEffect(() => {
     if (!revision) return;
@@ -778,19 +790,28 @@ export function AnimePlayer({
         fromEpisode: selected.episode,
         travel,
       };
-      if (target.episodeId && (next.crossPart || initialEpisodeId)) {
+      if (target.episodeId && next.crossPart) {
         if (destinationPlayback) playbackClient.carry(targetSlug, destinationPlayback);
         try {
           sessionStorage.setItem(playbackIntentKey, JSON.stringify(intent));
+          if (destinationPlayback)
+            localStorage.setItem(
+              "animesoul:playback:" + destinationPlayback.animeId,
+              JSON.stringify({
+                season: target.season,
+                episode: target.episode,
+                episodeId: target.episodeId,
+                choice: choiceKey(target),
+              }),
+            );
         } catch {
-          /* The canonical destination still opens without storage. */
+          /* The destination season remains available without storage. */
         }
         // Keep the current player intact while the server prepares the route.
         // Only the committed destination runs the complete, bounded carousel swap.
         waitingForRoute.current = target.episodeId;
-        const href = episodeHref(targetSlug, target.episodeId) + "#anime-watch";
-        if (next.crossPart) router.push(href, { scroll: false });
-        else router.replace(href, { scroll: false });
+        const href = `/anime/${encodeURIComponent(targetSlug)}#anime-watch`;
+        router.push(href, { scroll: false });
         transitionTimer.current = setTimeout(() => {
           finishTransition();
           setTransitionMessage("Не удалось переключить серию. Попробуйте ещё раз.");
@@ -842,7 +863,7 @@ export function AnimePlayer({
     part: currentPart?.anime.id ?? "",
     onPartChange: changePart,
     ...(currentPart ? { contextLabel: `${currentPart.label} · Серия ${episode}` } : {}),
-    seasons: seasons.map((value) => ({ value, label: `Сезон ${value}` })),
+    seasons: seasons.map((value) => ({ value, label: seasonLabel(value) })),
     season,
     onSeasonChange: (value) => select(sources.find((source) => source.season === value)),
     episodes: episodes.map((value) => ({ value, label: `Серия ${value}` })),
@@ -939,54 +960,63 @@ export function AnimePlayer({
     <section ref={region} className="anime-playback" id="player" aria-label="Просмотр аниме">
       <div className="playback-heading">
         <h2>Смотреть {title}</h2>
+        {selected && (
+          <span>
+            {seasons.length > 1 ? `${seasonLabel(season)} · ` : ""}
+            серия {selected.episode}
+          </span>
+        )}
         {saved && <span>Последняя выбранная серия</span>}
       </div>
       <div className="player-engines" role="group" aria-label="Выбор плеера">
-        <button
-          className="player-engine-native"
-          aria-pressed={wantsNative && stream?.mode === "direct"}
-          aria-haspopup={!subscription.value?.nativeAccess ? "dialog" : undefined}
-          onClick={() => {
-            if (!subscription.value?.nativeAccess) {
-              progress.pause();
-              setSubscriptionOpen(true);
-              return;
-            }
-            if (wantsNative && stream?.mode === "direct") return;
-            nativeAutoplay.current = playingState.current;
-            progress.pause();
-            setStart(time);
-            setEngine("native");
-            setStreamRetry((value) => value + 1);
-            try {
-              sessionStorage.removeItem("animesoul:player-engine");
-            } catch {
-              /* Optional preference. */
-            }
-          }}
-        >
-          AnimeSoul <span>PLUS</span>
-        </button>
-        <button
-          aria-pressed={!wantsNative || stream?.mode === "embed"}
-          onClick={() => {
-            if (!wantsNative || stream?.mode === "embed") {
-              setEngine("kodik");
-            } else {
+        <div className="player-engine-switch">
+          <button
+            className="player-engine-native"
+            aria-pressed={comparisonOpen || (wantsNative && stream?.mode === "direct")}
+            aria-expanded={!subscription.value?.nativeAccess ? comparisonOpen : undefined}
+            onClick={() => {
+              if (!subscription.value?.nativeAccess) {
+                progress.pause();
+                setComparisonOpen(true);
+                return;
+              }
+              if (wantsNative && stream?.mode === "direct") return;
               nativeAutoplay.current = playingState.current;
               progress.pause();
               setStart(time);
-              setEngine("kodik");
-            }
-            try {
-              sessionStorage.setItem("animesoul:player-engine", "kodik");
-            } catch {
-              /* Optional preference. */
-            }
-          }}
-        >
-          Kodik
-        </button>
+              setEngine("native");
+              setStreamRetry((value) => value + 1);
+              try {
+                sessionStorage.removeItem("animesoul:player-engine");
+              } catch {
+                /* Optional preference. */
+              }
+            }}
+          >
+            AnimeSoul <span>PLUS</span>
+          </button>
+          <button
+            aria-pressed={!comparisonOpen && (!wantsNative || stream?.mode === "embed")}
+            onClick={() => {
+              setComparisonOpen(false);
+              if (!wantsNative || stream?.mode === "embed") {
+                setEngine("kodik");
+              } else {
+                nativeAutoplay.current = playingState.current;
+                progress.pause();
+                setStart(time);
+                setEngine("kodik");
+              }
+              try {
+                sessionStorage.setItem("animesoul:player-engine", "kodik");
+              } catch {
+                /* Optional preference. */
+              }
+            }}
+          >
+            Kodik
+          </button>
+        </div>
         {subscription.error ? (
           <p role="status">
             Не удалось проверить доступ.{" "}
@@ -1005,6 +1035,26 @@ export function AnimePlayer({
             <p role="status">Для этой серии сейчас доступен Kodik.</p>
           )}
       </div>
+      {subscription.value && !subscription.value.nativeAccess && !comparisonOpen && (
+        <p className="player-plus-hint">
+          <span className="player-plus-tag">PLUS</span>
+          <span>
+            В плеере AnimeSoul: Anime4K, качество без потери момента и все озвучки в одном меню.
+          </span>
+          <button type="button" onClick={() => setComparisonOpen(true)}>
+            Сравнить плееры
+          </button>
+        </p>
+      )}
+      {comparisonOpen && (
+        <PlayerComparison
+          onTrial={() => {
+            setComparisonOpen(false);
+            setSubscriptionOpen(true);
+          }}
+          onStay={() => setComparisonOpen(false)}
+        />
+      )}
       <SubscriptionPreview
         open={subscriptionOpen}
         onClose={() => setSubscriptionOpen(false)}
@@ -1032,6 +1082,10 @@ export function AnimePlayer({
                   </button>
                 )}
               </div>
+              <PlayerLoadingHint
+                loading={!error && (!playback || validatingPolicy)}
+                progressStatus={progress.status}
+              />
             </div>
           </div>
         </div>
@@ -1092,6 +1146,7 @@ export function AnimePlayer({
                     menu={playerMenu}
                     onTime={onTime}
                     onRefresh={refreshStream}
+                    progressStatus={progress.status}
                     onFallback={() => {
                       setStart(time);
                       setStream({ mode: "embed" });
@@ -1104,11 +1159,12 @@ export function AnimePlayer({
                     url={selected.embedUrl}
                     title={`${title} — серия ${selected.episode}, ${selected.translation}`}
                     start={start}
-                    paused={subscriptionOpen}
+                    paused={subscriptionOpen || comparisonOpen}
                     autoplay={
                       started && nativeAutoplay.current && playerPreferences.preferences.autoplay
                     }
                     onTime={onTime}
+                    progressStatus={progress.status}
                     onEpisode={(number, reportedSeason, reportedTranslation) => {
                       if (transitionBusy.current) return false;
                       const matches = sources.filter(
@@ -1192,6 +1248,7 @@ export function AnimePlayer({
                     </div>
                   </div>
                 )}
+                <PlayerLoadingHint loading={preparingVideo} progressStatus={progress.status} />
               </div>
             </div>
             {preview(nextEpisode, 1)}
@@ -1205,20 +1262,7 @@ export function AnimePlayer({
             <p className="playback-hint" role="alert">
               {transitionMessage}
             </p>
-          )}{" "}
-          <p className="playback-hint" role="status">
-            {progress.status === "guest"
-              ? "Войди в аккаунт, чтобы сохранять прогресс между устройствами."
-              : progress.status === "error"
-                ? "Не удалось сохранить прогресс. Проверим соединение повторно."
-                : progress.status === "loading"
-                  ? "Проверяем сохранённый прогресс…"
-                  : "Прогресс просмотра сохраняется в аккаунте."}
-          </p>
-          <p className="playback-hint">
-            Если видео не запускается, попробуй другую озвучку. Выбор серии сохраняется в этом
-            браузере.
-          </p>
+          )}
         </>
       )}
     </section>

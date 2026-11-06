@@ -1,3 +1,4 @@
+/* Horizontal rail shell and its scroll controls (shared by shelves). */
 .rail-shell {
   position: relative;
   min-width: 0;
@@ -20,7 +21,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #fff;
+  color: var(--white);
   font-size: 40px;
   font-weight: 400;
   line-height: 1;

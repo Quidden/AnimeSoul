@@ -38,7 +38,7 @@ export function homeResumeHref(
 
 export function homeProgressLabel(progress: HomeProgress) {
   const episode = progress.episode
-    ? `Сезон ${progress.episode.season} · Серия ${progress.episode.number}`
+    ? `${progress.episode.season === "0" ? "Спецвыпуски" : `Сезон ${progress.episode.season}`} · Серия ${progress.episode.number}`
     : "Последний просмотр";
   const remaining = Math.max(0, progress.duration - progress.position);
   const time = progress.completed

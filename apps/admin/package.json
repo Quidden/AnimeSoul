@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@animesoul/diagnostics": "workspace:*",
-    "next": "16.3.8",
+    "next": "16.4.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "@animesoul/contracts": "workspace:*"

@@ -14,8 +14,17 @@ compact cards and an open profile composition. See the [route map](../architectu
 | Anime information                          | `anime.css`                 | `app/anime/[slug]/page.tsx`                          |
 | Profile, fading cover and compact identity | `profile.css`               | `ProfileHeader.tsx`, `app/users/[username]/page.tsx` |
 
-`apps/web/app/globals.css` only imports page-specific CSS.
-Admin owns `apps/admin/app/globals.css` independently; its current page explains closed access.
+`apps/web/styles/tokens.css` defines shared colors, radii and layers. `pnpm styles:check`
+rejects new literal colors outside tokens against the checked-in baseline. The current
+interface also uses `anime-watch.css`, `community.css`, `header-tabs.css`, `greeting.css`,
+`scroll-compass.css` and `scroll-reveal.css`. Home/catalog/library/player components
+share these tokens; account appearance settings preserve the selected palette.
+
+`apps/web/app/globals.css` imports page CSS and holds cross-page behavior.
+`ScrollReveals` progressively reveals sections while keeping server-rendered content
+readable without JavaScript and respecting reduced motion. Admin owns
+`apps/admin/app/globals.css` independently; its protected interface is described in
+[administration](../operations/ADMINISTRATION.md).
 
 The profile cover fills the screen width and fades near the avatar. `ProfileHeader` measures scroll,
 updates `--profile-collapse` and portals compact avatar/username into body above the site header.

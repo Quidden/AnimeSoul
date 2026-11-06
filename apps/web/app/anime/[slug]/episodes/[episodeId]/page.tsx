@@ -31,8 +31,10 @@ export default async function EpisodePage({ params, searchParams }: Props) {
   if (typeof timestamp !== "number" && !timestamp.success) notFound();
   const start = typeof timestamp === "number" ? timestamp : timestamp.data;
   if (episode.duration && start > episode.duration) notFound();
-  const cast = await getAnimeCharacters(anime.slug);
-  const franchise = await getFranchise(anime.slug);
+  const [cast, franchise] = await Promise.all([
+    getAnimeCharacters(anime.slug),
+    getFranchise(anime.slug),
+  ]);
   if (!franchise || franchise.currentAnimeId !== anime.id) notFound();
   return (
     <>

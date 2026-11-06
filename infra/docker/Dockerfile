@@ -25,7 +25,7 @@ RUN pnpm --filter @animesoul/database generate \
     && pnpm --filter @animesoul/contracts build \
     && pnpm --filter @animesoul/database build \
     && pnpm --filter @animesoul/api build
-# The Prisma CLI is present only in this one-off administration image.
+# Regular application images omit the Prisma CLI; migrate and dev-box use it for upgrades.
 FROM server-build AS migrate
 WORKDIR /app/packages/database
 USER node
@@ -33,6 +33,10 @@ CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
 
 FROM server-build AS api-deploy
 RUN pnpm --filter @animesoul/api deploy --legacy --prod /out/api
+
+# The private all-in-one image needs Prisma to upgrade its persistent database.
+FROM server-build AS dev-migrate
+RUN pnpm --filter @animesoul/database deploy --legacy /out/migrate
 
 FROM base AS api
 ENV NODE_ENV=production
@@ -77,6 +81,7 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     DEV_BOX_DATA=/var/lib/postgresql/animesoul-dev \
     SITE_URL=http://localhost:18021 ADMIN_URL=http://localhost:18022
 COPY --from=api-deploy --chown=postgres:postgres /out/api ./api
+COPY --from=dev-migrate --chown=postgres:postgres /out/migrate ./migrate
 COPY --from=frontend-build --chown=postgres:postgres /app/apps/web/.next/standalone ./web
 COPY --from=frontend-build --chown=postgres:postgres /app/apps/web/.next/static ./web/apps/web/.next/static
 COPY --from=frontend-build --chown=postgres:postgres /app/apps/web/public ./web/apps/web/public
@@ -87,7 +92,7 @@ COPY --chown=postgres:postgres artifacts/dev-image/schema.dump artifacts/dev-ima
 RUN node --version && mkdir -p /var/lib/postgresql/animesoul-dev \
     && chown postgres:postgres /var/lib/postgresql /var/lib/postgresql/animesoul-dev
 LABEL org.opencontainers.image.title="AnimeSoul private development environment" \
-      org.opencontainers.image.description="API, web, admin, PostgreSQL and a catalog snapshot; one owner account generated on first boot"
+      org.opencontainers.image.description="Full application, runtime integrations, PostgreSQL and catalog; owner bootstrapped on first boot"
 USER postgres
 EXPOSE 8020 8021 8022
 HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=8 \

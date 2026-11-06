@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { seasonLabel } from "../lib/season-label";
 import dynamic from "next/dynamic";
 import { useEffect, useState, type FormEvent } from "react";
 import {
@@ -35,11 +36,26 @@ function url(kind: string, query: Record<string, string | undefined>) {
   for (const [key, value] of Object.entries(query)) if (value) q.set(key, value);
   return "/api/account/content/" + kind + "?" + q.toString();
 }
+// undefined while the session is loading, null for a guest: guest prompts must not flash for members.
 function useAccount() {
-  return useAccountSession().account;
+  const { account, ready } = useAccountSession();
+  return ready ? account : undefined;
 }
 function labels(form: FormData) {
   return ["spoiler", "18+", "nsfw"].filter((label) => form.get("label-" + label) === "on");
+}
+// "5 мин назад", "вчера", "12 окт": short enough for a feed card; the full date stays in the tooltip.
+function ago(iso: string) {
+  const date = new Date(iso),
+    minutes = Math.round((Date.now() - date.getTime()) / 60000);
+  if (minutes < 1) return "только что";
+  if (minutes < 60) return `${minutes} мин назад`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} ч назад`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return "вчера";
+  if (days < 7) return `${days} дн. назад`;
+  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 function LabelFields() {
   return (
@@ -76,13 +92,21 @@ export function PostCard({
   post,
   account,
   onChange,
+  thread = false,
 }: {
   post: ContentPost;
   account: Account | null;
   onChange?: () => void;
+  // Feed mode: long text folds and the discussion thread opens inside the card.
+  thread?: boolean;
 }) {
   const [editing, setEditing] = useState(false),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [expanded, setExpanded] = useState(false),
+    [discussion, setDiscussion] = useState(false),
+    [commentCount, setCommentCount] = useState(post.commentCount);
+  useEffect(() => setCommentCount(post.commentCount), [post.commentCount]);
+  const long = thread && post.body.length > 420;
   async function remove() {
     if (!account) return;
     try {
@@ -93,23 +117,28 @@ export function PostCard({
     }
   }
   return (
-    <article className="content-card">
+    <article className={"content-card" + (thread ? " is-feed" : "")}>
       <div className="content-meta">
         <Author author={post.author} />
-        <time dateTime={post.createdAt}>
-          {new Date(post.createdAt).toLocaleDateString("ru-RU")}
+        {post.pinned && <span className="content-audience">Закреплено</span>}
+        <time dateTime={post.createdAt} title={new Date(post.createdAt).toLocaleString("ru-RU")}>
+          {ago(post.createdAt)}
         </time>
-        <span>
-          {post.audience === "friends"
-            ? "Друзьям"
-            : post.audience === "private"
-              ? "Только мне"
-              : "Публично"}
-        </span>
+        {post.audience !== "public" && (
+          <span className="content-audience">
+            {post.audience === "friends" ? "Друзьям" : "Только мне"}
+          </span>
+        )}
       </div>
       <h3>
         <Link href={"/posts/" + post.id}>{post.title}</Link>
       </h3>
+      {post.kind !== "text" && (
+        <p className={"content-kind is-" + post.kind}>
+          {post.kind === "review" ? "Рецензия" : "Обсуждение серии"}
+          {post.score !== null && <b>★ {post.score}/10</b>}
+        </p>
+      )}
       {post.anime && (
         <Link
           className="content-context"
@@ -120,7 +149,8 @@ export function PostCard({
           }
         >
           {post.anime.title}
-          {post.episode && ` · сезон ${post.episode.season}, серия ${post.episode.number}`}
+          {post.episode &&
+            ` · ${seasonLabel(post.episode.season).toLowerCase()}, серия ${post.episode.number}`}
           {post.timestamp !== null && ` · ${contentTimeLabel(post.timestamp)}`}
         </Link>
       )}
@@ -131,8 +161,14 @@ export function PostCard({
           ))}
         </div>
       )}
-      <ContentText body={post.body} spoiler={post.labels.includes("spoiler")} />
-      {post.score !== null && <p>Оценка: ★ {post.score}/10</p>}
+      <div className={"content-body" + (long && !expanded ? " is-clamped" : "")}>
+        <ContentText body={post.body} spoiler={post.labels.includes("spoiler")} />
+      </div>
+      {long && (
+        <button type="button" className="content-more" onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Свернуть" : "Читать полностью"}
+        </button>
+      )}
       <div className="content-tags">
         {post.tags.map((tag) => (
           <Link key={tag} href={"/community?tag=" + encodeURIComponent(tag)}>
@@ -141,7 +177,21 @@ export function PostCard({
         ))}
       </div>
       <div className="content-actions">
-        <Link href={"/posts/" + post.id}>Обсудить →</Link>
+        {thread ? (
+          <>
+            <button
+              type="button"
+              className="content-thread-toggle"
+              aria-expanded={discussion}
+              onClick={() => setDiscussion(!discussion)}
+            >
+              {discussion ? "Скрыть обсуждение" : "Обсудить"} · {commentCount}
+            </button>
+            <Link href={"/posts/" + post.id}>Открыть →</Link>
+          </>
+        ) : (
+          <Link href={"/posts/" + post.id}>Обсудить · {commentCount} →</Link>
+        )}
         {account?.id === post.author.id && (
           <>
             <button className="outline" onClick={() => setEditing(!editing)}>
@@ -154,6 +204,19 @@ export function PostCard({
         )}
       </div>
       {notice && <p role="status">{notice}</p>}
+      {thread && discussion && (
+        <div className="content-thread">
+          <CommentsPanel
+            target={{ postId: post.id }}
+            compact
+            onChange={() => {
+              void accountRequest("/api/account/content/posts/" + post.id)
+                .then((value) => setCommentCount(postSchema.parse(value).commentCount))
+                .catch(() => {});
+            }}
+          />
+        </div>
+      )}
       {editing && account && (
         <PostComposer
           account={account}
@@ -173,7 +236,7 @@ export function PostCard({
     </article>
   );
 }
-function PostComposer({
+export function PostComposer({
   account,
   context,
   draft,
@@ -399,7 +462,7 @@ export function PostsPanel({
           <PostComposer account={account} context={context} saved={refresh} />
         </details>
       )}
-      {!account && !authorId && (
+      {account === null && !authorId && (
         <p>
           <Link href="/account">Войди</Link>, чтобы опубликовать пост.
         </p>
@@ -414,7 +477,12 @@ export function PostsPanel({
         </div>
       )}
       {items.map((p) => (
-        <PostCard key={p.id + ":" + p.updatedAt} post={p} account={account} onChange={refresh} />
+        <PostCard
+          key={p.id + ":" + p.updatedAt}
+          post={p}
+          account={account ?? null}
+          onChange={refresh}
+        />
       ))}
       {!loading && !items.length && !notice && (
         <p className="profile-empty">
@@ -444,11 +512,20 @@ export function CommentsPanel({
   title = "Обсуждение",
   allDiscussions = false,
   context = {},
+  compact = false,
+  globalFeed = false,
+  query,
+  onChange,
 }: {
   target: Target;
   title?: string;
   allDiscussions?: boolean;
   context?: ContentEditorContext;
+  // Inside a feed card the thread drops its own heading.
+  compact?: boolean;
+  globalFeed?: boolean;
+  query?: string | undefined;
+  onChange?: () => void;
 }) {
   const account = useAccount(),
     [items, setItems] = useState<ContentComment[]>([]),
@@ -474,6 +551,7 @@ export function CommentsPanel({
         postId,
         authorId,
         discussions: allDiscussions ? "all" : undefined,
+        q: query,
       }),
     )
       .then((v) => {
@@ -492,7 +570,7 @@ export function CommentsPanel({
     return () => {
       active = false;
     };
-  }, [animeId, episodeId, postId, authorId, revision, allDiscussions, account?.id]);
+  }, [animeId, episodeId, postId, authorId, revision, allDiscussions, query, account?.id]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!account) return;
@@ -515,6 +593,7 @@ export function CommentsPanel({
       form.reset();
       setReply(null);
       refresh();
+      onChange?.();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Не удалось отправить.");
     } finally {
@@ -526,21 +605,26 @@ export function CommentsPanel({
     try {
       await accountRequest("/api/account/content/comments/delete", { id }, account.csrfToken);
       refresh();
+      onChange?.();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Не удалось удалить.");
     }
   }
   const rootIds = new Set(items.filter((c) => !c.parentId).map((c) => c.id));
-  const orderedComments = authorId
-    ? items
-    : [
-        ...items
-          .filter((c) => !c.parentId)
-          .flatMap((root) => [root, ...items.filter((c) => c.parentId === root.id)]),
-        ...items.filter((c) => c.parentId && !rootIds.has(c.parentId)),
-      ];
+  const orderedComments =
+    authorId || globalFeed
+      ? items
+      : [
+          ...items
+            .filter((c) => !c.parentId)
+            .flatMap((root) => [root, ...items.filter((c) => c.parentId === root.id)]),
+          ...items.filter((c) => c.parentId && !rootIds.has(c.parentId)),
+        ];
   return (
-    <section className="content-section content-comments-section" id="profile-comments">
+    <section
+      className={"content-section content-comments-section" + (compact ? " is-compact" : "")}
+      {...(compact ? {} : { id: "profile-comments" })}
+    >
       <div className="content-comments-heading">
         <div>
           <p className="eyebrow">ОБСУЖДАЕМ ВМЕСТЕ</p>
@@ -552,6 +636,7 @@ export function CommentsPanel({
         </span>
       </div>
       {!authorId &&
+        (!globalFeed || reply) &&
         (account ? (
           <form className="content-form content-comment-composer" onSubmit={submit}>
             <div className="content-composer-caption">
@@ -580,9 +665,11 @@ export function CommentsPanel({
             </button>
           </form>
         ) : (
-          <p>
-            <Link href="/account">Войди</Link>, чтобы участвовать в обсуждении.
-          </p>
+          account === null && (
+            <p>
+              <Link href="/account">Войди</Link>, чтобы участвовать в обсуждении.
+            </p>
+          )
         ))}
       {loading && <p role="status">Загружаем комментарии…</p>}
       {notice && (
@@ -631,7 +718,7 @@ export function CommentsPanel({
           )}
           <div className="content-actions">
             {authorId && <Link href={c.href + "#comment-" + c.id}>Открыть обсуждение →</Link>}
-            {allDiscussions && (
+            {(allDiscussions || globalFeed) && (
               <Link href={c.href + "#comment-" + c.id}>
                 {c.episodeId
                   ? "К обсуждению серии →"
@@ -671,6 +758,7 @@ export function CommentsPanel({
                 postId,
                 authorId,
                 discussions: allDiscussions ? "all" : undefined,
+                q: query,
                 before: next.before,
                 beforeId: next.beforeId,
               }),
@@ -719,7 +807,7 @@ export function PostDetail({ id }: { id: string }) {
       {notice && <p role="status">{notice}</p>}
       {post && (
         <>
-          <PostCard post={post} account={account} onChange={() => setRev((n) => n + 1)} />
+          <PostCard post={post} account={account ?? null} onChange={() => setRev((n) => n + 1)} />
           <CommentsPanel
             target={{ postId: post.id }}
             context={{

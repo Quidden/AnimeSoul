@@ -1,3 +1,4 @@
+/* Character pages and the characters block on the anime page: cards, voice actors, appearances, description. */
 .anime-characters {
   margin: 38px 0;
   padding-top: 26px;
@@ -58,14 +59,14 @@
   align-content: start;
   gap: 8px;
   min-width: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-10);
 }
 .character-card-image {
   display: grid;
   place-items: center;
   aspect-ratio: 8 / 11;
   overflow: hidden;
-  border-radius: 9px;
+  border-radius: var(--radius-10);
   background: var(--panel-strong);
   color: var(--muted);
 }
@@ -89,7 +90,7 @@
 .character-card > span:last-child,
 .character-role {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .character-card:hover strong,
@@ -113,7 +114,7 @@
   place-items: center;
   aspect-ratio: 13 / 18;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: var(--radius-12);
   background: var(--panel-strong);
   color: var(--muted);
 }
@@ -192,7 +193,7 @@
   height: 48px;
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--panel-strong);
   color: var(--muted);
 }
@@ -220,7 +221,7 @@
   width: 100%;
   aspect-ratio: 2 / 3;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: var(--panel-strong);
   color: var(--muted);
 }
@@ -252,7 +253,7 @@
 .character-appearance p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .character-appearance .text-link {
   width: fit-content;
@@ -288,6 +289,34 @@
     font-size: 12px;
   }
   .character-card > span:last-child {
-    font-size: 10px;
+    font-size: 12px;
   }
+}
+
+.character-description h3 {
+  margin: 22px 0 6px;
+  font-size: 16px;
+}
+.character-description ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding-left: 20px;
+  color: color-mix(in srgb, var(--ink) 82%, transparent);
+  line-height: 1.65;
+}
+/* ── Long description: the part after the first heading is folded ─── */
+.character-description-more > summary {
+  display: inline-block;
+  margin: 6px 0 12px;
+  color: var(--accent-soft);
+  font-size: 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.character-description-more > summary::-webkit-details-marker {
+  display: none;
+}
+.character-description-more[open] > summary {
+  display: none;
 }

@@ -19,6 +19,8 @@ test("successful-playback telemetry survives rerenders, player switches, reload 
   globalThis.sessionStorage = store();
   Date.now = () => clock;
   globalThis.fetch = async (_url, input) => {
+    assert.equal(input.keepalive, true);
+    assert.equal(input.signal, undefined);
     sent.push(JSON.parse(input.body));
     return { status: 201 };
   };

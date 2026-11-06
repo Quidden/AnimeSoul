@@ -17,7 +17,7 @@ export function animeDescription(anime: Anime) {
 export function animeMetadata(anime: Anime, episode?: Episode): Metadata {
   const site = siteConfiguration();
   const path = episode ? episodeHref(anime.slug, episode.id) : `/anime/${anime.slug}`;
-  const title = `${anime.title}${episode ? ` — серия ${episode.number}` : anime.year > 0 ? ` (${anime.year})` : ""} — смотреть онлайн`;
+  const title = `${anime.title}${anime.year > 0 ? ` (${anime.year})` : ""} — смотреть онлайн`;
   const description = episode
     ? `Серия ${episode.number} аниме «${anime.title}» на AnimeSoul. ${animeDescription(anime)}`.slice(
         0,
@@ -99,13 +99,6 @@ export function animeStructuredData(anime: Anime, episode?: Episode) {
     { "@type": "ListItem", position: 2, name: anime.title, item: url },
   ];
   const episodeUrl = episode ? new URL(episodeHref(anime.slug, episode.id), base).href : undefined;
-  if (episode && episodeUrl)
-    crumbs.push({
-      "@type": "ListItem",
-      position: 3,
-      name: `Серия ${episode.number}`,
-      item: episodeUrl,
-    });
   return {
     "@context": "https://schema.org",
     "@graph": [

@@ -54,6 +54,12 @@ title. Changing parts updates `/anime/:slug`, poster, description, ratings and d
 together. The player exposes the same choice, including fullscreen. Provider seasons remain
 local to the current `animeId`. Direct episode links override saved selection. Completed
 episodes are marked, while partially watched episodes show personal progress.
+Episode cards and player controls switch locally without replacing the page or its URL;
+direct episode links remain available for sharing and opening in another tab. Search by
+episode number filters the current provider season. Loading advice appears inside the
+player after eight seconds and disappears when the video is ready.
+Title, franchise and cast reads use stored catalog data while provider metadata refreshes
+in the background. Part links prepare their route and playback list on hover or focus.
 
 `GET /api/anime/:slug/franchise` follows saved direct, reverse and transitive UUID and
 Shikimori/Kodik identity links, replacing legacy duplicates. Directed relationships from

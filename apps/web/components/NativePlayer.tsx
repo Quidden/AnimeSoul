@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { seasonLabel } from "../lib/season-label";
 import type { Stream } from "@animesoul/contracts";
 import {
   PlayerMenuSelect,
@@ -15,6 +16,7 @@ import { PlayerTimelinePreview } from "./PlayerTimelinePreview";
 import { PlayerSelect } from "./PlayerSelect";
 import { AnimePartSwitches } from "./AnimePartSwitches";
 import type { UpscaleTarget, UpscaleProfile } from "../lib/upscale";
+import { PlayerLoadingHint, type ProgressStatus } from "./PlayerLoadingHint";
 type Direct = Extract<Stream, { mode: "direct" }>;
 function clock(value: number) {
   const seconds = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
@@ -31,6 +33,7 @@ export function NativePlayer({
   onRefresh,
   autoplay = true,
   loop = false,
+  progressStatus = "guest",
 }: {
   stream: Direct;
   start: number;
@@ -42,6 +45,7 @@ export function NativePlayer({
   onRefresh: () => Promise<boolean>;
   autoplay?: boolean;
   loop?: boolean;
+  progressStatus?: ProgressStatus;
 }) {
   const video = useRef<HTMLVideoElement>(null),
     shell = useRef<HTMLDivElement>(null),
@@ -447,6 +451,7 @@ export function NativePlayer({
           <span>Буферизация…</span>
         </div>
       )}
+      <PlayerLoadingHint loading={loading} progressStatus={progressStatus} />
       {native.pending && native.sourceKey && (
         <div className="player-quality-pending" role="status">
           Подготавливаем качество…
@@ -627,7 +632,9 @@ export function NativePlayer({
           <header>
             <div>
               <strong>Настройки</strong>
-              <span>{menu.contextLabel ?? `Сезон ${menu.season} · Серия ${menu.episode}`}</span>
+              <span>
+                {menu.contextLabel ?? `${seasonLabel(menu.season)} · Серия ${menu.episode}`}
+              </span>
             </div>
             <button
               type="button"

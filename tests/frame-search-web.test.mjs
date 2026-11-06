@@ -6,8 +6,10 @@ import { spawn } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
 import path from "node:path";
 
-test("frame page and same-origin web proxy work for guests, bound uploads and keep session/key private", async () => {
+test("frame page and same-origin web proxy work for guests, bound uploads and keep the provider key private", async () => {
+  const secret = "s".repeat(40);
   const uploads = [];
+  const quotas = [];
   let status = 200;
   let maintenance = false;
   const api = createServer(async (request, response) => {
@@ -29,7 +31,7 @@ test("frame page and same-origin web proxy work for guests, bound uploads and ke
       return;
     }
     if (request.url === "/api/search/frame/quota") {
-      assert.equal(request.headers.cookie, undefined);
+      quotas.push(request.headers);
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ total: 100, used: 12, remaining: 88 }));
       return;
@@ -72,6 +74,7 @@ test("frame page and same-origin web proxy work for guests, bound uploads and ke
         PUBLIC_INDEXING: "true",
         DEMO_CATALOG: "false",
         TRACE_MOE_API_KEY: "private-web-key",
+        INTERNAL_PROXY_SECRET: secret,
       },
     },
   );
@@ -134,6 +137,24 @@ test("frame page and same-origin web proxy work for guests, bound uploads and ke
     });
     assert.equal(quota.headers.get("cache-control"), "no-store");
     assert.deepEqual(await quota.json(), { total: 100, used: 12, remaining: 88 });
+    // The session cookie reaches the API. Without an ingress Next fills X-Forwarded-For with the socket address.
+    assert.equal(quotas[0].cookie, headers.Cookie);
+    assert.equal(quotas[0]["x-animesoul-client-ip"], "127.0.0.1");
+    // The address is the last X-Forwarded-For entry (written by the ingress); a browser-sent claim is dropped.
+    await fetch(base + "/api/search/frame/quota", {
+      headers: {
+        "X-Forwarded-For": "198.51.100.7, 203.0.113.9",
+        "X-AnimeSoul-Client-IP": "192.0.2.1",
+        "X-AnimeSoul-Proxy-Secret": "browser-supplied",
+      },
+    });
+    assert.equal(quotas[1]["x-animesoul-client-ip"], "203.0.113.9");
+    assert.equal(quotas[1]["x-animesoul-proxy-secret"], secret);
+    await fetch(base + "/api/search/frame/quota", {
+      headers: { "X-Forwarded-For": "not-an-ip", "X-AnimeSoul-Client-IP": "192.0.2.1" },
+    });
+    assert.equal(quotas[2]["x-animesoul-client-ip"], undefined);
+    assert.equal(quotas[2]["x-animesoul-proxy-secret"], undefined);
     assert.match(await (await fetch(base + "/robots.txt")).text(), /Allow: \/search\/frame/);
     assert.match(
       await (await fetch(base + "/sitemap.xml")).text(),
@@ -173,7 +194,12 @@ test("frame page and same-origin web proxy work for guests, bound uploads and ke
     assert.equal(uploads[0].headers.origin, "https://animesoul.test");
     assert.equal(uploads[0].headers["x-animesoul-request"], "1");
     await upload(bytes);
-    assert.equal(uploads[1].headers.cookie, undefined);
+    assert.equal(uploads[1].headers.cookie, headers.Cookie);
+    assert.equal(uploads[1].headers["x-animesoul-client-ip"], "127.0.0.1");
+    await upload(bytes, { "X-Forwarded-For": "203.0.113.9", "X-AnimeSoul-Client-IP": "192.0.2.1" });
+    assert.equal(uploads[2].headers["x-animesoul-client-ip"], "203.0.113.9");
+    assert.equal(uploads[2].headers["x-animesoul-proxy-secret"], secret);
+    uploads.pop();
     assert.equal(uploads[1].headers["x-trace-key"], undefined);
     status = 429;
     const limited = await upload(bytes);

@@ -154,18 +154,66 @@ Only the first GIF frame is used. The API strips metadata and sends a JPEG of at
 cookies and personal account information are not forwarded. Cancel, retry and timeout
 states are supported.
 
-`TRACE_MOE_API_KEY` is optional and server-only. Without it trace.moe currently allows
-100 searches per 24 hours per server IP and one concurrent search. AnimeSoul runs one
-external search at a time and limits this route to five requests per minute per API IP;
-requests through the web proxy share that IP. Multiple API instances need a shared
-limiter. Provider quotas, outages and invalid responses return readable errors.
+`TRACE_MOE_API_KEY` is optional and server-only. AnimeSoul permits ten outbound search
+attempts per verified user (guest fallback: normalized socket IP) per 24-hour window,
+with a shared ceiling of 100 attempts per 24 hours. Windows start on the first attempt;
+reading quota or rejecting an invalid image does not spend a slot. Attempts that reach
+the provider count even if it fails. The five-per-minute gate uses the same identity.
+One external search runs at a time per API process; provider limits still apply.
+Daily counters persist in the namespaced hashed-key `AuthThrottle` store. A PostgreSQL
+transaction/advisory lock reserves both budgets atomically across API instances.
+Without a configured database, local/demo tests use process-local counters.
+Provider quotas, outages and invalid responses return readable errors.
 Preview URLs expire after five minutes; retrying obtains fresh previews. Consult
 the provider's [terms](https://soruly.github.io/trace.moe-api/#/terms) before commercial use.
-`GET /api/search/frame/quota` exposes only total/used/remaining counts from `/me`, cached
-for 30 seconds and refreshed via `/me` after search (search-response counters may lag).
-Both views show the shared server quota.
-An unavailable quota is labelled unknown; no estimated remaining count is presented.
-The provider's IP/email identifier and key never reach the browser.
+`GET /api/search/frame/quota` and `/api/search/frame/limit` return `personal` and `global`
+objects with `total`, `used`, `remaining`, and `resetAfter` (seconds). `personal.scope`
+is `user` or `ip`. Legacy top-level counts retain provider counts when available;
+the new `global` object describes the effective ceiling. Without provider data,
+top-level counts describe the local policy ceiling.
+Provider `/me` counts are cached for 30 seconds and refreshed after search; they can
+only reduce the global remainder. If unavailable, `providerAvailable: false` explicitly
+marks that only the local policy counters are known. No provider identity/key is exposed.
+429 responses use `RATE_LIMITED`, `retryAfter`, `Retry-After`, and `limitScope`:
+`personal`, `global`, `provider`, or `concurrency`.
+
+The API accepts a dedicated, opt-in visitor-IP channel for frame-search budgets:
+
+```http
+X-AnimeSoul-Client-IP: 203.0.113.10
+X-AnimeSoul-Proxy-Secret: <INTERNAL_PROXY_SECRET>
+```
+
+Configure the same private `INTERNAL_PROXY_SECRET` in web and API (32–256 URL-safe
+characters; generate with `openssl rand -hex 32`). Also explicitly configure the API's
+trusted socket peers: `INTERNAL_PROXY_TRUSTED_HOSTS=web` for Docker Compose, or
+comma-separated exact `INTERNAL_PROXY_TRUSTED_IPS` for static addresses. Loopback peers
+such as `127.0.0.1,::1` are suitable for local development. IP subnets are not accepted.
+A nonempty secret without a source allowlist fails configuration validation. An empty
+secret disables the channel, including when visitors supply these headers themselves.
+
+The API requires both a constant-time secret match and an actual socket IP belonging
+to the configured web peer. Docker hostnames are resolved afresh per request, with only
+concurrent DNS work shared and a one-second timeout; DNS failures do not authorize a
+previous web address. IPv4-mapped addresses are canonicalized; source IPv6 peers must
+match exactly, not merely share a /64. Visitor IPs must be single IPv4/IPv6 literals,
+without ports, lists or zone IDs. Failed checks ignore the claimed IP and retain the
+socket identity. Existing guest IPv6 budget grouping remains /64.
+
+Use both headers on `POST /api/search/frame`, `GET /api/search/frame/quota`, and
+`GET /api/search/frame/limit`, so reads and reservations use the same visitor identity.
+Verified account sessions still take priority. Fastify `trustProxy` remains false;
+neither `request.ip` nor the general API traffic/authentication budgets are rewritten.
+The API never accepts ordinary `X-Forwarded-For`/`Forwarded` as this authorization.
+
+The existing web route still needs to send these headers. It must overwrite any
+incoming `X-AnimeSoul-*` values and derive the visitor IP from its trusted ingress,
+not copy a browser-supplied client-IP claim and attach the secret. Keep the secret in
+server-only runtime configuration, outside `NEXT_PUBLIC_*`, browser responses and logs.
+Use the channel only over the private web-to-API network or protected HTTPS transport.
+The API implementation and spoofing tests are in
+[`internal-proxy.service.ts`](../../apps/api/src/auth/internal-proxy.service.ts) and
+[`internal-proxy.test.mjs`](../../apps/api/tests/internal-proxy.test.mjs).
 
 Code: [UI](../../apps/web/components/FrameSearch.tsx),
 [API service](../../apps/api/src/catalog/frame-search.service.ts),

@@ -89,6 +89,7 @@ try {
       version: 1,
       databasePassword: randomBytes(32).toString("hex"),
       mfaEncryptionKey: randomBytes(32).toString("hex"),
+      internalProxySecret: randomBytes(32).toString("hex"),
       account: {
         id: randomUUID(),
         email: "dev-owner@example.test",
@@ -103,6 +104,10 @@ try {
   }
   await chmod(privateFile, 0o600);
   if (state.version !== 1) throw new Error("Unsupported dev-box volume version.");
+  if (!state.internalProxySecret) {
+    state.internalProxySecret = randomBytes(32).toString("hex");
+    await writeFile(privateFile, JSON.stringify(state) + "\n", { mode: 0o600 });
+  }
   const pgEnv = {
     ...process.env,
     PGHOST: "127.0.0.1",
@@ -231,12 +236,27 @@ try {
     );
   }
   const databaseUrl = `postgresql://animesoul:${state.databasePassword}@127.0.0.1:5432/animesoul_dev`;
+  await run(
+    "node",
+    [
+      "/app/migrate/node_modules/prisma/build/index.js",
+      "migrate",
+      "deploy",
+      "--config",
+      "/app/migrate/prisma.config.ts",
+    ],
+    { ...pgEnv, DATABASE_URL: databaseUrl },
+  );
   const db = createDatabase(databaseUrl);
   try {
-    const users = await db.user.findMany({ select: { id: true } });
-    if (users.length > 1 || (users.length === 1 && users[0].id !== state.account.id))
-      throw new Error("This volume contains another account; refusing to replace user data.");
-    if (users.length === 0) {
+    // Remove the old preview-only restriction without removing accounts or their data.
+    await db.$executeRawUnsafe('DROP INDEX IF EXISTS "dev_box_single_account"');
+    const owner = await db.user.findUnique({ where: { id: state.account.id } });
+    if (!owner) {
+      if ((await db.user.count()) > 0)
+        throw new Error(
+          "Bootstrap owner is missing from this volume; refusing to replace accounts.",
+        );
       const passwordHash = await hashPassword(state.account.password);
       await db.user.create({
         data: {
@@ -271,10 +291,6 @@ try {
         },
       });
     }
-    // This restriction belongs only to the isolated test database, never the application schema.
-    await db.$executeRawUnsafe(
-      'CREATE UNIQUE INDEX IF NOT EXISTS dev_box_single_account ON "User" ((true))',
-    );
     for (const key of ["kodik", "yummy"])
       await db.providerSetting.upsert({
         where: { key },
@@ -292,22 +308,23 @@ try {
     LOCAL_POSTGRES: "false",
     API_URL: "http://127.0.0.1:8020",
     NEXT_TELEMETRY_DISABLED: "1",
-    PUBLIC_INDEXING: "false",
+    PUBLIC_INDEXING: process.env.PUBLIC_INDEXING || "false",
+    INTERNAL_PROXY_SECRET: process.env.INTERNAL_PROXY_SECRET || state.internalProxySecret,
+    INTERNAL_PROXY_TRUSTED_IPS: "127.0.0.1,::1",
+    INTERNAL_PROXY_TRUSTED_HOSTS: "",
     DIAGNOSTICS_DIR: path.join(data, "diagnostics"),
   };
   const backend = {
     ...common,
     DATABASE_URL: databaseUrl,
-    NODE_ENV: "development",
+    NODE_ENV: process.env.APP_ENV || "development",
     API_HOST: "0.0.0.0",
     API_PORT: "8020",
     SITE_URL: process.env.SITE_URL ?? "http://localhost:18021",
     ADMIN_URL: process.env.ADMIN_URL ?? "http://localhost:18022",
     MFA_ENCRYPTION_KEY: state.mfaEncryptionKey,
     PROFILE_MEDIA_DIR: path.join(data, "profile-media"),
-    MAIL_MODE: "disabled",
-    GOOGLE_CLIENT_ID: "",
-    GOOGLE_CLIENT_SECRET: "",
+    MAIL_MODE: process.env.MAIL_MODE || "disabled",
   };
   start("api", "node", ["/app/api/dist/main.js"], backend);
   start("worker", "node", ["/app/api/dist/providers/catalog-worker.js"], backend);

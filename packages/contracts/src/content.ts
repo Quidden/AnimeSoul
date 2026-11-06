@@ -57,16 +57,38 @@ export const contentQuerySchema = z
     postId: uuid.optional(),
     discussions: z.literal("all").optional(),
     section: z.enum(["posts", "reviews", "comments"]).optional(),
+    sort: z.enum(["new", "discussed", "top"]).optional(),
+    q: z.string().trim().max(200).optional(),
+    kind: z.enum(["text", "episode", "review"]).optional(),
+    pinned: z.enum(["true", "false"]).optional(),
     tag: z
       .string()
       .regex(/^[\p{L}\p{N}_]{1,40}$/u)
       .optional(),
     before: z.iso.datetime().optional(),
     beforeId: uuid.optional(),
+    beforeActivity: z.iso.datetime().optional(),
+    beforeCount: z.coerce.number().int().min(0).max(2147483647).optional(),
   })
   .strict()
   .refine((v) => !!v.before === !!v.beforeId)
+  .refine((v) => (v.sort === "discussed" && v.before ? !!v.beforeActivity : !v.beforeActivity))
+  .refine((v) =>
+    v.sort === "top" && v.before ? v.beforeCount !== undefined : v.beforeCount === undefined,
+  )
   .refine((v) => !v.discussions || Boolean(v.animeId && !v.episodeId && !v.postId && !v.authorId));
+export const contentTagsQuerySchema = z
+  .object({
+    period: z.enum(["day", "week", "month"]).default("week"),
+    limit: z.coerce.number().int().min(1).max(50).default(16),
+  })
+  .strict();
+export const contentTagsSchema = z.object({
+  items: z.array(z.object({ tag: z.string(), count: z.number().int().positive() })).max(50),
+  period: z.enum(["day", "week", "month"]),
+  since: z.iso.datetime(),
+  until: z.iso.datetime(),
+});
 export const deleteContentSchema = z.object({ id: uuid }).strict();
 export const adultPreferenceSchema = z
   .object({ enabled: z.boolean(), confirmed18: z.boolean() })
@@ -86,6 +108,8 @@ export const postSchema = z.object({
   episode: z.object({ id: uuid, season: z.string(), number: z.string() }).nullable(),
   timestamp: z.number().nullable(),
   score: z.number().nullable(),
+  commentCount: z.number().int().nonnegative(),
+  pinned: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -103,7 +127,17 @@ export const commentSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 const nextSchema = z.object({ before: z.iso.datetime(), beforeId: uuid }).nullable();
-export const postListSchema = z.object({ items: z.array(postSchema).max(20), next: nextSchema });
+const postNextSchema = nextSchema
+  .unwrap()
+  .extend({
+    beforeActivity: z.iso.datetime().optional(),
+    beforeCount: z.number().int().nonnegative().optional(),
+  })
+  .nullable();
+export const postListSchema = z.object({
+  items: z.array(postSchema).max(20),
+  next: postNextSchema,
+});
 export const commentListSchema = z.object({
   items: z.array(commentSchema).max(50),
   next: nextSchema,

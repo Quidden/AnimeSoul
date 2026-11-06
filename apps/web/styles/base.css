@@ -1,17 +1,5 @@
-/* Palette and typography retained from the archived website. */
+/* Theme colours, palette and radius scale live in tokens.css; this file holds layout variables and element resets. */
 :root {
-  --bg: #09080d;
-  --panel: #141218;
-  --line: #2c2732;
-  --ink: #f5f1fa;
-  --muted: #9a94a2;
-  --accent: #9a78ff;
-  --accent-soft: #ac8cff;
-  --panel-strong: #211a30;
-  --field-bg: #0e0c13;
-  --ambient: #2c2142;
-  --primary-start: #a98aff;
-  --primary-end: #7659df;
   --header-height: 70px;
   --anime-navigation-height: 58px;
   --navigation-bg: color-mix(in srgb, var(--panel) 84%, transparent);
@@ -24,6 +12,8 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--header-height) + 20px);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 45%, transparent) transparent;
 }
 body {
   margin: 0;
@@ -59,7 +49,13 @@ p {
 }
 .app {
   min-height: 100vh;
-  background: radial-gradient(ellipse at 12% 15%, #2c21424d, transparent 58%), var(--bg);
+  background:
+    radial-gradient(
+      ellipse at 12% 15%,
+      color-mix(in srgb, var(--violet-800) 30%, transparent),
+      transparent 58%
+    ),
+    var(--bg);
 }
 .primary,
 .outline {
@@ -69,26 +65,26 @@ p {
   gap: 8px;
   min-height: 42px;
   padding: 10px 16px;
-  border-radius: 9px;
+  border-radius: var(--radius-10);
   font-size: 13px;
 }
 .primary {
-  border: 1px solid #b193ee80;
-  background: linear-gradient(135deg, #a98aff, #7659df);
+  border: 1px solid color-mix(in srgb, var(--violet-300) 50%, transparent);
+  background: linear-gradient(135deg, var(--violet-300), var(--violet-600));
   color: white;
   font-weight: 650;
 }
 .outline {
-  border: 1px solid #ffffff20;
-  background: #ffffff04;
+  border: 1px solid var(--white-12);
+  background: var(--white-4);
 }
 .outline:hover {
-  background: #ffffff09;
-  border-color: #9a78ff66;
+  background: var(--white-4);
+  border-color: color-mix(in srgb, var(--violet-400) 40%, transparent);
 }
 .eyebrow {
-  color: #ac8cff;
-  font-size: 11px;
+  color: var(--violet-300);
+  font-size: 12px;
   letter-spacing: 2.5px;
   font-weight: 800;
 }
@@ -107,18 +103,18 @@ p {
 }
 .preview-note {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   margin: 0;
 }
 .site-footer {
   padding: 36px 5vw;
-  border-top: 1px solid #ffffff0c;
+  border-top: 1px solid var(--white-4);
   display: flex;
   flex-direction: column;
   gap: 14px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .footer-sitemap {
   display: grid;
@@ -179,4 +175,28 @@ p {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* Flat sections: a hairline with a short accent tick is the only mark that a block starts here. */
+.account-card,
+.filter-panel,
+.friends-search-panel,
+.friends-list-panel,
+.friends-guest,
+.anime-viewing-summary {
+  position: relative;
+}
+.account-card::before,
+.filter-panel::before,
+.friends-search-panel::before,
+.friends-list-panel::before,
+.friends-guest::before,
+.anime-viewing-summary::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 0;
+  width: 28px;
+  height: 2px;
+  background: var(--accent);
 }

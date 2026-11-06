@@ -20,7 +20,7 @@ import { accountSettingsHref } from "../lib/account-settings";
 const sections = {
   friends: {
     label: "Друзья",
-    icon: "user",
+    icon: "users",
     description: "Твои друзья и знакомые в AnimeSoul.",
     empty: "Пока нет друзей",
     help: "Найди знакомых через поиск выше и отправь заявку.",
@@ -52,7 +52,7 @@ const sections = {
   },
   followers: {
     label: "Подписчики",
-    icon: "user",
+    icon: "users",
     description: "Люди, которые подписались на твой профиль.",
     empty: "Пока нет подписчиков",
     help: "Здесь появятся люди, которые подпишутся на твой профиль.",

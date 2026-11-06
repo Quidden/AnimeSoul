@@ -9,6 +9,10 @@ export const adminWriteSchema = z.object({
   operationId: z.uuid(),
   version: z.number().int().nonnegative(),
 });
+export const adminPostPinSchema = adminWriteSchema
+  .omit({ version: true })
+  .extend({ pinned: z.boolean() })
+  .strict();
 const date = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)

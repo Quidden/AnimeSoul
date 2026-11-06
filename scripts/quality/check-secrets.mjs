@@ -44,13 +44,14 @@ for (const file of readdirSync(".")) {
 const patterns = [
   ["private key", /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/g],
   ["GitHub token", /\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{60,255})\b/g],
+  ["Docker Hub token", /\bdckr_pat_[A-Za-z0-9_-]{20,}\b/g],
   ["AWS access key", /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g],
   ["Google OAuth secret", /\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g],
   ["Stripe live key", /\bsk_live_[A-Za-z0-9]{20,}\b/g],
   ["Slack token", /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/g],
   [
     "embedded service credential",
-    /\b(?:KODIK_TOKEN|YUMMY_TOKEN|KODIK_PRIVATE_KEY|MFA_ENCRYPTION_KEY|GOOGLE_CLIENT_SECRET|TRACE_MOE_API_KEY|SMTP_PASSWORD)\s*["']?\s*[:=]\s*["'][A-Za-z0-9_+/=-]{24,}["']/g,
+    /\b(?:KODIK_TOKEN|YUMMY_TOKEN|KODIK_PRIVATE_KEY|MFA_ENCRYPTION_KEY|INTERNAL_PROXY_SECRET|GOOGLE_CLIENT_SECRET|TRACE_MOE_API_KEY|SMTP_PASSWORD)\s*["']?\s*[:=]\s*["'][A-Za-z0-9_+/=-]{24,}["']/g,
   ],
 ];
 const failures = new Set();

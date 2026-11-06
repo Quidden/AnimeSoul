@@ -327,9 +327,14 @@ export async function animeFranchise(
     select: { id: true, details: true },
   });
   if (!current) return null;
-  await refreshShikimoriFranchise(db, current.id, current.details);
-  if (config.NODE_ENV !== "test" && (await refreshAnimeCharacters(db, current.id)))
-    invalidateCharacterIndex(db);
+  if (config.NODE_ENV !== "test") {
+    void refreshShikimoriFranchise(db, current.id, current.details).catch(() => {});
+    void refreshAnimeCharacters(db, current.id)
+      .then((updated) => {
+        if (updated) invalidateCharacterIndex(db);
+      })
+      .catch(() => {});
+  }
   // Keep visibility flags in the graph input so explicitly hidden titles cannot
   // be mistaken for absent provider nodes and used as bridges.
   const rows = await db.anime.findMany({

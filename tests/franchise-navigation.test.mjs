@@ -43,6 +43,15 @@ test("an explicit canonical episode beats a saved season, episode and dubbing", 
   assert.equal(choosePlaybackSource(sources, "another-title-episode", saved), undefined);
 });
 
+test("without a saved choice the story opens before season 0 specials", () => {
+  const sources = [
+    { season: "0", episode: "1", episodeId: "special", variantId: "voice-a" },
+    { season: "1", episode: "1", episodeId: "story", variantId: "voice-a" },
+  ];
+  assert.equal(choosePlaybackSource(sources, undefined, {}), sources[1]);
+  assert.equal(choosePlaybackSource([sources[0]], undefined, {}), sources[0]);
+});
+
 test("route acknowledgement preserves active playback; real deep-link changes select or seek", () => {
   assert.equal(playbackRouteAction("next", "next", 100, undefined), "preserve");
   assert.equal(playbackRouteAction("next", "next", undefined, undefined), "preserve");

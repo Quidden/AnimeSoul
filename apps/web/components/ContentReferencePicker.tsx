@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
+import { seasonLabel } from "../lib/season-label";
 import { episodeListSchema, type Episode } from "@animesoul/contracts";
 import {
   contentEpisodeHref,
@@ -98,7 +99,7 @@ export function ContentReferencePicker({
     onSelect({
       kind: "episode",
       label:
-        `${anime.title} · сезон ${selected.season}, серия ${selected.number}` +
+        `${anime.title} · ${seasonLabel(selected.season).toLowerCase()}, серия ${selected.number}` +
         (seconds === null ? "" : ` · ${contentTimeLabel(seconds)}`),
       href: contentEpisodeHref(anime.slug, selected.id, seconds),
     });

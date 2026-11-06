@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { embeddedPlayerEvent } from "@animesoul/contracts";
 import { kodikResume } from "../lib/kodik-resume";
+import { PlayerLoadingHint, type ProgressStatus } from "./PlayerLoadingHint";
 export function EmbeddedPlayer({
   url,
   title,
@@ -10,12 +11,14 @@ export function EmbeddedPlayer({
   onEpisode,
   paused = false,
   autoplay = false,
+  progressStatus = "guest",
 }: {
   url: string;
   title: string;
   start: number;
   paused?: boolean;
   autoplay?: boolean;
+  progressStatus?: ProgressStatus;
   onTime: (position: number, duration: number, playing: boolean, ended?: boolean) => void;
   onEpisode: (number: string, season?: string, translation?: string) => boolean;
 }) {
@@ -27,6 +30,7 @@ export function EmbeddedPlayer({
   const autoplayState = useRef(autoplay);
   const [notice, setNotice] = useState("");
   const [retry, setRetry] = useState(0);
+  const [loading, setLoading] = useState(true);
   callback.current = onTime;
   episodeCallback.current = onEpisode;
   pauseState.current = paused;
@@ -53,6 +57,7 @@ export function EmbeddedPlayer({
   }, [autoplay]);
   useEffect(() => {
     setNotice("");
+    setLoading(true);
     let position = 0,
       duration = 0,
       playing = false,
@@ -75,18 +80,21 @@ export function EmbeddedPlayer({
       }
       if (blocked) return;
       if (value.kind === "ready") {
+        setLoading(false);
         seek();
         if (pauseState.current) command("pause");
         else if (autoplayState.current) command("play");
         return;
       }
       if (value.kind === "duration") {
+        setLoading(false);
         duration = value.duration;
         resume.duration(duration);
         seek();
         return;
       }
       if (value.kind === "time" || value.kind === "seek") {
+        setLoading(false);
         if (value.kind === "time" && value.duration) {
           duration = value.duration;
           resume.duration(duration);
@@ -113,6 +121,7 @@ export function EmbeddedPlayer({
         }, 2500);
       }
       if (value.kind === "play") {
+        setLoading(false);
         playing = !pauseState.current;
         seek();
         if (pauseState.current) command("pause");
@@ -147,6 +156,7 @@ export function EmbeddedPlayer({
         referrerPolicy="origin"
         sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
       />
+      <PlayerLoadingHint loading={loading} progressStatus={progressStatus} />
       {notice && (
         <div className="embedded-resume-notice" role="status">
           {notice}{" "}

@@ -30,7 +30,7 @@ AnimeSoul/
       app/                   Next.js страницы, layout, ошибки, robots и sitemap
       components/            Шапка сайта, профиль, карточки, иконки и подвал
       lib/                   Серверный HTTP-клиент и правила SEO
-      styles/                CSS по страницам; app/globals.css подключает их
+      styles/                CSS по страницам; tokens.css хранит цвета, радиусы, слои (pnpm styles:check)
       public/                Логотип и доверенные SVG-пресеты профиля
     api/
       src/main.ts            Точка запуска API
@@ -75,6 +75,13 @@ AnimeSoul/
 Конфигурация Prettier обнаруживается через поле `prettier` в `package.json`;
 его ignore-файл остаётся в корне. Git, EditorConfig, Docker и pnpm используют свои стандартные корневые файлы.
 Утилиты описаны в [scripts/README](../../scripts/README.ru.md), настройки — в [packages/config/README](../../packages/config/README.ru.md).
+
+`ScrollReveals.tsx` добавляет однократное появление заголовков секций и карточек через
+`lib/scroll-reveal.ts` и `styles/scroll-reveal.css`. Общий IntersectionObserver прекращает
+наблюдать за элементом после появления и подключает новые элементы при загрузке данных.
+Содержимое первого экрана видно сразу; уменьшение движения, фокус с клавиатуры и очистка
+наблюдателя показывают содержимое без анимации. Плеер, диалоги и карта франшизы исключены.
+Серверная страница остаётся читаемой без JavaScript.
 
 Дополнения переноса просмотра: `apps/api/src/providers` содержит серверные адаптеры, кеш и повторяемый импорт;
 `apps/api/src/playback` — списки просмотра, регистрацию Episode, привязанные сессии прогресса и приватный resolver потока.
@@ -143,6 +150,13 @@ flowchart LR
 | Медиа профиля           | `apps/web/public/profile-presets/`                                                             | [Описание assets](../../apps/web/public/ASSETS.ru.md); пресеты, загрузки и GIPHY доступны в /account         |
 | Запуск и инфраструктура | `scripts/`, `compose.yaml`, `compose.server.yaml`, `infra/docker/`, `.env.example`             | [Docker и сервер](../operations/DOCKER.ru.md), [локальная разработка](../operations/LOCAL_DEVELOPMENT.ru.md) |
 | Публикация и проверки   | `.github/workflows/publish-containers.yml`, `scripts/quality/`, `package.json`                 | Ручная публикация GHCR; локальные проверки и проверка секретов                                               |
+
+`AnimeDetailPage` собирает ближайшие выходы по франшизе через `lib/anime-releases.ts`.
+`AnimeReleaseSchedule.tsx` показывает отдельный таймер с названием для каждого актуального сезона
+или анонсированной премьеры и поясняет планы без точной даты. Если известен только день, отсчёт
+идёт в календарных днях; точное время отсчитывается в секундах по Киеву. Истечение таймера
+не означает подтверждённую доступность серии. Проверки: `tests/anime-releases.test.mjs`
+и `tests/anime-releases-web.test.mjs`.
 
 У текущего API нет каталога `src/modules`, общего пакета `ui`, OpenAPI или генерируемого мобильного SDK.
 Это цели плана. При изменении маршрута, DTO, модели или команды обновляются соответствующая карта

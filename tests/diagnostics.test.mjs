@@ -10,6 +10,27 @@ import {
   normalizeDiagnostic,
 } from "../packages/diagnostics/sanitize.mjs";
 import { readDiagnostics, writeDiagnostic } from "../packages/diagnostics/index.mjs";
+import { reportClientError } from "../apps/web/lib/diagnostics-client.ts";
+
+test("browser diagnostics use keepalive without a navigation abort signal", () => {
+  const previous = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (url, options) => {
+    sent.push({ url, options });
+    return new Response(null, { status: 204 });
+  };
+  try {
+    reportClientError(new Error("Navigation telemetry fixture"), "request", "/catalog");
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].url, "/api/diagnostics");
+    assert.equal(sent[0].options.method, "POST");
+    assert.equal(sent[0].options.keepalive, true);
+    assert.equal(sent[0].options.signal, undefined);
+    assert.equal(JSON.parse(sent[0].options.body).path, "/catalog");
+  } finally {
+    globalThis.fetch = previous;
+  }
+});
 
 test("diagnostics remove URL credentials, queries, fragments, emails and tokens", () => {
   assert.equal(

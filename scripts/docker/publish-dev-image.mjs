@@ -91,9 +91,10 @@ if (response.status === 404) {
       name,
       registry: "docker.io",
       is_private: true,
-      description: "Private AnimeSoul test environment with full catalog and one owner account",
+      description:
+        "Private AnimeSoul with full catalog, regular registration and runtime integrations",
       full_description:
-        "Self-contained development image: web, administration, API, worker and PostgreSQL. The full catalog is restored on first boot; a single owner account and MFA credentials are generated in the persistent volume. No original user accounts or provider keys are included. See the project docs/operations/DEV_IMAGE.md for build, launch and credential commands.",
+        "Self-contained application: web, administration, API, worker and PostgreSQL. A catalog and bootstrap owner with MFA are created on first boot; additional accounts register normally. Provider, Google OAuth, SMTP, GIPHY and frame-search keys are supplied only at runtime. Persistent databases receive Prisma migrations. No original accounts or private keys are included. See https://github.com/Quidden/AnimeSoul/blob/main/docs/operations/DEV_IMAGE.md for launch and configuration.",
     }),
   });
   if (!response.ok) {

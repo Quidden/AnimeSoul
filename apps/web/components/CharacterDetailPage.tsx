@@ -2,12 +2,38 @@ import Link from "next/link";
 import type { CharacterDetails } from "@animesoul/contracts";
 import { characterAlternateNames, characterRoleLabels } from "../lib/characters";
 import { formatLabels } from "../lib/catalog-filters";
+import { descriptionGroups } from "../lib/description-text";
 import { Icon } from "./Icon";
 import { CardRail } from "./CardRail";
 import { DetailNavigation } from "./DetailNavigation";
 
+type DescriptionGroup = ReturnType<typeof descriptionGroups>[number];
+function descriptionBlocks(groups: DescriptionGroup[], offset = 0) {
+  return groups.map((group, position) => {
+    const index = offset + position;
+    return group.kind === "heading" ? (
+      <h3 key={index}>{group.text}</h3>
+    ) : group.kind === "list" ? (
+      <ul key={index}>
+        {group.items.map((item, itemIndex) => (
+          <li key={itemIndex}>{item}</li>
+        ))}
+      </ul>
+    ) : (
+      <p key={index}>{group.text}</p>
+    );
+  });
+}
+
 export function CharacterDetailPage({ character }: { character: CharacterDetails }) {
   const names = characterAlternateNames(character);
+  const groups = descriptionGroups(character.description);
+  // The first heading after the opening paragraphs starts the folded part of a long description.
+  const firstHeading = groups.findIndex((group, index) => index > 0 && group.kind === "heading");
+  const fold =
+    firstHeading > 0 && groups.map((group) => JSON.stringify(group)).join("").length > 900
+      ? firstHeading
+      : groups.length;
   return (
     <div className="character-page-layout">
       <DetailNavigation
@@ -55,8 +81,16 @@ export function CharacterDetailPage({ character }: { character: CharacterDetails
               aria-labelledby="character-description-title"
             >
               <h2 id="character-description-title">Описание</h2>
-              {character.description ? (
-                <p>{character.description}</p>
+              {groups.length ? (
+                <>
+                  {descriptionBlocks(groups.slice(0, fold))}
+                  {fold < groups.length && (
+                    <details className="character-description-more">
+                      <summary>Показать полностью</summary>
+                      {descriptionBlocks(groups.slice(fold), fold)}
+                    </details>
+                  )}
+                </>
               ) : (
                 <p>Описание персонажа пока не добавлено.</p>
               )}

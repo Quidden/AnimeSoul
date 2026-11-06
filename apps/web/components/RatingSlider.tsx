@@ -45,7 +45,7 @@ export function RatingSlider({
           dialog.current?.showModal();
         }}
       >
-        <span aria-hidden="true">{value != null ? "★" : "☆"}</span>
+        <span className="rating-star-icon" aria-hidden="true" />
         {value != null && <b>{value}</b>}
       </button>
       <dialog

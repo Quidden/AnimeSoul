@@ -432,83 +432,87 @@ function AccountSecurity({
           {notice}
         </p>
       )}
-      <form className="account-form" onSubmit={changePassword}>
+      <div className="account-block">
         <h3>Изменить пароль</h3>
-        <label>
-          Текущий пароль
-          <input
-            name="current"
-            type="password"
-            autoComplete="current-password"
-            minLength={6}
-            maxLength={128}
-            required
-          />
-        </label>
-        <label>
-          Новый пароль
-          <input
-            name="next"
-            type="password"
-            autoComplete="new-password"
-            minLength={6}
-            maxLength={128}
-            required
-          />
-        </label>
         <p className="account-help">
           После смены пароля потребуется войти заново на всех устройствах.
         </p>
-        <button className="outline" disabled={busy}>
-          Изменить пароль
-        </button>
-      </form>
-      <h3>Второй фактор для административного доступа</h3>
-      <p className="account-help">
-        Для входа в админку нужны назначенная роль, пароль и код приложения аутентификации.
-      </p>
-      {account.mfaEnabled ? (
-        <p>Второй фактор включён.</p>
-      ) : (
-        <form className="account-form" onSubmit={mfa}>
-          {secret ? (
-            <>
-              <p className="account-help">
-                Добавьте этот секрет в приложение аутентификации: TOTP, 6 цифр, 30 секунд.
-              </p>
-              <code className="account-secret">{secret}</code>
+        <form className="account-form" onSubmit={changePassword}>
+          <label>
+            Текущий пароль
+            <input
+              name="current"
+              type="password"
+              autoComplete="current-password"
+              minLength={6}
+              maxLength={128}
+              required
+            />
+          </label>
+          <label>
+            Новый пароль
+            <input
+              name="next"
+              type="password"
+              autoComplete="new-password"
+              minLength={6}
+              maxLength={128}
+              required
+            />
+          </label>
+          <button className="primary" disabled={busy}>
+            Изменить пароль
+          </button>
+        </form>
+      </div>
+      <div className="account-block">
+        <h3>Второй фактор для административного доступа</h3>
+        <p className="account-help">
+          Для входа в админку нужны назначенная роль, пароль и код приложения аутентификации.
+        </p>
+        {account.mfaEnabled ? (
+          <p className="account-status is-on">Второй фактор включён</p>
+        ) : (
+          <form className="account-form" onSubmit={mfa}>
+            {secret ? (
+              <>
+                <p className="account-help">
+                  Добавьте этот секрет в приложение аутентификации: TOTP, 6 цифр, 30 секунд.
+                </p>
+                <code className="account-secret">{secret}</code>
+                <label>
+                  Код из приложения
+                  <input
+                    name="code"
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    required
+                  />
+                </label>
+              </>
+            ) : (
               <label>
-                Код из приложения
+                Подтвердите пароль
                 <input
-                  name="code"
-                  autoComplete="one-time-code"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  minLength={6}
+                  maxLength={128}
                   required
                 />
               </label>
-            </>
-          ) : (
-            <label>
-              Подтвердите пароль
-              <input
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                minLength={6}
-                maxLength={128}
-                required
-              />
-            </label>
-          )}
-          <button className="outline" disabled={busy}>
-            {secret ? "Подтвердить код" : "Настроить второй фактор"}
-          </button>
-        </form>
-      )}
+            )}
+            <button className="outline" disabled={busy}>
+              {secret ? "Подтвердить код" : "Настроить второй фактор"}
+            </button>
+          </form>
+        )}
+      </div>
       {recovery.length > 0 && (
-        <>
+        <div className="account-block">
           <h3>Одноразовые резервные коды</h3>
           <textarea
             className="account-secret"
@@ -523,7 +527,7 @@ function AccountSecurity({
           <button className="outline" onClick={() => setRecovery([])}>
             Сохранил коды
           </button>
-        </>
+        </div>
       )}
     </section>
   );

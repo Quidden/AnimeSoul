@@ -55,10 +55,13 @@ async function proxy(request: Request) {
         ...(body !== undefined ? { body } : {}),
       },
     );
-    return new Response(await response.text(), {
+    const result = new Response(await response.text(), {
       status: response.status,
       headers: { ...headers, "Content-Type": "application/json" },
     });
+    const retryAfter = response.headers.get("retry-after");
+    if (retryAfter) result.headers.set("Retry-After", retryAfter);
+    return result;
   } catch {
     return Response.json({ message: "Service unavailable" }, { status: 503, headers });
   }

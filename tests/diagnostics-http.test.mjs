@@ -174,7 +174,7 @@ test("home survives API failure and diagnostics verify identity, redact secrets 
     const html = await recovered.text();
     assert.equal(recovered.status, 200);
     assert.doesNotMatch(html, /Подборка временно недоступна/);
-    assert.match(html, /home-rail-track/);
+    assert.match(html, /home-popular-row/);
   } catch (error) {
     throw new Error(String(error) + "\n" + errors.join("\n"), { cause: error });
   } finally {

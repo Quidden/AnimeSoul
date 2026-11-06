@@ -4,11 +4,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Account, Library } from "@animesoul/contracts";
 import { accountRequest, loadAccount, loadLibrary } from "../lib/account-client";
-type Value = { account: Account | null; library: Library | null; refresh: () => Promise<void> };
-const Context = createContext<Value>({ account: null, library: null, refresh: async () => {} });
+type Value = {
+  account: Account | null;
+  library: Library | null;
+  // False until the first session answer, so guest copy is not shown to a signed-in reader.
+  ready: boolean;
+  refresh: () => Promise<void>;
+};
+const Context = createContext<Value>({
+  account: null,
+  library: null,
+  ready: false,
+  refresh: async () => {},
+});
 export function CardLibraryProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null),
-    [library, setLibrary] = useState<Library | null>(null);
+    [library, setLibrary] = useState<Library | null>(null),
+    [ready, setReady] = useState(false);
   const revision = useRef(0);
   async function refresh() {
     const current = ++revision.current;
@@ -19,10 +31,12 @@ export function CardLibraryProvider({ children }: { children: ReactNode }) {
       if (current !== revision.current) return;
       setAccount(user);
       setLibrary(data);
+      setReady(true);
     } catch {
       if (current !== revision.current) return;
       setAccount(null);
       setLibrary(null);
+      setReady(true);
     }
   }
   useEffect(() => {
@@ -42,7 +56,9 @@ export function CardLibraryProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("animesoul:library-updated", progress);
     };
   }, []);
-  return <Context.Provider value={{ account, library, refresh }}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={{ account, library, ready, refresh }}>{children}</Context.Provider>
+  );
 }
 export function useCardLibrary() {
   return useContext(Context);

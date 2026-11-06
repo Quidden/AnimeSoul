@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { parseTheme, themeChoices, themeStorageKey, type Theme } from "../lib/theme";
+import { greetingEnabled, greetingQuery, setGreetingEnabled } from "../lib/greeting";
 import { useSettingsAnchor } from "../lib/use-settings-anchor";
 
 export function AccountAppearance() {
   const [theme, setTheme] = useState<Theme>("lilac");
   const [notice, setNotice] = useState("");
+  const [greeting, setGreeting] = useState(true);
   useSettingsAnchor("appearance-settings");
   useEffect(() => {
     setTheme(parseTheme(document.documentElement.dataset.theme) ?? "lilac");
+    setGreeting(greetingEnabled());
     const synchronize = (event: StorageEvent) => {
       if (event.key !== null && event.key !== themeStorageKey) return;
       const next = parseTheme(event.newValue) ?? "lilac";
@@ -51,6 +54,33 @@ export function AccountAppearance() {
             </span>
           </button>
         ))}
+      </div>
+      <div className="greeting-setting">
+        <label>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={greeting}
+            onChange={(event) => {
+              const next = event.target.checked;
+              setGreeting(next);
+              try {
+                setGreetingEnabled(next);
+                setNotice(next ? "Приветствие включено." : "Приветствие выключено.");
+              } catch {
+                setNotice("Браузер не разрешил сохранить этот выбор.");
+              }
+            }}
+          />
+          <span>
+            <strong>Приветствие при первом входе</strong>
+            <small>Короткая заставка «Привет» перед главной страницей.</small>
+          </span>
+        </label>
+        {/* A full load lets the pre-paint script hold the page behind the greeting. */}
+        <a className="text-link" href={`/?${greetingQuery}=1`}>
+          Показать сейчас
+        </a>
       </div>
       {notice && (
         <p className="account-help" role="status">

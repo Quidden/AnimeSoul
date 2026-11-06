@@ -1,0 +1,119 @@
+/* Compass scale in place of the scrollbar on desktop pointers. */
+.scroll-compass {
+  display: none;
+}
+@media (min-width: 901px) and (hover: hover) and (pointer: fine) {
+  html[data-compass-on] {
+    scrollbar-width: none;
+  }
+  html[data-compass-on]::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  .scroll-compass {
+    position: fixed;
+    z-index: var(--layer-sticky);
+    top: calc(var(--header-height) + 36px);
+    right: max(8px, env(safe-area-inset-right, 0px));
+    bottom: 64px;
+    display: flex;
+    width: 40px;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: space-between;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .scroll-compass i {
+    position: relative;
+    display: block;
+    width: 24px;
+    height: 2px;
+    border-radius: var(--radius-4);
+    background: var(--ink);
+    opacity: calc(0.16 + 0.84 * var(--a, 0));
+    transform: scaleX(calc(0.28 + 0.72 * var(--a, 0)));
+    transform-origin: right center;
+    transition:
+      transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 300ms ease;
+  }
+  .scroll-compass i.is-major {
+    width: 34px;
+    height: 3px;
+    background: var(--accent-soft);
+    opacity: calc(0.55 + 0.45 * var(--a, 0));
+    transform: none;
+  }
+  .scroll-compass i.is-major::after {
+    position: absolute;
+    top: 50%;
+    left: -9px;
+    width: 5px;
+    height: 5px;
+    border-radius: var(--radius-round);
+    background: var(--accent-soft);
+    content: "";
+    transform: translateY(-50%);
+    transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .scroll-compass i.is-here {
+    opacity: 1;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  }
+  .scroll-compass i.is-here::after {
+    transform: translateY(-50%) scale(1.6);
+  }
+  .scroll-compass i.is-major::before {
+    position: absolute;
+    top: 50%;
+    right: 48px;
+    padding: 3px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: var(--panel);
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(6px, -50%);
+    transition:
+      opacity 250ms ease,
+      transform 350ms cubic-bezier(0.22, 1, 0.36, 1),
+      color 250ms ease;
+  }
+  html[data-compass-active] .scroll-compass i.is-here::before {
+    color: var(--ink);
+    font-weight: 600;
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+  .scroll-compass:hover i.is-major::before {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-compass i,
+  .scroll-compass i::before,
+  .scroll-compass i::after {
+    transition: none;
+  }
+}
+/* Header popups sit in a lower stacking context than the scale; step aside while one is open. */
+@media (min-width: 901px) and (hover: hover) and (pointer: fine) {
+  html:has(.header-menu[open], .notification-panel) .scroll-compass {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .scroll-compass {
+    transition: opacity 200ms ease;
+  }
+}
+
+.scroll-compass[data-empty] {
+  display: none;
+}

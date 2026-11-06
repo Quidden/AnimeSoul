@@ -1,3 +1,4 @@
+/* Subscription page (/subscription): plans, feature list, player engines and demo start. */
 .embedded-resume-notice {
   position: absolute;
   bottom: 8px;
@@ -5,7 +6,7 @@
   right: 8px;
   z-index: 2;
   padding: 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: var(--panel);
   font-size: 12px;
 }
@@ -35,7 +36,7 @@
 .player-engines button {
   min-height: 44px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   background: var(--panel);
   padding: 10px 18px;
 }
@@ -72,12 +73,12 @@
   max-height: calc(100dvh - 32px);
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--radius-20);
   background: var(--panel);
   color: var(--ink);
 }
 .subscription-dialog::backdrop {
-  background: #050409bd;
+  background: color-mix(in srgb, var(--night-0) 74%, transparent);
   backdrop-filter: blur(8px);
 }
 .subscription-close {
@@ -139,7 +140,7 @@
   object-fit: contain;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-12);
 }
 .subscription-features h4 {
   margin: 16px 0 8px;
@@ -164,7 +165,7 @@
   text-align: left;
   padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-12);
   background: var(--bg);
   color: var(--ink);
 }
@@ -221,9 +222,9 @@
   aspect-ratio: 16/9;
   margin-top: 22px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-14);
   overflow: hidden;
-  background: #050407;
+  background: var(--night-0);
   isolation: isolate;
 }
 .subscription-demo-screen:has(:fullscreen) {
@@ -250,13 +251,13 @@
   padding: 18px;
 }
 .subscription-demo-start p {
-  background: #100d19eb;
-  color: #fff;
+  background: color-mix(in srgb, var(--night-1) 92%, transparent);
+  color: var(--white);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
 }
 .subscription-demo-start .primary {
-  box-shadow: 0 4px 24px #100c2580;
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--night-2) 50%, transparent);
 }
 .subscription-demo-footer {
   display: flex;
@@ -298,7 +299,7 @@
 .subscription-shot:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 5px;
-  border-radius: 12px;
+  border-radius: var(--radius-12);
 }
 .subscription-lightbox {
   width: min(1440px, calc(100% - 32px));
@@ -307,10 +308,10 @@
   background: var(--panel);
   color: var(--ink);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-14);
 }
 .subscription-lightbox::backdrop {
-  background: #030207e6;
+  background: color-mix(in srgb, var(--night-0) 90%, transparent);
 }
 .subscription-lightbox-heading,
 .subscription-lightbox-footer {
@@ -328,7 +329,7 @@
   height: auto;
   max-height: calc(100dvh - 190px);
   object-fit: contain;
-  background: #050407;
+  background: var(--night-0);
 }
 .subscription-lightbox-footer {
   margin-top: 14px;
@@ -361,7 +362,7 @@
   .subscription-dialog {
     width: calc(100% - 16px);
     max-height: calc(100dvh - 16px);
-    border-radius: 14px;
+    border-radius: var(--radius-14);
   }
   .subscription-content {
     padding: 28px 18px;

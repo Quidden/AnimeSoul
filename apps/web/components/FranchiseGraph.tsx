@@ -38,7 +38,7 @@ const castPageSize = 12;
 function boardInset() {
   return (
     (document.querySelector(".app-header")?.getBoundingClientRect().height ?? 70) +
-    (document.querySelector(".anime-navigation-island")?.getBoundingClientRect().height ?? 56)
+    (document.querySelector(".anime-navigation-island")?.getBoundingClientRect().height ?? 0)
   );
 }
 export function FranchiseGraph({ franchise: initialFranchise }: { franchise: AnimeFranchise }) {

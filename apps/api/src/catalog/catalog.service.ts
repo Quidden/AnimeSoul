@@ -16,9 +16,11 @@ import { profileFriends } from "../social/access.js";
 import { globalSearch } from "./global-search.js";
 import { animeFranchise } from "./franchise.js";
 import { animeCharacters, characterDetails, searchCharacters } from "./characters.js";
+import { PublicResponseCache } from "./public-response-cache.js";
 @Injectable()
 export class CatalogService {
   private readonly database: Database | undefined;
+  private readonly publicCache = new PublicResponseCache();
   constructor(@Inject(CONFIG) private readonly config: Configuration) {
     this.database = config.DATABASE_URL ? createDatabase(config.DATABASE_URL) : undefined;
   }
@@ -49,6 +51,21 @@ export class CatalogService {
   }
   async franchise(slug: string) {
     return animeFranchise(this.database, this.config, slug);
+  }
+  async publicResponse(kind: "anime" | "franchise", slug: string) {
+    // PostgreSQL's full MVCC snapshot changes when writes become visible, including
+    // worker/admin edits, publication, ratings and character changes. Unlike a TTL
+    // alone, it cannot keep a withdrawn title public until the cache expires.
+    const revision = this.database
+      ? (
+          await this.database.$queryRaw<{ revision: string }[]>`
+          SELECT pg_current_snapshot()::text AS revision
+        `
+        )[0]!.revision
+      : "demo";
+    return this.publicCache.read(revision, kind + ":" + slug, () =>
+      kind === "anime" ? this.find(slug) : this.franchise(slug),
+    );
   }
   async characters(slug: string) {
     return animeCharacters(this.database, this.config, slug);
@@ -114,11 +131,11 @@ export class CatalogService {
       },
     });
     if (!anime) return undefined;
-    const enriched =
-      this.config.NODE_ENV === "test"
-        ? anime
-        : await refreshShikimoriMetadata(this.database, anime);
-    return (await enrichAnime(this.database, [enriched]))[0];
+    // Page navigation reads the catalog immediately; provider enrichment updates
+    // the next read instead of holding the route open for network requests.
+    if (this.config.NODE_ENV !== "test")
+      void refreshShikimoriMetadata(this.database, anime).catch(() => {});
+    return (await enrichAnime(this.database, [anime]))[0];
   }
   async profile(username: string) {
     if (this.config.DEMO_CATALOG === "true")

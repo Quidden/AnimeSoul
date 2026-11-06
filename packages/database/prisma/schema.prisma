@@ -476,6 +476,9 @@ model Post {
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
   comments Comment[]
+  pinned Boolean @default(false)
+  @@index([pinned, createdAt, id])
+  @@index([tags], type: Gin)
   @@index([createdAt, id])
   @@index([authorId, createdAt])
   @@index([animeId, createdAt])

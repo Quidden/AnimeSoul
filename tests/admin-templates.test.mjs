@@ -61,7 +61,7 @@ test(
     const url = new URL(process.env.TEST_DATABASE_URL);
     assert.equal(url.hostname, "127.0.0.1");
     assert.equal(url.port, "54329");
-    assert.equal(url.pathname, "/animesoul_test");
+    assert.match(url.pathname, /^\/animesoul(?:_backend_\d+_\d+)?_test$/);
     const db = createDatabase(url.href),
       id = randomUUID(),
       token = randomToken(),

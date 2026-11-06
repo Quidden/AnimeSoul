@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { catalogSchema, type Anime } from "@animesoul/contracts";
-import { AnimeCard } from "./AnimeCard";
-import { HomeRail } from "./HomeRail";
 import { reportClientError } from "../lib/diagnostics-client";
+import { formatLabels } from "../lib/catalog-filters";
+import { ratingNumber } from "../lib/ratings";
 
 export function HomePopular({ initialItems }: { initialItems: Anime[] | null }) {
   const [items, setItems] = useState(initialItems);
@@ -26,10 +26,14 @@ export function HomePopular({ initialItems }: { initialItems: Anime[] | null }) 
     }
   }
   return (
-    <section className="home-popular" aria-labelledby="home-popular-title">
+    <section
+      className="home-popular"
+      aria-labelledby="home-popular-title"
+      data-compass="Популярное"
+    >
       <div className="home-library-heading">
         <div>
-          <h2 id="home-popular-title">Популярные аниме</h2>
+          <h2 id="home-popular-title">Популярное</h2>
           <p>Истории, к которым возвращаются.</p>
         </div>
         <Link className="home-section-link" href="/catalog/popular">
@@ -49,12 +53,78 @@ export function HomePopular({ initialItems }: { initialItems: Anime[] | null }) 
           </button>
         </div>
       ) : (
-        <HomeRail label="Популярные аниме" variant="popular">
-          {items.map((anime) => (
-            <AnimeCard key={anime.id} anime={anime} />
-          ))}
-        </HomeRail>
+        <PopularRow items={items.slice(0, 10)} />
       )}
     </section>
+  );
+}
+
+// Posters stand side by side; the one under the pointer or focus opens up. Nothing scrolls.
+function PopularRow({ items }: { items: Anime[] }) {
+  const [open, setOpen] = useState(0);
+  const pointer = useRef("mouse");
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  return (
+    <ol className="home-popular-row">
+      {items.map((anime, index) => (
+        <li key={anime.id} className={index === open ? "is-open" : undefined}>
+          <Link
+            href={`/anime/${anime.slug}`}
+            aria-label={`${index + 1} место: ${anime.title}`}
+            onPointerDown={(event) => {
+              pointer.current = event.pointerType;
+            }}
+            onPointerEnter={(event) => {
+              if (event.pointerType !== "mouse") return;
+              clearTimeout(timer.current);
+              timer.current = setTimeout(() => setOpen(index), 70);
+            }}
+            onPointerLeave={() => clearTimeout(timer.current)}
+            onFocus={() => setOpen(index)}
+            onClick={(event) => {
+              // A first tap on a closed poster opens it; the next one goes to the anime.
+              if (index !== open && pointer.current !== "mouse") {
+                event.preventDefault();
+                setOpen(index);
+              }
+              pointer.current = "mouse";
+            }}
+          >
+            {anime.poster ? (
+              <img
+                className="home-popular-poster"
+                src={anime.poster}
+                alt=""
+                width={320}
+                height={480}
+                loading={index < 4 ? "eager" : "lazy"}
+                draggable={false}
+              />
+            ) : (
+              <span className="home-popular-poster is-empty" />
+            )}
+            <span className="home-popular-short" aria-hidden="true">
+              {anime.title}
+            </span>
+            <span className="home-popular-info" aria-hidden={index !== open}>
+              <span className="home-popular-meta">
+                {[
+                  anime.year || null,
+                  formatLabels[anime.format ?? "unknown"],
+                  anime.shikimoriScore ? `★ ${ratingNumber(anime.shikimoriScore)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+              <strong>{anime.title}</strong>
+              {anime.description && (
+                <span className="home-popular-description">{anime.description}</span>
+              )}
+              <span className="home-popular-open">▶ Открыть</span>
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ol>
   );
 }

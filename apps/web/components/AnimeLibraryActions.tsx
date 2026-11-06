@@ -5,7 +5,7 @@ import { useCardLibrary } from "./CardLibrary";
 import { RatingSlider } from "./RatingSlider";
 import { accountRequest } from "../lib/account-client";
 export function AnimeLibraryActions({ animeId }: { animeId: string }) {
-  const { account, library, refresh } = useCardLibrary();
+  const { account, library, ready, refresh } = useCardLibrary();
   const [busy, setBusy] = useState(false),
     [notice, setNotice] = useState("");
   const item = library?.items.find((i) => i.animeId === animeId);
@@ -26,7 +26,10 @@ export function AnimeLibraryActions({ animeId }: { animeId: string }) {
   }
   if (!account)
     return (
-      <p className="account-help anime-library">
+      <p
+        className="account-help anime-library"
+        style={ready ? undefined : { visibility: "hidden" }}
+      >
         <Link href="/account" className="outline">
           Войдите, чтобы сохранять любимое аниме и оценки →
         </Link>

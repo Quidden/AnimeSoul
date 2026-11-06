@@ -11,6 +11,11 @@
 **/generated
 **/*.tsbuildinfo
 .env*
+**/.env*
+.ssh
+**/.ssh
+**/id_rsa
+**/id_ed25519
 artifacts/*
 !artifacts/dev-image/
 artifacts/dev-image/*

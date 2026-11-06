@@ -1,3 +1,4 @@
+/* Episode page stage: player glow, previous/next episode previews and the "preparing" state. */
 .episode-stage {
   position: relative;
   isolation: isolate;
@@ -14,12 +15,12 @@
   margin: auto;
   z-index: 2;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-16);
   background: var(--panel);
 }
 .episode-center .playback-screen {
   border: 0;
-  border-radius: 17px;
+  border-radius: var(--radius-16);
   min-width: 0;
 }
 .player-frame-glow {
@@ -83,7 +84,7 @@
   aspect-ratio: 16 / 9;
   display: block;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-16);
   background: var(--panel);
   overflow: hidden;
 }
@@ -109,7 +110,10 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(transparent 20%, #090610d9);
+  background: linear-gradient(
+    transparent 20%,
+    color-mix(in srgb, var(--night-ink) 85%, transparent)
+  );
   pointer-events: none;
 }
 .episode-preview-copy {
@@ -135,7 +139,7 @@
 .episode-preview-copy > span,
 .episode-preview-copy small {
   font-size: 10px;
-  color: #ddd7ea;
+  color: var(--text-2);
 }
 .episode-preview-arrow {
   position: absolute;
@@ -167,7 +171,7 @@
   height: 100%;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-16);
   background: var(--panel);
   pointer-events: none;
   z-index: 1;
@@ -184,7 +188,7 @@
   position: absolute;
   inset: auto 0 0;
   padding: 24px;
-  background: linear-gradient(transparent, #090610d9);
+  background: linear-gradient(transparent, color-mix(in srgb, var(--night-ink) 85%, transparent));
 }
 .episode-preparing img {
   opacity: 0.5;
@@ -192,8 +196,8 @@
 .episode-preparing > span {
   position: relative;
   padding: 12px 18px;
-  border-radius: 12px;
-  background: #090610c9;
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--night-ink) 79%, transparent);
 }
 .episode-transition-status {
   position: absolute;
@@ -202,8 +206,8 @@
   transform: translateX(-50%);
   z-index: 4;
   padding: 9px 14px;
-  border-radius: 12px;
-  background: #090610dc;
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--night-ink) 86%, transparent);
   color: var(--ink);
   font-size: 12px;
   pointer-events: none;
@@ -250,15 +254,15 @@
 @media (max-width: 600px) {
   .episode-center {
     width: calc(100% - 48px);
-    border-radius: 12px;
+    border-radius: var(--radius-12);
   }
   .episode-center .playback-screen {
-    border-radius: 11px;
+    border-radius: var(--radius-12);
   }
   .episode-outgoing {
     left: 24px;
     width: calc(100% - 48px);
-    border-radius: 12px;
+    border-radius: var(--radius-12);
   }
   .episode-preview {
     width: 48px;
@@ -267,10 +271,10 @@
     padding: 0;
   }
   .episode-preview-visual {
-    border-radius: 9px;
+    border-radius: var(--radius-10);
   }
   .episode-preview.next .episode-preview-visual {
-    border-radius: 9px;
+    border-radius: var(--radius-10);
   }
   .episode-preview.previous {
     left: 0;

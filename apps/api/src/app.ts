@@ -1,5 +1,9 @@
 import "reflect-metadata";
-import { isTrustedRequestOrigin } from "@animesoul/contracts";
+import {
+  isTrustedRequestOrigin,
+  rateLimitErrorSchema,
+  rateLimitErrorCode,
+} from "@animesoul/contracts";
 import {
   ForbiddenException,
   HttpException,
@@ -12,7 +16,7 @@ import { writeDiagnostic } from "@animesoul/diagnostics";
 import { diagnosticError } from "@animesoul/diagnostics/sanitize";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import helmet from "@fastify/helmet";
-import rateLimit from "@fastify/rate-limit";
+import rateLimit, { normalizeIP } from "@fastify/rate-limit";
 import { CONFIG, readConfig, type Configuration } from "./config.js";
 import { CatalogService } from "./catalog/catalog.service.js";
 import { CatalogController } from "./catalog/catalog.controller.js";
@@ -67,6 +71,18 @@ import {
 } from "./admin/platform.controller.js";
 import { AvailabilityService } from "./admin/availability.service.js";
 import { AdminTemplatesService } from "./admin/templates.service.js";
+import { FrameSearchBudgetService } from "./catalog/frame-search-budget.service.js";
+import { InternalProxyService } from "./auth/internal-proxy.service.js";
+
+const trafficLimits = { read: 600, write: 120, experience: 120, analytics: 120 };
+function trafficBudget(request: { method: string; url: string }): keyof typeof trafficLimits {
+  const read = request.method === "GET" || request.method === "HEAD";
+  if (read && /^\/api\/experience(?:[/?]|$)/.test(request.url)) return "experience";
+  if (request.method === "POST" && /^\/api\/experience\/event(?:\?|$)/.test(request.url))
+    return "analytics";
+  return read ? "read" : "write";
+}
+
 export async function createApplication(
   config: Configuration = readConfig(),
   upstreamFetch: UpstreamFetch = fetch,
@@ -103,6 +119,8 @@ export async function createApplication(
       { provide: UPSTREAM_FETCH, useValue: upstreamFetch },
       CatalogService,
       FrameSearchService,
+      FrameSearchBudgetService,
+      InternalProxyService,
       { provide: FRAME_SEARCH_FETCH, useValue: identity.frameFetch ?? fetch },
       ProvidersService,
       PlaybackService,
@@ -136,6 +154,33 @@ export async function createApplication(
   app.useGlobalFilters({
     async catch(error: unknown, host: ArgumentsHost) {
       const status = error instanceof HttpException ? error.getStatus() : 500;
+      if (status === 429 && error instanceof HttpException) {
+        const value = error.getResponse();
+        const detail =
+          typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+        const reply = host.switchToHttp().getResponse<{
+          getHeader: (name: string) => unknown;
+          header: (name: string, value: string) => unknown;
+        }>();
+        const seconds = Number(reply.getHeader("retry-after") ?? detail.retryAfter ?? 60);
+        const body = rateLimitErrorSchema.parse({
+          statusCode: 429,
+          code: rateLimitErrorCode,
+          message:
+            typeof value === "string"
+              ? value
+              : typeof detail.message === "string"
+                ? detail.message
+                : "Слишком много запросов. Подождите и повторите.",
+          retryAfter: Number.isFinite(seconds)
+            ? Math.max(1, Math.min(86400, Math.ceil(seconds)))
+            : 60,
+          ...(detail.limitScope ? { limitScope: detail.limitScope } : {}),
+        });
+        reply.header("Retry-After", String(body.retryAfter));
+        exceptions.catch(new HttpException(body, 429), host);
+        return;
+      }
       if (status >= 500) {
         const request = host.switchToHttp().getRequest<{ url: string }>();
         await writeDiagnostic({
@@ -186,7 +231,15 @@ export async function createApplication(
       const kind = /^\/api\/account\/profile\/media\/(avatar|banner)$/.exec(route.url)?.[1];
       if (route.url === "/api/search/frame") {
         route.bodyLimit = frameSearchLimits.bytes;
-        route.config = { ...route.config, rateLimit: { max: 5, timeWindow: "1 minute" } };
+        route.config = {
+          ...route.config,
+          rateLimit: {
+            max: 5,
+            timeWindow: "1 minute",
+            keyGenerator: async (request: AuthRequest) =>
+              (await app.get(FrameSearchBudgetService).subject(request)).key,
+          },
+        };
       }
       if (kind) {
         route.bodyLimit = profileMediaLimits[kind as "avatar" | "banner"];
@@ -195,10 +248,21 @@ export async function createApplication(
     },
   );
   await app.register(rateLimit, {
-    max: 120,
+    // Keep catalog/prefetch reads and background experience traffic out of the
+    // user-action budget, including when Next.js requests share one socket IP.
+    max: (request) => trafficLimits[trafficBudget(request)],
+    keyGenerator: (request) => `${normalizeIP(request.ip)}:${trafficBudget(request)}`,
     timeWindow: "1 minute",
-    errorResponseBuilder: () =>
-      new HttpException("Слишком много запросов. Подождите и повторите.", 429),
+    errorResponseBuilder: (_request, context) =>
+      new HttpException(
+        {
+          statusCode: 429,
+          code: rateLimitErrorCode,
+          message: "Слишком много запросов. Подождите и повторите.",
+          retryAfter: Math.ceil(context.ttl / 1000),
+        },
+        429,
+      ),
   });
   server.addHook(
     "onRequest",
@@ -273,8 +337,20 @@ export async function createApplication(
   );
   server.addHook(
     "onSend",
-    async (_request: unknown, reply: { header: (key: string, value: string) => void }) => {
-      reply.header("Cache-Control", "no-store");
+    async (
+      request: { method: string; url: string },
+      reply: {
+        statusCode: number;
+        getHeader: (key: string) => unknown;
+        header: (key: string, value: string) => void;
+      },
+    ) => {
+      const publicRead =
+        ["GET", "HEAD"].includes(request.method) &&
+        /^\/api\/anime\/[a-z0-9-]{1,160}(?:\/franchise)?(?:\?|$)/.test(request.url) &&
+        [200, 304].includes(reply.statusCode) &&
+        reply.getHeader("etag");
+      if (!publicRead) reply.header("Cache-Control", "no-store");
     },
   );
   app.enableShutdownHooks();

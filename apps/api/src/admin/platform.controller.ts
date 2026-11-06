@@ -28,6 +28,7 @@ import {
   adminTemplateEditSchema,
   adminTemplatePublishSchema,
   adminWriteSchema,
+  adminPostPinSchema,
   templateKinds,
 } from "@animesoul/contracts";
 import { AuthService, type AuthRequest } from "../auth/auth.service.js";
@@ -132,6 +133,14 @@ export class AdminPlatformController {
       query,
     );
     return this.content.list("announcements", q.page, q.q, q.scope);
+  }
+  @Post("community/posts/:id/pin") async pinPost(
+    @Req() req: AuthRequest,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const actor = await this.auth.writeSession(req, "admin");
+    return this.content.pinPost(actor.userId, parse(idSchema, id), parse(adminPostPinSchema, body));
   }
   @Get("notifications") async notifications(@Req() req: AuthRequest, @Query() query: unknown) {
     await this.auth.requireSession(req, "admin");

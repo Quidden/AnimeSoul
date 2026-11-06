@@ -1,7 +1,8 @@
+/* Profile media editing: avatar and banner fields, GIPHY search, collections and name editing. */
 .profile-media-mini-preview {
   margin: 0 0 18px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-12);
   background: var(--bg);
   overflow: hidden;
 }
@@ -37,7 +38,7 @@
   margin-top: -30px;
   flex-shrink: 0;
   border: 4px solid var(--bg);
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   background: var(--panel-strong);
   color: var(--accent-soft);
   font-size: 24px;
@@ -99,7 +100,7 @@
   width: 28px;
   height: 28px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-6);
   color: var(--accent-soft);
   opacity: 0;
   pointer-events: none;
@@ -157,7 +158,7 @@
   margin: 0;
   padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-12);
 }
 .profile-media-field legend {
   padding: 0 6px;
@@ -174,7 +175,7 @@
   min-width: 0;
   min-height: 42px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: var(--field-bg);
   padding: 10px;
   font: inherit;
@@ -187,7 +188,7 @@
   color: var(--ink);
   padding: 7px 10px;
   margin-right: 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-6);
   cursor: pointer;
 }
 .profile-media-sample {
@@ -202,12 +203,12 @@
 }
 .profile-media-sample.is-avatar {
   width: 110px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   font-size: 30px;
 }
 .profile-media-sample.is-banner {
   width: 100%;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
 }
 .profile-media-sample img {
   display: block;
@@ -252,7 +253,7 @@
   overflow-wrap: anywhere;
 }
 .profile-media-notice[role="alert"] {
-  color: #f0afbb;
+  color: var(--rose);
 }
 .profile-media-field:disabled {
   opacity: 0.7;
@@ -294,15 +295,15 @@ body:has(.profile-hero[data-compact="true"]) .profile-brand > span {
 .profile-cover:has(> img) .profile-cover-shade {
   background: linear-gradient(
     180deg,
-    #0c0b101f,
-    #0c0b1038 25%,
-    #0c0b10c2 50%,
-    #0c0b10eb 75%,
-    #0c0b10
+    color-mix(in srgb, var(--night-1) 12%, transparent),
+    color-mix(in srgb, var(--night-1) 22%, transparent) 25%,
+    color-mix(in srgb, var(--night-1) 76%, transparent) 50%,
+    color-mix(in srgb, var(--night-1) 92%, transparent) 75%,
+    var(--night-1)
   );
 }
 .profile-identity-meta {
-  color: #b0a8bf;
+  color: var(--text-4);
   font-size: 11px;
 }
 .profile-user-id {
@@ -400,7 +401,7 @@ body:has(.profile-hero[data-compact="true"]) .profile-brand > span {
 .profile-loading-identity > *,
 .profile-loading-section {
   background: var(--panel-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-12);
 }
 .profile-loading-cover {
   height: clamp(200px, 23vw, 290px);
@@ -414,7 +415,7 @@ body:has(.profile-hero[data-compact="true"]) .profile-brand > span {
 .profile-loading-identity > span {
   width: 90px;
   height: 90px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   flex-shrink: 0;
 }
 .profile-loading-identity > div {
@@ -484,7 +485,7 @@ body:has(.profile-hero[data-compact="true"]) .profile-brand > span {
   scroll-margin-top: 84px;
   padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-16);
   background: var(--panel);
   min-width: 0;
 }
@@ -516,7 +517,7 @@ body:has(.profile-hero[data-compact="true"]) .profile-brand > span {
   min-width: 0;
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: var(--field-bg);
   color: var(--ink);
   padding: 12px;
@@ -558,7 +559,7 @@ body:has(.profile-hero[data-compact="true"]) .profile-brand > span {
   padding: 0;
   overflow: hidden;
   aspect-ratio: 1;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   border: 2px solid transparent;
   background: var(--panel-strong);
 }
@@ -575,7 +576,7 @@ body:has(.profile-hero[data-compact="true"]) .profile-brand > span {
   bottom: 12px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-12);
   background: var(--panel);
   display: flex;
   align-items: center;
@@ -587,7 +588,7 @@ body:has(.profile-hero[data-compact="true"]) .profile-brand > span {
   width: 160px;
   height: 120px;
   object-fit: contain;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
 }
 @media (max-width: 540px) {
   .profile-giphy-picker {

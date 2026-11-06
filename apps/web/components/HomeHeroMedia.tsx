@@ -5,6 +5,7 @@ import { trailerEmbed } from "../lib/trailer";
 
 type TrailerPlayer = {
   mute: () => void;
+  unMute: () => void;
   destroy: () => void;
   getIframe: () => HTMLIFrameElement;
   getPlayerState: () => number;
@@ -64,20 +65,53 @@ function loadTrailerAPI() {
   return trailerAPI;
 }
 
+const frameInterval = 7000;
+
 export function HomeHeroMedia({
   title,
   poster,
   trailers,
+  screenshots = [],
+  muted = true,
+  onPlayingChange,
 }: {
   title: string;
   poster: string | null;
   trailers: string[];
+  screenshots?: string[];
+  muted?: boolean;
+  onPlayingChange?: (playing: boolean) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const player = useRef<TrailerPlayer | null>(null);
+  const mutedRef = useRef(muted);
   const [playing, setPlaying] = useState(false);
+  const [frame, setFrame] = useState(0);
   const embed = trailers.map(trailerEmbed).find(Boolean);
   const videoId = embed?.split("/").at(-1);
+  const frames = screenshots.slice(0, 6);
+
+  useEffect(() => {
+    onPlayingChange?.(playing);
+  }, [playing, onPlayingChange]);
+
+  useEffect(() => {
+    mutedRef.current = muted;
+    if (!player.current) return;
+    if (muted) player.current.mute();
+    else player.current.unMute();
+  }, [muted]);
+
+  // Without a trailer, frames from the episodes take its place and change slowly.
+  useEffect(() => {
+    if (playing || frames.length < 2) return;
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (preference.matches) return;
+    const timer = setInterval(() => {
+      if (!document.hidden) setFrame((value) => (value + 1) % frames.length);
+    }, frameInterval);
+    return () => clearInterval(timer);
+  }, [playing, frames.length]);
 
   useEffect(() => {
     const container = host.current;
@@ -133,7 +167,8 @@ export function HomeHeroMedia({
               iframe.tabIndex = -1;
               iframe.inert = true;
               iframe.setAttribute("aria-hidden", "true");
-              target.mute();
+              if (mutedRef.current) target.mute();
+              else target.unMute();
             },
             onStateChange: ({ data }) => {
               if (!active) return;
@@ -199,6 +234,20 @@ export function HomeHeroMedia({
         </>
       ) : (
         <span className="home-cinema-placeholder">AnimeSoul</span>
+      )}
+      {frames.length > 0 && (
+        <div className={`home-cinema-frames${playing ? " is-covered" : ""}`}>
+          {frames.map((src, index) => (
+            <img
+              key={src}
+              className={index === frame ? "is-current" : undefined}
+              src={src}
+              alt=""
+              loading={index === 0 ? "eager" : "lazy"}
+              decoding="async"
+            />
+          ))}
+        </div>
       )}
       <div ref={host} className={`home-cinema-trailer${playing ? " is-playing" : ""}`} />
     </div>

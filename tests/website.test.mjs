@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { URLSearchParams } from "node:url";
 import { developmentAnime } from "../packages/database/dist/src/fixtures.js";
 
-test("anime and episode SSR select the opened franchise part, preserve canonical URLs and validate timecodes", async () => {
+test("anime and episode SSR keep season titles, select the opened franchise part and validate timecodes", async () => {
   const anime = {
       ...developmentAnime[0],
       format: "tv",
@@ -122,7 +122,10 @@ test("anime and episode SSR select the opened franchise part, preserve canonical
     const response = await fetch(base + "?t=42");
     assert.equal(response.status, 200);
     const html = await response.text();
-    assert.match(html, /<h1[^>]*>.*Атака титанов.*серия.*1/);
+    assert.ok(html.includes(`<h1>${anime.title}</h1>`));
+    const breadcrumb = html.match(/<nav class="anime-breadcrumb"[^>]*>(.*?)<\/nav>/)?.[1];
+    assert.ok(breadcrumb);
+    assert.doesNotMatch(breadcrumb, /Серия /);
     assert.match(html, /"@type":"TVEpisode"/);
     assert.match(html, /"@type":"TVSeries"/);
     assert.match(html, /"@type":"BreadcrumbList"/);
@@ -136,7 +139,9 @@ test("anime and episode SSR select the opened franchise part, preserve canonical
     assert.ok(
       html.indexOf('aria-label="Разделы аниме"') < html.indexOf('class="watch-anime-hero"'),
     );
-    assert.ok(html.indexOf('id="anime-screenshots"') < html.indexOf('id="anime-watch"'));
+    // The player follows the title; screenshots and details come after it.
+    assert.ok(html.indexOf('class="watch-anime-hero"') < html.indexOf('id="anime-watch"'));
+    assert.ok(html.indexOf('id="anime-watch"') < html.indexOf('id="anime-screenshots"'));
     assert.ok(html.indexOf('id="anime-episodes"') < html.indexOf('id="anime-comments"'));
     assert.match(html, /<iframe[^>]*src="https:\/\/www.youtube-nocookie.com\/embed\/7IQM5EPf2Y0"/);
     assert.match(html, /aria-label="Увеличить кадр 1"/);
@@ -188,7 +193,8 @@ test("anime and episode SSR select the opened franchise part, preserve canonical
       );
       assert.equal(episodePage.status, 200);
       const episodeBody = await episodePage.text();
-      assert.match(episodeBody, new RegExp(`<title>${part.title} — серия 1`));
+      assert.ok(episodeBody.includes(`<title>${part.title} (${part.year}) — смотреть онлайн`));
+      assert.ok(episodeBody.includes(`<h1>${part.title}</h1>`));
       assert.match(
         episodeBody,
         new RegExp(

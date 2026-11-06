@@ -8,14 +8,22 @@ Checked against `main` on 2026-10-07. [Boundaries](../architecture/PROJECT_MAP.m
 Local accounts, owner authorization and admin MFA are implemented. Public production release requires later stages.
 
 Implemented: validated inputs and DTO outputs, bounded parameterized Prisma reads, server profile privacy,
-no shared response cache, no proxy-header trust, 64 KiB body limit, 120 requests/minute/IP,
+bounded public-response caching, no unauthenticated proxy-header trust, 64 KiB body limit, separate IP traffic budgets,
 API security headers, website frame/type/referrer restrictions, disabled indexing, separate audience/role/MFA admin access,
 private configuration and reproducible dependency lock.
 
 The limiter is process-local and uses the actual socket IP. Redis-backed limits and a configured trusted
 proxy are required before multiple replicas or Cloudflare. Do not trust a client-supplied forwarded address.
+Frame-search visitor identities have a separate opt-in [internal proxy channel](../operations/SEARCH.md):
+a shared secret and an exact trusted web socket peer are both required. It does not rewrite
+the socket IP or the general API budgets. No secret means no forwarded visitor-IP trust.
 
-SSR API requests use the Next.js server IP and share this limit. This is a local boundary,
+GET/HEAD reads, including catalog and prefetch requests, share a budget of 600 requests/minute/IP.
+Other methods share a separate budget of 120 requests/minute/IP. Experience reads and
+`POST /api/experience/event` each have their own 120 requests/minute/IP budget, so background
+traffic cannot exhaust catalog reads or user actions. Diagnostics collection has its own
+[web-process limit](../operations/DIAGNOSTICS.md).
+SSR API requests use the Next.js server IP and share these budgets. This is a local boundary,
 not completed distributed production protection.
 
 Availability, health and readiness checks do not consume the shared budget. The staff DEV access
@@ -23,6 +31,18 @@ switch uses a separate limit of 60 requests/minute/IP so page traffic cannot blo
 the real role. Role, origin and CSRF checks still apply.
 Account identity and subscription reads each have their own 120 requests/minute/IP budget
 so unrelated page traffic cannot make a restored account or player appear signed out.
+Rate-limit responses return HTTP 429 with `code: "RATE_LIMITED"`, a `retryAfter` duration in
+seconds and the matching `Retry-After` header. Catalog/account and experience proxies preserve
+the response body, status and retry header for clients.
+The body is validated by `rateLimitErrorSchema` in `packages/contracts`; frame-search
+quota and concurrency errors use the same body and header, with an optional `limitScope`.
+
+Only public anime and franchise GET/HEAD responses use `public, max-age=0, must-revalidate`
+and a SHA-256 ETag. Every request checks PostgreSQL's complete MVCC snapshot before using
+the process-local cache (30 seconds, 128 responses, 32 MiB, coalesced concurrent loads).
+Committed writes invalidate it, including withdrawals, ratings and worker updates. Unrelated
+writes can also invalidate it conservatively. Conditional requests return 304 with no body.
+Account, personalized catalog, errors and all other responses retain `no-store`.
 
 | Protection                                              | Source                                                                | Evidence/limit                                                   |
 | ------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- |

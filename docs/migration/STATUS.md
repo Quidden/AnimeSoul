@@ -1,10 +1,43 @@
 [English](STATUS.md) | [Русский](STATUS.ru.md)
 
-# Migration progress — October 14, 2026
+# Migration progress — November 6, 2026
 
 [Project](../architecture/PROJECT_MAP.md) · [Site/API](../architecture/SITE_MAP.md) ·
 [Data](../architecture/DATA_MODEL.md) · [Run](../operations/LOCAL_DEVELOPMENT.md) ·
 [Social network](../architecture/SOCIAL_NETWORK_PLAN.md).
+
+## Website update — November 6
+
+The interface now includes release schedules, a community feed, franchise navigation,
+updated catalog/library/player controls, first-visit greetings and reduced-motion-aware
+scroll reveals. Shared CSS tokens and `pnpm styles:check` constrain new literal colors.
+Public catalog responses use a bounded cache; frame-search budgets and signed internal
+visitor identities preserve provider quota and distinguish rate-limit reasons.
+Community content adds pinned posts and query indexes through
+`202611020001_community_content`.
+
+[Self-hosting](../operations/SELF_HOSTING.md) is a separate installation guide for
+domains, HTTPS, private environment configuration, GHCR/source builds and backups.
+GHCR still publishes four application targets manually; Docker Hub holds the separate
+private catalog test image. `pnpm check` now includes the secret scan; nested Docker
+env files and SSH keys are excluded, and scanning also recognizes Docker Hub tokens
+and embedded internal-proxy secrets. Historical check results below refer to their dates.
+
+Release dependency audit identified high/critical advisories in Next.js/Zod. The release
+pins Next.js **16.4.5** and Zod **4.6.6** and updates the lockfile before image publication.
+
+The private Docker Hub image now permits additional unprivileged accounts and all
+implemented application features. Its runtime environment supports provider keys,
+Google OAuth, SMTP, GIPHY and frame search; secrets stay outside the image. Existing
+volumes receive Prisma migrations and lose only the legacy single-account index.
+
+Release verification: production builds, types, lint, CSS checks and all **322 tests**
+pass with an isolated PostgreSQL database, without skips. The dependency audit reports
+no high/critical findings (5 low and 9 moderate remain). The private image is checked
+for upgrade from the previous schema, regular registration, ordinary account privileges,
+friendship, publishing/replies, runtime integration settings and owner MFA login across
+restart. Documentation links, formatting, working-tree/index secrets and unpublished
+history are checked before push.
 
 ## Delivery — October 14
 

@@ -236,11 +236,11 @@ export function AccountProfileSettings({
                       ["favorites", "Любимое"],
                       ["folders", "Папки"],
                       ["ratings", "Оценки"],
-                      ["statistics", "Статистику"],
-                      ["friends", "Друзей"],
+                      ["statistics", "Статистика"],
+                      ["friends", "Друзья"],
                       ["posts", "Посты"],
                       ["reviews", "Рецензии"],
-                      ["comments", "Историю комментариев"],
+                      ["comments", "История комментариев"],
                     ] as const
                   ).map(([key, label]) => (
                     <label key={key}>

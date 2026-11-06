@@ -1,3 +1,4 @@
+/* Franchise map page: graph nodes, relation legend, season cards and external links. */
 html:has(.franchise-board) {
   overflow: hidden;
 }
@@ -175,8 +176,8 @@ html[data-anime-docked] .app-header {
   -webkit-backdrop-filter: var(--navigation-backdrop);
   backdrop-filter: var(--navigation-backdrop);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 12px 35px #0005;
+  border-radius: var(--radius-16);
+  box-shadow: 0 12px 35px var(--black-30);
 }
 .franchise-board-legend {
   top: calc(var(--header-height) + var(--anime-navigation-height) + 18px);
@@ -196,7 +197,7 @@ html[data-anime-docked] .app-header {
   height: 126px;
   object-fit: cover;
   object-position: top;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   margin: 0 14px 14px 0;
 }
 .franchise-character-aliases {
@@ -241,7 +242,7 @@ html[data-anime-docked] .app-header {
   width: 26px;
   padding: 1px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
 }
 .franchise-board-legend h1 {
   font-size: 14px;
@@ -274,7 +275,7 @@ html[data-anime-docked] .app-header {
   text-align: left;
   border: 0;
   padding: 9px 7px;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   background: transparent;
   color: var(--ink);
   font-size: 11px;
@@ -288,7 +289,7 @@ html[data-anime-docked] .app-header {
   background: var(--part-color);
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   flex-shrink: 0;
 }
 .franchise-type-row > button > small {
@@ -320,7 +321,7 @@ html[data-anime-docked] .app-header {
 .franchise-external-placeholder {
   width: 32px;
   height: 48px;
-  border-radius: 4px;
+  border-radius: var(--radius-4);
   object-fit: cover;
   background: var(--panel-strong);
 }
@@ -475,7 +476,7 @@ html[data-anime-docked] .app-header {
   width: 55px;
   height: 82px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   margin: 0 12px 12px 0;
 }
 .franchise-node-details h2 {
@@ -547,7 +548,7 @@ html[data-anime-docked] .app-header {
   width: 32px;
   height: 44px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
   flex-shrink: 0;
 }
 .franchise-cast-avatar {
@@ -611,7 +612,7 @@ html[data-anime-docked] .app-header {
   position: relative;
   flex: 0 0 218px;
   scroll-snap-align: start;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   padding: 4px;
 }
 .franchise-season-card.selected {
@@ -633,7 +634,7 @@ html[data-anime-docked] .app-header {
   flex-shrink: 0;
   width: 52px;
   height: 78px;
-  border-radius: 7px;
+  border-radius: var(--radius-8);
   object-fit: cover;
 }
 .franchise-season-placeholder {

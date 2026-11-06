@@ -13,6 +13,11 @@ const paths = {
   erase: "m16 3 5 5-12 12H5l-3-3L16 3ZM9 20h12M9 10l5 5",
   settings:
     "M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3ZM15 12a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z",
+  users:
+    "M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM21 21v-2a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75",
+  chat: "M21 12a8 8 0 0 1-11.7 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z",
+  volume: "M4 10v4h4l5 4V6l-5 4H4ZM16.5 9.5a4 4 0 0 1 0 5M19 7a7.5 7.5 0 0 1 0 10",
+  "volume-off": "M4 10v4h4l5 4V6l-5 4H4ZM17 10l4 4M21 10l-4 4",
 } as const;
 
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: keyof typeof paths }) {

@@ -65,6 +65,12 @@ with a lowercase name matching its published packages.
 
 ## Before committing
 
+For a fresh server, follow the separate [self-hosting guide](SELF_HOSTING.md).
+Application images are published to GHCR; the private catalog dev-box remains on
+Docker Hub. `pnpm check` includes the secret scan. The scanner also recognizes Docker
+Hub PATs and embedded internal-proxy credentials; nested `.env*` files are excluded
+from the Docker build context.
+
 ```sh
 pnpm secrets:check
 pnpm secrets:check --history

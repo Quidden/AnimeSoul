@@ -60,8 +60,12 @@ export async function animeCharacters(
     select: { id: true },
   });
   if (!anime) return null;
-  if (config.NODE_ENV !== "test" && (await refreshAnimeCharacters(db, anime.id)))
-    invalidateCharacterIndex(db);
+  if (config.NODE_ENV !== "test")
+    void refreshAnimeCharacters(db, anime.id)
+      .then((updated) => {
+        if (updated) invalidateCharacterIndex(db);
+      })
+      .catch(() => {});
   const rows = await db.animeCharacter.findMany({
     where: {
       animeId: anime.id,

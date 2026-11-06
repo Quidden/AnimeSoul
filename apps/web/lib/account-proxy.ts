@@ -46,6 +46,7 @@ const paths = new Set([
   "POST /api/account/social",
   "GET /api/account/social/search",
   "GET /api/account/content/posts",
+  "GET /api/account/content/tags",
   "POST /api/account/content/posts",
   "POST /api/account/content/posts/delete",
   "GET /api/account/content/comments",

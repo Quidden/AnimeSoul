@@ -1,3 +1,4 @@
+/* Search by screenshot (/search/frame): upload area, quota, guide and history. */
 .frame-search-page {
   max-width: 960px;
   margin: 0 auto;
@@ -25,9 +26,8 @@
 }
 .frame-upload {
   padding: 24px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: 1px dashed var(--white-20);
+  border-radius: var(--radius-16);
   text-align: center;
   transition: border-color 0.15s;
 }
@@ -62,14 +62,14 @@
   max-height: 320px;
   max-width: 100%;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: var(--radius-8);
 }
 .frame-upload label {
   display: inline-block;
   padding: 10px 16px;
   background: var(--panel-strong);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-10);
   font-size: 14px;
   cursor: pointer;
 }
@@ -120,16 +120,14 @@
 }
 .frame-status {
   margin: 24px 0;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel-strong);
+  padding: 4px 0 4px 16px;
+  border-left: 2px solid var(--accent);
   font-size: 14px;
   line-height: 1.6;
 }
 .frame-status.is-error {
-  border-color: #ef859f66;
-  color: color-mix(in srgb, #ef859f 70%, var(--ink));
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+  color: color-mix(in srgb, var(--red) 70%, var(--ink));
 }
 .frame-results {
   margin-top: 36px;
@@ -156,7 +154,7 @@
   gap: 0;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-14);
   overflow: hidden;
   transition:
     border-color 0.18s,
@@ -245,33 +243,39 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 20px 0;
+  padding: 10px 18px 0;
   flex-shrink: 0;
 }
+/* "By title" / "By frame" read as a quiet segmented switch. */
 .search-frame-shortcut .outline {
   font-size: 12px;
-  min-height: 36px;
-  padding: 7px 12px;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-4);
 }
 .search-frame-shortcut span {
   color: var(--muted);
   font-size: 12px;
 }
 .search-frame-shortcut {
-  flex-wrap: wrap;
-  padding-bottom: 12px;
+  padding-bottom: 10px;
 }
 .search-frame-hint {
-  flex: 1 1 260px;
+  flex: 1 1 0;
+  min-width: 0;
   margin: 0;
-  color: var(--muted);
+  overflow: hidden;
+  color: var(--text-6);
   font-size: 12px;
-  line-height: 1.6;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .search-frame-shortcut .outline[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: var(--panel-strong);
-  color: var(--accent-soft);
+  background: var(--white-8);
+  color: var(--ink);
 }
 .search-frame-heading {
   flex: 1;
@@ -351,10 +355,9 @@
 }
 .frame-quota {
   margin: 0 0 18px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
+  padding: 12px 0;
+  border-top: 1px solid var(--white-8);
+  border-bottom: 1px solid var(--white-8);
 }
 .frame-quota > div {
   display: flex;
@@ -374,25 +377,25 @@
   height: 5px;
   margin: 10px 0 6px;
   border: 0;
-  border-radius: 3px;
+  border-radius: var(--radius-4);
   appearance: none;
   background: var(--line);
   accent-color: var(--accent);
 }
 .frame-quota progress::-webkit-progress-bar {
   background: var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-4);
 }
 .frame-quota progress::-webkit-progress-value {
   background: var(--accent);
-  border-radius: 3px;
+  border-radius: var(--radius-4);
 }
 .frame-quota progress::-moz-progress-bar {
   background: var(--accent);
-  border-radius: 3px;
+  border-radius: var(--radius-4);
 }
 .frame-quota[data-empty="true"] strong {
-  color: #ef859f;
+  color: var(--red);
 }
 .frame-search-tool .text-link,
 .search-recent .text-link {
@@ -435,10 +438,10 @@
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--white-8);
+  background: none;
   text-align: left;
 }
 .frame-history-item:hover {
@@ -480,7 +483,7 @@
 .search-recent > div:last-child button {
   padding: 5px 9px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-6);
   background: var(--field-bg);
   font-size: 12px;
   max-width: 100%;
@@ -505,9 +508,42 @@
   border-bottom: 1px solid var(--line);
 }
 .frame-guide summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   font-size: 14px;
   cursor: pointer;
   line-height: 1.6;
+  list-style: none;
+  transition: color 0.15s ease;
+}
+.frame-guide summary::-webkit-details-marker {
+  display: none;
+}
+.frame-guide summary::after {
+  content: "";
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-right: 1.6px solid currentcolor;
+  border-bottom: 1.6px solid currentcolor;
+  color: var(--muted);
+  rotate: 45deg;
+  transition: rotate 0.15s ease;
+}
+.frame-guide summary:hover {
+  color: var(--violet-200);
+}
+.frame-guide details[open] > summary {
+  color: var(--ink);
+}
+.frame-guide details[open] > summary::after {
+  rotate: 225deg;
+}
+.frame-guide summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 .frame-guide details p {
   margin-bottom: 0;

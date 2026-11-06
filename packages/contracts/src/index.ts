@@ -22,3 +22,4 @@ export * from "./player-preferences.js";
 export * from "./administration.js";
 export * from "./admin-templates.js";
 export * from "./request-origin.js";
+export * from "./errors.js";

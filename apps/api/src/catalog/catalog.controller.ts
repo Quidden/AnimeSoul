@@ -9,6 +9,7 @@ import {
   Req,
   Header,
   UnauthorizedException,
+  Res,
 } from "@nestjs/common";
 import {
   catalogQuerySchema,
@@ -18,6 +19,11 @@ import {
 } from "@animesoul/contracts";
 import { CatalogService } from "./catalog.service.js";
 import { AuthService, cookieToken, type AuthRequest } from "../auth/auth.service.js";
+import { matchesEtag } from "./public-response-cache.js";
+type PublicReply = {
+  header: (name: string, value: string) => unknown;
+  code: (status: number) => unknown;
+};
 @Controller("api")
 export class CatalogController {
   constructor(
@@ -72,11 +78,13 @@ export class CatalogController {
     return this.catalog.byIds(input.data);
   }
   @Get("anime/:slug")
-  async anime(@Param("slug") slug: string) {
+  async anime(
+    @Param("slug") slug: string,
+    @Req() request: AuthRequest,
+    @Res({ passthrough: true }) reply: PublicReply,
+  ) {
     if (!/^[a-z0-9-]{1,160}$/.test(slug)) throw new NotFoundException();
-    const anime = await this.catalog.find(slug);
-    if (!anime) throw new NotFoundException();
-    return anime;
+    return this.publicResponse("anime", slug, request, reply);
   }
   @Get("anime/:slug/related")
   async related(@Param("slug") slug: string) {
@@ -107,11 +115,30 @@ export class CatalogController {
     return result;
   }
   @Get("anime/:slug/franchise")
-  async franchise(@Param("slug") slug: string) {
+  async franchise(
+    @Param("slug") slug: string,
+    @Req() request: AuthRequest,
+    @Res({ passthrough: true }) reply: PublicReply,
+  ) {
     if (!/^[a-z0-9-]{1,160}$/.test(slug)) throw new NotFoundException();
-    const result = await this.catalog.franchise(slug);
+    return this.publicResponse("franchise", slug, request, reply);
+  }
+  private async publicResponse(
+    kind: "anime" | "franchise",
+    slug: string,
+    request: AuthRequest,
+    reply: PublicReply,
+  ) {
+    const result = await this.catalog.publicResponse(kind, slug);
     if (!result) throw new NotFoundException();
-    return result;
+    reply.header("Cache-Control", "public, max-age=0, must-revalidate");
+    reply.header("ETag", result.etag);
+    if (matchesEtag(request.headers["if-none-match"], result.etag)) {
+      reply.code(304);
+      return;
+    }
+    reply.header("Content-Type", "application/json; charset=utf-8");
+    return result.body;
   }
   @Get("profiles/:username")
   async profile(@Param("username") username: string) {

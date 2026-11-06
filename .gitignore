@@ -22,4 +22,7 @@ packages/database/generated/
 *.sqlite3
 .idea/
 .aws/
+.ssh/
+id_rsa
+id_ed25519
 .DS_Store

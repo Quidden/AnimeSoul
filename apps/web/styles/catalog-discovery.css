@@ -1,3 +1,4 @@
+/* Catalog discovery: section tabs, shelf headings, card folder menu and the compact rating board. */
 .catalog-page .section-head h1 {
   font-family: inherit;
   font-size: 34px;
@@ -9,37 +10,56 @@
 }
 .catalog-sections {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 26px 0;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 22px 0;
+  padding: 2px 2px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Fades the right edge so a cut-off chip reads as "more to scroll". */
+  mask-image: linear-gradient(to right, var(--black) calc(100% - 36px), transparent);
+}
+.catalog-sections::-webkit-scrollbar {
+  display: none;
 }
 .catalog-sections a {
-  padding: 10px 15px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 12px;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
   color: var(--muted);
-  background: #14121880;
+  background: var(--white-4);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
-.catalog-sections a:hover,
+.catalog-sections a:hover {
+  color: var(--ink);
+  border-color: var(--white-20);
+}
 .catalog-sections a[aria-current="page"] {
   color: var(--ink);
   border-color: var(--accent);
-  background: #8465df30;
+  background: color-mix(in srgb, var(--violet-500) 24%, transparent);
 }
 .catalog-filter-drawer > summary {
-  padding: 16px 18px 8px;
+  padding: 16px 0 0;
   cursor: pointer;
-  font-size: 13px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 .catalog-filter-drawer {
-  border: 1px solid var(--line);
-  border-radius: 17px;
-  background: #141218e6;
+  border: 0;
 }
 .catalog-filter-drawer .filter-panel {
   border: 0;
   background: none;
+  padding-top: 12px;
 }
 .catalog-year-range {
   display: grid;
@@ -136,6 +156,16 @@
 .catalog-recommendations {
   padding: 24px;
 }
+/* Section, genre and filtered pages keep only the picker buttons so the results stay in view. */
+.catalog-recommendations.is-compact {
+  padding: 14px 18px;
+}
+.catalog-recommendations.is-compact .eyebrow,
+.catalog-recommendations.is-compact h2,
+.catalog-recommendations.is-compact .catalog-random > p,
+.catalog-recommendations.is-compact .genre-row {
+  display: none;
+}
 .catalog-random-actions {
   display: flex;
   flex-wrap: wrap;
@@ -153,14 +183,57 @@
 }
 .catalog-active-filters {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  font-size: 12px;
-  padding: 12px 0;
-  color: var(--muted);
+  padding: 4px 0 18px;
 }
-.catalog-active-filters a {
+.catalog-active-filters ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.catalog-active-filters li a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--violet-500) 16%, transparent);
+  font-size: 12px;
+  transition: border-color 0.15s ease;
+}
+.catalog-active-filters li a svg {
+  width: 16px;
+  height: 16px;
+  padding: 3px;
+  border-radius: var(--radius-round);
+  color: var(--muted);
+  background: var(--white-8);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+.catalog-active-filters li a:hover {
+  border-color: var(--accent);
+}
+.catalog-active-filters li a:hover svg {
+  color: var(--ink);
+  background: var(--white-16);
+}
+.catalog-reset {
+  flex-shrink: 0;
+  padding: 6px 0;
   color: var(--accent);
+  font-size: 12px;
+}
+.catalog-reset:hover {
+  color: var(--violet-200);
 }
 .catalog-preference {
   font-size: 13px;
@@ -173,20 +246,20 @@
   display: inline-block;
   color: var(--accent);
   margin-top: 8px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .card-watch-progress {
   display: grid;
   gap: 6px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 8px;
 }
 .card-watch-progress progress {
   width: 100%;
   height: 4px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-4);
   accent-color: var(--accent);
 }
 .card-score-badge {
@@ -194,11 +267,11 @@
   bottom: 10px;
   left: 10px;
   z-index: 3;
-  background: #090711d9;
-  border: 1px solid #ffffff22;
-  border-radius: 7px;
+  background: color-mix(in srgb, var(--night-ink) 85%, transparent);
+  border: 1px solid var(--white-12);
+  border-radius: var(--radius-8);
   padding: 5px 7px;
-  color: #e6d7ff;
+  color: var(--violet-100);
   font-size: 12px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
@@ -220,13 +293,13 @@
 }
 .rating-chip small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .rating-chip.shikimori b {
-  color: #e4d0ff;
+  color: var(--violet-100);
 }
 .rating-chip.mine b {
-  color: #8fd9b0;
+  color: var(--teal);
 }
 .anime-rating-board.compact {
   margin: 10px 0 0;
@@ -238,7 +311,7 @@
   align-items: baseline;
 }
 .anime-rating-board.compact .rating-chip b {
-  font-size: 11px;
+  font-size: 12px;
 }
 .anime-rating-board.compact .rating-chip small {
   font-size: 9px;
@@ -256,16 +329,16 @@
   list-style: none;
   display: grid;
   place-items: center;
-  border: 1px solid #ffffff33;
-  border-radius: 8px;
-  background: #0f0b17e6;
+  border: 1px solid var(--white-20);
+  border-radius: var(--radius-8);
+  background: color-mix(in srgb, var(--night-1) 90%, transparent);
   width: 31px;
   height: 31px;
   font-size: 20px;
   cursor: pointer;
 }
 .card-library-actions > button[aria-pressed="true"] {
-  color: #c9aaff;
+  color: var(--violet-200);
   border-color: var(--accent);
 }
 .card-folder-picker > summary::-webkit-details-marker {
@@ -281,19 +354,19 @@
   max-height: 240px;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-10);
   padding: 12px;
-  background: #14101eee;
-  box-shadow: 0 12px 40px #0008;
+  background: color-mix(in srgb, var(--night-2) 93%, transparent);
+  box-shadow: 0 12px 40px var(--black-50);
 }
 .card-folder-menu b {
-  font-size: 11px;
+  font-size: 12px;
 }
 .card-folder-menu button,
 .card-folder-menu a {
   padding: 6px 4px;
   text-align: left;
-  font-size: 11px;
+  font-size: 12px;
   border: 0;
   background: none;
 }
@@ -302,16 +375,16 @@
   color: var(--accent);
 }
 .card-folder-menu p {
-  font-size: 10px;
+  font-size: 12px;
 }
 .card-save-notice {
   position: absolute;
   right: 0;
   bottom: 42px;
-  font-size: 10px;
+  font-size: 12px;
   padding: 8px;
-  border-radius: 8px;
-  background: #14101e;
+  border-radius: var(--radius-8);
+  background: var(--night-2);
   max-width: 170px;
 }
 .card-folder-picker[open] + .card-save-notice {
@@ -319,14 +392,14 @@
 }
 .tagline a {
   font-size: 9px;
-  color: #aaa1b5;
-  background: #1c1821;
-  border-radius: 12px;
+  color: var(--text-4);
+  background: var(--night-slate);
+  border-radius: var(--radius-12);
   padding: 5px 7px;
 }
 .tagline a:hover {
   color: var(--ink);
-  background: #8465df40;
+  background: color-mix(in srgb, var(--violet-500) 25%, transparent);
 }
 .profile-poster {
   position: relative;
@@ -355,7 +428,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .anime-facts a {
-  color: #cdb5ff;
+  color: var(--violet-200);
 }
 .anime-detail-navigation {
   display: flex;
@@ -398,7 +471,7 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: var(--radius-10);
 }
 .anime-media-links {
   display: flex;
@@ -429,7 +502,7 @@
 }
 .anime-episode-tile {
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-10);
   background: var(--panel);
   padding: 11px;
   font-size: 12px;
@@ -441,26 +514,26 @@
   padding-bottom: 8px;
 }
 .anime-episode-tile.completed {
-  border-color: #6eaf8d70;
+  border-color: color-mix(in srgb, var(--jade) 44%, transparent);
 }
-.anime-episode-tile.completed span {
-  color: #8fd9b0;
+.anime-episode-tile.completed > a span {
+  color: var(--teal);
 }
 .anime-episodes select {
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius-8);
   background: var(--bg);
   padding: 5px 7px;
   color: var(--muted);
   max-width: 100%;
-  font-size: 11px;
+  font-size: 12px;
 }
 .anime-trailer-frame {
   width: min(100%, 760px);
   aspect-ratio: 16 / 9;
-  border-radius: 12px;
+  border-radius: var(--radius-12);
   overflow: hidden;
-  background: linear-gradient(135deg, #392650, #141018);
+  background: linear-gradient(135deg, var(--violet-800), var(--night-2));
 }
 .anime-trailer-frame iframe {
   width: 100%;
@@ -485,7 +558,7 @@
 .anime-trailer-select select {
   padding: 6px 12px;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius-8);
   background: var(--panel);
   color: var(--ink);
 }
@@ -511,6 +584,13 @@
   }
 }
 @media (max-width: 900px) {
+  /* The sheet has its own close button, so the native disclosure arrow is noise. */
+  .catalog-filter-drawer > summary {
+    list-style: none;
+  }
+  .catalog-filter-drawer > summary::-webkit-details-marker {
+    display: none;
+  }
   .catalog-layout {
     display: block;
   }
@@ -519,14 +599,6 @@
     max-height: none;
     overflow: visible;
     margin-bottom: 20px;
-  }
-  .catalog-sections {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 8px;
-  }
-  .catalog-sections a {
-    flex-shrink: 0;
   }
   .catalog-shelf-heading {
     flex-wrap: wrap;
@@ -539,9 +611,9 @@
     position: fixed;
     right: 20px;
     bottom: 22px;
-    z-index: 350;
+    z-index: var(--layer-fab);
     border: 1px solid var(--accent);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     padding: 12px 22px;
     background: var(--panel);
     font-weight: 700;
@@ -554,18 +626,18 @@
     inset: auto 0 0;
     max-height: 85svh;
     overflow: auto;
-    z-index: 4800;
+    z-index: var(--layer-sheet);
     padding: 12px 14px 22px;
-    border-radius: 22px 22px 0 0;
+    border-radius: var(--radius-20) var(--radius-20) 0 0;
     background: var(--panel);
   }
   .catalog-filter-backdrop {
     display: block;
     position: fixed;
     inset: 0;
-    z-index: 4799;
+    z-index: var(--layer-sheet-backdrop);
     border: 0;
-    background: #050408ad;
+    background: color-mix(in srgb, var(--night-0) 68%, transparent);
   }
   .catalog-filter-close {
     display: block;
@@ -576,16 +648,15 @@
     background: none;
     font-size: 13px;
   }
-  .catalog-filter-drawer.is-mobile .filter-panel {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+  .catalog-filter-drawer.is-mobile > summary {
+    padding: 6px 2px 0;
   }
-  .catalog-filter-drawer .filter-heading,
-  .catalog-filter-drawer .filter-panel > label:first-of-type,
-  .catalog-year-range,
-  .catalog-filter-drawer .filter-panel button {
-    grid-column: 1 / -1;
+  .catalog-filter-drawer.is-mobile .filter-panel {
+    padding: 8px 2px 0;
+  }
+  .catalog-filter-drawer.is-mobile .filter-actions {
+    margin: 0 -2px;
+    padding: 14px 2px 4px;
   }
 }
 @media (max-width: 640px) {
@@ -600,5 +671,11 @@
   }
   .catalog-recommendations {
     padding: 19px;
+  }
+  /* On a phone the picker is one compact row: the explanatory text and genre chips
+     would otherwise push the first results below the fold. */
+  .catalog-random > p,
+  .catalog-recommendations .genre-row {
+    display: none;
   }
 }

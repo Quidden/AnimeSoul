@@ -25,18 +25,9 @@ export default async function Page({ params }: Props) {
       <h1>Публикации и обсуждения</h1>
       <p className="account-help">{anime.title} · впечатления, рецензии и обсуждения серий.</p>
       <nav className="anime-community-tabs" aria-label="Разделы сообщества аниме">
-        <a className="outline" href="#profile-posts">
-          Все публикации
-        </a>
-        <a className="outline" href="#profile-reviews">
-          Рецензии
-        </a>
-        <a className="outline" href="#profile-comments">
-          Комментарии
-        </a>
-        <Link className="outline" href={`/anime/${anime.slug}`}>
-          Вернуться к просмотру
-        </Link>
+        <a href="#profile-posts">Публикации</a>
+        <a href="#profile-reviews">Рецензии</a>
+        <a href="#profile-comments">Комментарии</a>
       </nav>
       <PostsPanel
         context={{

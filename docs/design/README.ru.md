@@ -15,9 +15,16 @@
 | Информация об аниме                                   | `anime.css`               | `app/anime/[slug]/page.tsx`                          |
 | Профиль, затухающая обложка и компактная идентичность | `profile.css`             | `ProfileHeader.tsx`, `app/users/[username]/page.tsx` |
 
-`apps/web/app/globals.css` — только точка импорта CSS по страницам.
-`apps/admin/app/globals.css` относится к самостоятельной функциональной админке и не наследует
-оформление публичного сайта. Текущая admin-страница лишь объясняет закрытый доступ.
+`apps/web/styles/tokens.css` задаёт общие цвета, радиусы и слои. `pnpm styles:check`
+проверяет новые цвета вне токенов по сохранённому baseline. Текущий интерфейс также
+использует `anime-watch.css`, `community.css`, `header-tabs.css`, `greeting.css`,
+`scroll-compass.css` и `scroll-reveal.css`. Главная, каталог, библиотека и плеер
+используют общие токены; настройки оформления аккаунта сохраняют выбранную палитру.
+
+`apps/web/app/globals.css` импортирует CSS разделов и содержит общие правила.
+`ScrollReveals` постепенно показывает секции, сохраняя читаемый SSR без JavaScript
+и учитывая уменьшение движения. `apps/admin/app/globals.css` относится к самостоятельной
+защищённой админке: [возможности](../operations/ADMINISTRATION.ru.md).
 
 Обложка профиля занимает ширину экрана и затухает к области аватара. `ProfileHeader`
 измеряет прокрутку, обновляет `--profile-collapse` и выводит компактный аватар/ник через React portal

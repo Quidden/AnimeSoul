@@ -1,3 +1,4 @@
+/* Theme-specific rules: graphite overrides, theme switcher swatches and the greeting setting. Colour values of the themes are in tokens.css (lilac) and the first block below (graphite). */
 html[data-theme="graphite"] {
   --bg: #090c0f;
   --panel: #151b20;
@@ -56,13 +57,8 @@ html[data-theme="graphite"] .account-avatar {
   color: var(--accent-soft);
 }
 html[data-theme="graphite"] .header-menu-panel,
-html[data-theme="graphite"] .catalog-filter-drawer,
-html[data-theme="graphite"] .filter-panel,
 html[data-theme="graphite"] .content-spoiler {
   background: var(--panel);
-}
-html[data-theme="graphite"] .catalog-filter-drawer .filter-panel {
-  background: transparent;
 }
 html[data-theme="graphite"] .header-menu-panel a:hover,
 html[data-theme="graphite"] .header-menu-panel a[aria-current="page"],
@@ -80,14 +76,6 @@ html[data-theme="graphite"] .content-form textarea,
 html[data-theme="graphite"] .content-form select {
   background: var(--field-bg);
   color: var(--ink);
-}
-html[data-theme="graphite"] .catalog-recommendations {
-  background: linear-gradient(
-    110deg,
-    color-mix(in srgb, var(--ambient) 80%, transparent),
-    var(--panel)
-  );
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 html[data-theme="graphite"] .catalog-sections a,
 html[data-theme="graphite"] .genre-row a,
@@ -149,6 +137,41 @@ html[data-theme="graphite"] .catalog-controls {
 }
 .theme-swatch-graphite {
   background: linear-gradient(135deg, #a9bfcd 0 28%, #23313b 28% 65%, #090c0f 65%);
+}
+.greeting-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-top: 18px;
+  padding: 16px 0;
+  border-top: 1px solid var(--white-8);
+}
+.greeting-setting label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.greeting-setting input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 20px;
+  min-height: 0;
+  height: 20px;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.greeting-setting label > span {
+  display: grid;
+  gap: 4px;
+}
+.greeting-setting strong {
+  font-size: 14px;
+}
+.greeting-setting small {
+  color: var(--muted);
+  font-size: 12px;
 }
 @media (max-width: 500px) {
   .theme-choices {

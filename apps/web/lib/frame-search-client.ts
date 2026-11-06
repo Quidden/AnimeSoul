@@ -3,9 +3,18 @@ import {
   frameSearchLimits,
   frameSearchTypes,
   frameSearchResultSchema,
+  rateLimitErrorSchema,
   episodeHref,
   type FrameSearchMatch,
 } from "@animesoul/contracts";
+
+// Kept local (same wording as lib/rate-limit.ts): this module is loaded by node tests,
+// which cannot resolve extensionless relative imports.
+function frameWait(seconds: number) {
+  if (seconds >= 3600) return `через ${Math.ceil(seconds / 3600)} ч`;
+  if (seconds >= 60) return `через ${Math.ceil(seconds / 60)} мин`;
+  return `через ${Math.max(1, Math.ceil(seconds))} сек`;
+}
 
 export function frameWatchHref(match: FrameSearchMatch) {
   if (!match.anime) return null;
@@ -39,9 +48,13 @@ export async function searchByFrame(file: File, signal: AbortSignal) {
   if (!response.ok) {
     const message =
       result && typeof result === "object" && "message" in result ? result.message : null;
+    const limit = response.status === 429 ? rateLimitErrorSchema.safeParse(result) : null;
+    const wait = limit?.success ? limit.data.retryAfter : null;
     throw new Error(
       typeof message === "string"
-        ? message
+        ? wait
+          ? `${message.replace(/[.!]$/, "")}. Повторите ${frameWait(wait)}.`
+          : message
         : response.status === 429
           ? "Слишком много запросов. Подождите и повторите поиск."
           : response.status === 413

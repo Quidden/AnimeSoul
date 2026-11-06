@@ -30,7 +30,7 @@ export function searchWatchView(anime: Pick<SearchAnime, "episodes" | "watchProg
   if (!watch) return { episodeLabel, watch: null };
   const denominator = total || available;
   const lastEpisodeLabel = watch.lastEpisode
-    ? `${watch.lastEpisode.season && watch.lastEpisode.season !== "1" ? `Сезон ${watch.lastEpisode.season} · ` : ""}Серия ${watch.lastEpisode.number}${watch.lastEpisode.percent !== null ? ` · ${Math.round(watch.lastEpisode.percent)}%` : ""}`
+    ? `${watch.lastEpisode.season && watch.lastEpisode.season !== "1" ? `${watch.lastEpisode.season === "0" ? "Спецвыпуски" : `Сезон ${watch.lastEpisode.season}`} · ` : ""}Серия ${watch.lastEpisode.number}${watch.lastEpisode.percent !== null ? ` · ${Math.round(watch.lastEpisode.percent)}%` : ""}`
     : "";
   const label =
     watch.status === "completed"

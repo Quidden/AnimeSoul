@@ -221,7 +221,7 @@ test(
         audit.some((event) => event.details.before === "guest" && event.details.after === "actual"),
       );
       let limited = false;
-      for (let index = 0; index < 121; index++) {
+      for (let index = 0; index < 601; index++) {
         const response = await get("/api/auth/options");
         if (response.statusCode === 429) {
           limited = true;

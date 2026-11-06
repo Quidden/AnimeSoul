@@ -29,7 +29,7 @@ AnimeSoul/
       app/                   Next.js pages, layout, errors, robots and sitemap
       components/            Site/profile headers, cards, icons and footer
       lib/                   Server HTTP client and SEO rules
-      styles/                Page-specific CSS imported by app/globals.css
+      styles/                CSS imported by app/globals.css; tokens.css holds colours, radius, layers (pnpm styles:check)
       public/                Logo and trusted profile SVG presets
     api/
       src/main.ts            API entry point
@@ -75,6 +75,13 @@ Git, EditorConfig, Docker and pnpm use their conventional root files. See [scrip
 and [packages/config/README](../../packages/config/README.md).
 
 ## Dependencies
+
+`ScrollReveals.tsx` adds first-appearance scroll animation to section headings and content
+cards through `lib/scroll-reveal.ts` and `styles/scroll-reveal.css`. A shared intersection
+observer releases each element after one appearance and handles newly loaded content.
+Above-the-fold content stays visible immediately; reduced motion, keyboard focus and
+cleanup expose content without animation. Player frames, dialogs and the franchise map
+are excluded. Server HTML stays readable without JavaScript.
 
 Playback additions: `apps/api/src/providers` owns adapters, cache and repeatable catalog import;
 `apps/api/src/playback` owns manifests, stable episodes, bound progress sessions and private stream resolution.
@@ -142,6 +149,12 @@ it does not establish an administrative role or premium entitlement.
 | Profile media          | `apps/web/public/profile-presets/`                                                             | [Asset guide](../../apps/web/public/ASSETS.md); presets, uploads and GIPHY work in /account       |
 | Launch/infrastructure  | `scripts/`, `compose.yaml`, `compose.server.yaml`, `infra/docker/`, `.env.example`             | [Docker/server](../operations/DOCKER.md), [local development](../operations/LOCAL_DEVELOPMENT.md) |
 | Publication and checks | `.github/workflows/publish-containers.yml`, `scripts/quality/`, `package.json`                 | Manual GHCR publication; local checks and secret scanning                                         |
+
+`AnimeDetailPage` derives upcoming releases from the franchise with `lib/anime-releases.ts`.
+`AnimeReleaseSchedule.tsx` shows a separate countdown and title for each airing season or announced
+premiere, and explains plans without an exact date. Date-only releases count calendar days;
+timestamps count seconds in Kyiv time. Expired schedules never imply confirmed availability.
+Checks: `tests/anime-releases.test.mjs` and `tests/anime-releases-web.test.mjs`.
 
 The API currently has no `src/modules` directory, shared `ui` package, OpenAPI or generated mobile SDK.
 These are roadmap targets. Route, DTO, model and command changes require corresponding map updates

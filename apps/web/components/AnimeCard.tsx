@@ -88,7 +88,7 @@ export function AnimeCard({
       )}
       <div className="tagline">
         {anime.genres.slice(0, 3).map((genre) => (
-          <Link key={genre} href={"/catalog/genres/" + encodeURIComponent(genre)}>
+          <Link key={genre} href={"/catalog/genres/" + encodeURIComponent(genre)} prefetch={false}>
             {genre}
           </Link>
         ))}

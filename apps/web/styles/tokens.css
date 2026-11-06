@@ -1,0 +1,143 @@
+/*
+ * DESIGN TOKENS — the single place where the site's raw values live.
+ * ------------------------------------------------------------------
+ * Rule of thumb: other stylesheets never write a colour literal (#abc, rgb(), rgba())
+ * or a "magic" corner radius. They reference a token from this file. If the value you
+ * need does not exist, add a token here (with a comment) instead of inlining it.
+ * `pnpm styles:check` fails when a stylesheet gains new colour literals.
+ *
+ * Contents
+ *   1. Theme tokens      — change with the user's theme (lilac / graphite)
+ *   2. Palette           — fixed colours, named by role
+ *   3. White / black     — transparent overlays for borders, hovers, shadows
+ *   4. Corner radius     — one scale for every rounded corner
+ *   5. Layers (z-index)  — global stacking order for things that float above pages
+ *
+ * Theme tokens are redefined for the graphite theme in theme.css; palette tokens never change.
+ */
+
+:root {
+  /* ── 1. Theme tokens (default theme: lilac) ────────────────────────── */
+  --bg: #09080d; /* page background */
+  --panel: #141218; /* cards, menus, popovers */
+  --panel-strong: var(--violet-900); /* emphasised panel: selected row, active tab */
+  --field-bg: #0e0c13; /* text inputs and selects */
+  --line: #2c2732; /* default 1px borders and dividers */
+  --ink: #f5f1fa; /* primary text */
+  --muted: #9a94a2; /* secondary text, captions */
+  --accent: var(--violet-400); /* links, focus rings, active states */
+  --accent-soft: #ac8cff; /* accent on dark surfaces where --accent is too dim */
+  --ambient: var(--violet-800); /* page glow behind the poster (see ambient.css) */
+  --primary-start: var(--violet-300); /* primary button gradient, top-left */
+  --primary-end: var(--violet-600); /* primary button gradient, bottom-right */
+
+  /* ── 2. Palette (fixed; named by role, not by hue alone) ───────────── */
+
+  /* Night surfaces, darkest first. Used behind video, under images, for overlays. */
+  --night-0: #050407; /* video letterbox, deepest shadow */
+  --night-1: #0c0b10; /* dark surface inside player and dialogs */
+  --night-2: #17131b; /* raised dark panel */
+  --night-3: #211c27; /* hovered / selected dark panel */
+  --night-ink: #08070b; /* near-black with a violet tint: scrims over posters */
+  --night-slate: #171923; /* cool dark panel: dropdowns and tooltips */
+  --night-wine: #391b26; /* dark rose: error banners */
+  --night-4: #3b3344; /* strong border on dark panels */
+  --violet-800: #2c2142; /* deep violet glow behind posters */
+  --violet-900: #211a30; /* deep violet tint: selected states */
+
+  /* Text on dark, brightest first. */
+  --text-1: #f5f1fa; /* headings, primary copy */
+  --text-2: #e1dbe5; /* body copy on cards */
+  --text-3: #c2b8d4; /* secondary copy */
+  --text-4: #aaa1b5; /* captions, hints */
+  --text-5: #9f96a7; /* placeholders, meta rows */
+  --text-6: #8e879c; /* disabled text, subtle icons */
+  --text-7: #79727f; /* faint labels */
+  --text-8: #686576; /* faintest still-readable text */
+
+  /* Violet brand family, light to dark. */
+  --violet-100: #e6d7ff; /* highlight text on violet backgrounds */
+  --violet-200: #c7acff; /* hover for accent text */
+  --violet-300: #a98aff; /* accent, bright (primary button start) */
+  --violet-400: #9a78ff; /* accent, default */
+  --violet-500: #8465df; /* accent, pressed */
+  --violet-600: #7659df; /* accent, deep (primary button end) */
+  --lavender-1: #a493d7; /* quiet violet text and icons */
+  --lavender-2: #9f83df; /* quiet violet borders and chips */
+  --violet-700: #6e4cb5; /* deep violet for tinted backgrounds */
+  --mauve-1: #5b4876; /* muted purple borders */
+  --mauve-2: #514654; /* muted brown-purple, disabled fills */
+  --mauve-3: #84719d; /* muted purple text */
+  --sage: #758475; /* grey-green, neutral "off" state */
+
+  /* Status and genre colours. */
+  --teal: #73d3b7; /* success, "watched", online */
+  --green: #62e596; /* strong success, high rating */
+  --green-soft: #74c6a0; /* calm success background text */
+  --amber: #e7b771; /* warning, "new" badges */
+  --gold: #d8ac4d; /* premium, PLUS */
+  --yellow: #ffd76b; /* stars and ratings */
+  --rose: #f0adb8; /* soft error / favourites */
+  --pink: #e99caa; /* hover for rose */
+  --red: #ef859f; /* error, destructive actions */
+  --blue: #66b9f0; /* informational highlights */
+  --mint: #a8f2c4; /* light success text on dark green */
+  --jade: #6eaf8d; /* success borders and tinted fills */
+  --peach: #f1be9d; /* soft warm highlight */
+  --dusty-rose: #b1747f; /* muted error and social accents */
+
+  /* ── 3. White / black overlays ──────────────────────────────────────
+   * The number is the opacity in percent: --white-12 is white at 12%.
+   * Use white for hairlines, hovers and glass; black for shadows and scrims.
+   * Plain #fff / #000 are --white / --black. */
+  --white: #fff;
+  --white-4: rgb(255 255 255 / 4%);
+  --white-6: rgb(255 255 255 / 6%);
+  --white-8: rgb(255 255 255 / 8%);
+  --white-10: rgb(255 255 255 / 10%);
+  --white-12: rgb(255 255 255 / 12%);
+  --white-16: rgb(255 255 255 / 16%);
+  --white-20: rgb(255 255 255 / 20%);
+  --white-30: rgb(255 255 255 / 30%);
+  --white-36: rgb(255 255 255 / 36%);
+  --white-45: rgb(255 255 255 / 45%);
+  --white-60: rgb(255 255 255 / 60%);
+  --white-80: rgb(255 255 255 / 80%);
+  --black: #000;
+  --black-10: rgb(0 0 0 / 10%);
+  --black-20: rgb(0 0 0 / 20%);
+  --black-30: rgb(0 0 0 / 30%);
+  --black-40: rgb(0 0 0 / 40%);
+  --black-50: rgb(0 0 0 / 50%);
+  --black-60: rgb(0 0 0 / 60%);
+  --black-70: rgb(0 0 0 / 70%);
+  --black-80: rgb(0 0 0 / 80%);
+  --black-90: rgb(0 0 0 / 90%);
+
+  /* ── 4. Corner radius ───────────────────────────────────────────────
+   * The number is the radius in px. Typical use: 4 chips · 6 small buttons · 8 inputs and
+   * list rows · 10 cards · 12 panels and menus · 14–16 large cards · 20 dialogs.
+   * pill: capsules (tabs, tags) · round: circles (avatars, play buttons). */
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-8: 8px;
+  --radius-10: 10px;
+  --radius-12: 12px;
+  --radius-14: 14px;
+  --radius-16: 16px;
+  --radius-20: 20px;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+
+  /* ── 5. Layers ──────────────────────────────────────────────────────
+   * Only global layers live here. Local z-index (1–10) inside one component stays in
+   * that component's stylesheet. */
+  --layer-sticky: 45; /* sticky bars under the header (anime tabs) and the scroll compass */
+  --layer-header: 50; /* sticky site header and its popups */
+  --layer-popover: 80; /* notification panel and other popups that must sit above the header */
+  --layer-fab: 350; /* floating "filters" button on mobile catalog */
+  --layer-greeting: 200; /* first-visit greeting, above everything but sheets and the player */
+  --layer-sheet-backdrop: 4799; /* dimmed backdrop behind the mobile filter sheet */
+  --layer-sheet: 4800; /* mobile bottom sheet with catalog filters */
+  --layer-player-popup: 10000; /* player select menus; must beat any page layer */
+}

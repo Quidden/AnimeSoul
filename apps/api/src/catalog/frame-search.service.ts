@@ -180,12 +180,20 @@ export class FrameSearchService {
       this.quotaRequest = null;
     }
   }
-  async search(bytes: unknown) {
+  async search(bytes: unknown, reserve?: () => Promise<void>) {
     if (this.active)
-      throw new HttpException("Поиск по кадру занят. Повторите через несколько секунд.", 429);
+      throw new HttpException(
+        {
+          message: "Поиск по кадру занят. Повторите через несколько секунд.",
+          retryAfter: 2,
+          limitScope: "concurrency",
+        },
+        429,
+      );
     this.active = true;
     try {
       const image = await prepareSearchFrame(bytes);
+      await reserve?.();
       let response: Response;
       try {
         response = await this.request("https://api.trace.moe/search?anilistInfo&cutBorders=1", {
@@ -206,8 +214,16 @@ export class FrameSearchService {
       }
       if ([402, 429].includes(response.status)) {
         this.quota = null;
+        this.quotaVersion++;
         throw new HttpException(
-          "Лимит trace.moe исчерпан или сервис занят. Попробуйте позже.",
+          {
+            message: "Лимит trace.moe исчерпан или сервис занят. Попробуйте позже.",
+            retryAfter: Math.max(
+              1,
+              Math.min(86400, Number(response.headers.get("retry-after")) || 60),
+            ),
+            limitScope: "provider",
+          },
           429,
         );
       }

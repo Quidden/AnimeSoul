@@ -14,9 +14,10 @@
   width: 100%;
   aspect-ratio: 2 / 3;
   overflow: hidden;
-  border-radius: 13px;
-  background: #1c1822;
-  box-shadow: 0 18px 45px #0005;
+  border-radius: var(--radius-12);
+  /* Shows while the poster image is still loading (images are lazy and come from outside). */
+  background: linear-gradient(145deg, var(--violet-800), var(--night-2));
+  box-shadow: 0 18px 45px var(--black-30);
 }
 .poster img {
   display: block;
@@ -29,7 +30,11 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, #08070bbb, transparent 48%);
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--night-ink) 73%, transparent),
+    transparent 48%
+  );
   pointer-events: none;
 }
 .anime-card:hover .poster img {
@@ -40,8 +45,8 @@
   place-items: center;
   width: 100%;
   height: 100%;
-  color: #817095;
-  background: linear-gradient(145deg, #2b2234, #151119);
+  color: var(--text-7);
+  background: linear-gradient(145deg, var(--violet-800), var(--night-2));
 }
 .poster-placeholder svg {
   width: 42px;
@@ -57,19 +62,19 @@
   top: 9px;
   left: 9px;
   padding: 5px 7px;
-  border-radius: 7px;
-  background: #0b0817db;
-  color: #ddd3eb;
-  font-size: 10px;
+  border-radius: var(--radius-8);
+  background: color-mix(in srgb, var(--night-1) 86%, transparent);
+  color: var(--text-2);
+  font-size: 12px;
 }
 .release-badge i {
   width: 5px;
   height: 5px;
-  border-radius: 50%;
-  background: #9890aa;
+  border-radius: var(--radius-round);
+  background: var(--text-5);
 }
 .release-badge.ongoing i {
-  background: #7bd7a0;
+  background: var(--teal);
 }
 .anime-card h3 {
   font-size: 14px;
@@ -78,11 +83,11 @@
   line-height: 1.35;
 }
 .anime-card h3 a:hover {
-  color: #b697ff;
+  color: var(--violet-300);
 }
 .card-meta-line {
-  font-size: 11px;
-  color: #79727f;
+  font-size: 12px;
+  color: var(--text-7);
   margin: 0;
   line-height: 1.5;
   overflow: hidden;
@@ -97,9 +102,9 @@
 }
 .tagline span {
   font-size: 9px;
-  color: #aaa1b5;
-  background: #1c1821;
-  border-radius: 12px;
+  color: var(--text-4);
+  background: var(--night-slate);
+  border-radius: var(--radius-12);
   padding: 5px 7px;
 }
 .library {
@@ -127,7 +132,7 @@
 }
 .catalog-layout {
   display: grid;
-  grid-template-columns: 255px minmax(0, 1fr);
+  grid-template-columns: 284px minmax(0, 1fr);
   gap: 28px;
   align-items: start;
 }
@@ -137,62 +142,259 @@
   max-height: calc(100svh - var(--header-height) - 44px);
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #8a6ade #141218;
-  border-radius: 17px;
+  scrollbar-color: var(--violet-500) var(--night-2);
+  border-radius: var(--radius-16);
 }
 .filter-panel {
   display: flex;
   flex-direction: column;
-  gap: 13px;
-  padding: 17px;
-  border: 1px solid #ffffff0a;
-  border-radius: 17px;
-  background: #141218e6;
+  gap: 14px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--white-16);
 }
 .filter-heading {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
   gap: 14px;
   color: var(--muted);
   font-size: 12px;
-  margin-bottom: 2px;
 }
 .filter-heading a {
-  font-size: 11px;
-  color: #b19bde;
+  font-size: 12px;
+  color: var(--lavender-1);
+}
+.filter-heading a:hover {
+  color: var(--violet-200);
 }
 .filter-panel label {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   color: var(--muted);
   font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.filter-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.filter-group > legend {
+  padding: 0;
+  margin-bottom: 9px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.filter-group > .filter-field {
+  margin-top: 12px;
 }
 .filter-panel select,
-.filter-panel input {
+.filter-panel input:not([type="radio"]) {
   width: 100%;
   min-width: 0;
-  min-height: 43px;
-  padding: 10px 12px;
-  border: 1px solid #ffffff16;
-  border-radius: 13px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-12);
   color: var(--ink);
-  background: #ffffff03;
-  font-size: 12px;
+  background-color: var(--white-4);
+  font-size: 13px;
+  letter-spacing: 0;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
-.filter-panel button {
+.filter-panel select {
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%239a94a2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2.5 4.5 3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+.filter-panel select option {
+  color: var(--ink);
+  background: var(--panel);
+}
+.filter-panel select:hover,
+.filter-panel input:not([type="radio"]):hover {
+  border-color: var(--white-20);
+}
+.filter-panel select:focus-visible,
+.filter-panel input:not([type="radio"]):focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background-color: var(--white-6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.filter-panel .filter-search {
+  position: relative;
+  display: block;
+}
+.filter-search svg {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  width: 16px;
+  height: 16px;
+  translate: 0 -50%;
+  color: var(--muted);
+  pointer-events: none;
+}
+.filter-panel .filter-search input:not([type="radio"]) {
+  padding-left: 38px;
+}
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-panel .filter-chip {
+  position: relative;
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.filter-chip input {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  margin-top: 4px;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.filter-chip span {
+  display: block;
+  padding: 7px 12px;
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-pill);
+  color: var(--text-3);
+  background: var(--white-4);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+.filter-chip:hover span {
+  border-color: var(--white-20);
+  color: var(--ink);
+}
+.filter-chip input:checked + span {
+  border-color: var(--lavender-2);
+  color: var(--white);
+  background: color-mix(in srgb, var(--violet-500) 55%, transparent);
+}
+.filter-chip input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Three exclusive choices read better as one segmented bar than as loose chips. */
+.filter-chips.is-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 3px;
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-pill);
+  background: var(--white-4);
+}
+.is-segmented .filter-chip span {
+  padding: 6px 4px;
+  border-color: transparent;
+  background: none;
+  text-align: center;
+}
+.is-segmented .filter-chip input:checked + span {
+  background: color-mix(in srgb, var(--violet-500) 65%, transparent);
+}
+.filter-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px dashed var(--white-20);
+  border-radius: var(--radius-12);
+  color: var(--accent);
+  background: none;
+  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.filter-more > summary::-webkit-details-marker {
+  display: none;
+}
+.filter-more > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin: -3px 2px 0 auto;
+  border-right: 1.6px solid currentcolor;
+  border-bottom: 1.6px solid currentcolor;
+  rotate: 45deg;
+  transition: rotate 0.15s ease;
+}
+.filter-more[open] > summary::after {
+  margin-top: 3px;
+  rotate: 225deg;
+}
+.filter-more > summary:hover {
+  border-color: var(--accent);
+  color: var(--violet-200);
+}
+.filter-more > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* One summary, two captions: the one that matches the current state is shown. */
+.filter-more[open] .filter-more-closed,
+.filter-more:not([open]) .filter-more-open {
+  display: none;
+}
+.filter-more-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--white);
+  background: var(--violet-500);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+.filter-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 16px;
+}
+.filter-actions {
+  position: sticky;
+  bottom: 0;
+  margin: 0;
+  padding: 16px 0;
+  background: linear-gradient(to top, var(--bg) 64%, transparent);
+}
+.filter-actions button {
+  width: 100%;
+  min-height: 44px;
 }
 .catalog-content {
   min-width: 0;
 }
 .catalog-recommendations {
   margin-bottom: 24px;
-  padding: 28px 26px;
-  border: 1px solid #ae8bf940;
-  border-radius: 18px;
-  background: linear-gradient(110deg, #6e4cb544, #14121880);
+  padding: 24px 0;
+  border-top: 1px solid var(--white-8);
+  border-bottom: 1px solid var(--white-8);
 }
 .catalog-recommendations .eyebrow {
   margin: 0 0 12px;
@@ -213,17 +415,17 @@
 }
 .genre-row a {
   white-space: nowrap;
-  border: 1px solid #ffffff16;
-  border-radius: 999px;
+  border: 1px solid var(--white-8);
+  border-radius: var(--radius-pill);
   padding: 8px 12px;
-  background: #14121870;
-  color: #c2b8d4;
-  font-size: 11px;
+  background: color-mix(in srgb, var(--night-2) 44%, transparent);
+  color: var(--text-3);
+  font-size: 12px;
 }
 .genre-row a:hover,
 .genre-row a[aria-current="page"] {
-  background: #8465df;
-  border-color: #a187ed;
+  background: var(--violet-500);
+  border-color: var(--lavender-2);
   color: white;
 }
 .catalog-shelf-heading {
@@ -246,7 +448,7 @@
 }
 @media (max-width: 1000px) {
   .catalog-layout {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 252px minmax(0, 1fr);
     gap: 22px;
   }
 }
@@ -263,7 +465,7 @@
     margin-bottom: 14px;
   }
   .section-head .outline {
-    font-size: 11px;
+    font-size: 12px;
     padding: 8px 10px;
   }
   .catalog-layout {
@@ -273,16 +475,6 @@
   .catalog-controls {
     position: static;
     max-height: none;
-  }
-  .filter-panel {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-  .filter-heading,
-  .filter-panel > label:first-of-type,
-  .filter-panel button {
-    grid-column: 1 / -1;
   }
   .catalog-recommendations {
     padding: 22px;
