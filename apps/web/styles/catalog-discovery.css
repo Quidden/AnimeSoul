@@ -424,12 +424,6 @@
   display: grid;
   gap: 5px;
 }
-.anime-facts {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.anime-facts a {
-  color: var(--violet-200);
-}
 .anime-detail-navigation {
   display: flex;
   flex-wrap: wrap;
@@ -660,9 +654,6 @@
   }
 }
 @media (max-width: 640px) {
-  .anime-facts {
-    grid-template-columns: 1fr;
-  }
   .catalog-page .section-head h1 {
     font-size: 28px;
   }

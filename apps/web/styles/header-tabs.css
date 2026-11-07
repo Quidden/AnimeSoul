@@ -31,10 +31,12 @@ html[data-header-tabs] .header-center > .global-search-trigger > span,
 html[data-header-tabs] .header-center > .global-search-trigger > kbd {
   display: none;
 }
+/* The tabs area leaves the same gap on both sides as the search icon takes on the left, so the
+   tabs are centred on the header; when they overflow they scroll from the start instead. */
 .header-context {
   position: absolute;
   top: 0;
-  right: 0;
+  right: 52px;
   bottom: 0;
   left: 52px;
   min-width: 0;
@@ -44,6 +46,7 @@ html[data-header-tabs] .header-center > .global-search-trigger > kbd {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: safe center;
   gap: 2px;
   height: 100%;
   overflow-x: auto;
@@ -130,6 +133,9 @@ html[data-header-tabs] .header-center > .global-search-trigger > kbd {
   overflow: hidden;
 }
 @media (max-width: 720px) {
+  .header-context {
+    right: 0;
+  }
   .header-tabs a {
     padding: 0 10px;
     font-size: 12px;

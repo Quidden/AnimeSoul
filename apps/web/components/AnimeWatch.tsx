@@ -188,7 +188,6 @@ export function AnimeWatch({
             animeId={anime.id}
             initial={episodes}
             durationMinutes={anime.details?.duration}
-            airedAt={anime.details?.airedAt}
             nextEpisodeAt={anime.details?.nextEpisodeAt}
             totalEpisodes={anime.details?.episodesTotal}
             selectedSeason={selection.season}

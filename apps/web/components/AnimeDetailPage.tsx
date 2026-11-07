@@ -1,7 +1,9 @@
 import { AnimeAnnouncements } from "./SiteExperience";
 import Link from "next/link";
 import type { Anime, AnimeCharacter, AnimeFranchise, Episode } from "@animesoul/contracts";
+import { AnimeBackdrop } from "./AnimeBackdrop";
 import { AnimeCharacters } from "./AnimeCharacters";
+import { AnimeDescription } from "./AnimeDescription";
 import { AnimeLibraryActions } from "./AnimeLibraryActions";
 import { AnimeRatings } from "./AnimeRatings";
 import { AnimeReleaseSchedule } from "./AnimeReleaseSchedule";
@@ -16,7 +18,10 @@ import { Icon } from "./Icon";
 import { formatLabels } from "../lib/catalog-filters";
 import { animeReleases } from "../lib/anime-releases";
 import { plainDescription } from "../lib/description-text";
+import { trailerEmbed } from "../lib/trailer";
 
+// Everything about the title sits above the player: poster, synopsis and a row of facts, then tabs
+// with frames, trailer and characters. Under the player there are only episodes and comments.
 export function AnimeDetailPage({
   anime,
   franchise,
@@ -41,25 +46,34 @@ export function AnimeDetailPage({
   const releaseNow = Date.now();
   const releases = animeReleases(anime, franchise, releaseNow);
   const backdrop = details?.screenshots?.[0] ?? anime.poster;
+  const screenshots = details?.screenshots ?? [];
+  const trailer = Boolean(details?.trailerUrls?.some(trailerEmbed));
   return (
     <article className="watch-shell anime-detail-page">
-      {backdrop && (
-        <div className="anime-backdrop" aria-hidden="true">
-          <img src={backdrop} alt="" />
-        </div>
-      )}
+      {backdrop && <AnimeBackdrop src={backdrop} />}
       <nav className="anime-breadcrumb" aria-label="Навигационная цепочка">
         <Link href="/catalog">Каталог</Link>
         <span>/</span>
         <span>{anime.title}</span>
       </nav>
       <AnimeAnnouncements animeId={anime.id} />
-      <div className="watch-anime-hero">
-        <aside className="watch-anime-rail">
+      <section
+        className="anime-hero"
+        id="anime-about"
+        aria-label="О тайтле"
+        data-compass="О тайтле"
+      >
+        <aside className="anime-hero-rail">
           {anime.poster ? (
-            <img src={anime.poster} alt={`Постер: ${anime.title}`} width="270" height="405" />
+            <img
+              className="anime-hero-poster"
+              src={anime.poster}
+              alt={`Постер: ${anime.title}`}
+              width="270"
+              height="405"
+            />
           ) : (
-            <div className="watch-anime-poster-empty">
+            <div className="anime-hero-poster anime-hero-poster-empty">
               <Icon name="image" />
             </div>
           )}
@@ -68,33 +82,106 @@ export function AnimeDetailPage({
             <AnimeLibraryActions key={anime.id} animeId={anime.id} />
           </div>
         </aside>
-        <div className="watch-anime-hero-copy">
+        <header className="anime-hero-head">
           <p className="anime-title-kicker">
             {anime.year > 0 && <span>{anime.year}</span>}
             <span>{formatLabels[anime.format ?? "unknown"]}</span>
             <span className={`anime-status ${anime.status}`}>{status}</span>
             {!!count && <span>{count} эп.</span>}
-            {!!details?.studios?.[0] && <span>{details.studios[0]}</span>}
-            {!!details?.ageRating && <span>{details.ageRating}</span>}
           </p>
           <h1>{anime.title}</h1>
-          <p className="anime-original-title">{anime.originalTitle}</p>
+          {!!anime.originalTitle && <p className="anime-original-title">{anime.originalTitle}</p>}
           <AnimeRatings anime={anime} />
-          <div className="watch-anime-meta" aria-label="Жанры аниме">
-            {anime.genres.map((genre) => (
-              <Link key={genre} href={`/catalog/genres/${encodeURIComponent(genre)}`}>
-                {genre}
-              </Link>
-            ))}
-          </div>
-          {!!description && (
-            <p className="anime-teaser">
-              {description.length > 260
-                ? description.slice(0, 260).replace(/\s\S*$/, "") + "…"
-                : description}{" "}
-              <a href="#anime-description">Всё описание ↓</a>
+        </header>
+        <div className="anime-hero-body">
+          {!!anime.genres.length && (
+            <div className="watch-anime-meta" aria-label="Жанры аниме">
+              {anime.genres.map((genre) => (
+                <Link key={genre} href={`/catalog/genres/${encodeURIComponent(genre)}`}>
+                  {genre}
+                </Link>
+              ))}
+            </div>
+          )}
+          <AnimeDescription text={description} />
+          <dl className="anime-facts" aria-label="Информация об аниме">
+            <div>
+              <dt>Тип</dt>
+              <dd>
+                <Link href={`/catalog/all?format=${anime.format ?? ""}`}>
+                  {formatLabels[anime.format ?? "unknown"]}
+                </Link>
+              </dd>
+            </div>
+            <div>
+              <dt>Год выпуска</dt>
+              <dd>
+                {anime.year > 0 ? (
+                  <Link href={`/catalog/all?from=${anime.year}&to=${anime.year}`}>
+                    {anime.year}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Статус</dt>
+              <dd>
+                <Link
+                  href={`/catalog/${anime.status === "ongoing" ? "ongoing" : anime.status === "announced" ? "announced" : "completed"}`}
+                >
+                  {status}
+                </Link>
+              </dd>
+            </div>
+            {!!count && (
+              <div>
+                <dt>Эпизоды</dt>
+                <dd>
+                  {anime.status === "ongoing" && details?.episodesTotal
+                    ? `${details.episodesAired ?? 0} / ${details.episodesTotal}`
+                    : count}
+                </dd>
+              </div>
+            )}
+            {!!details?.duration && (
+              <div>
+                <dt>Длительность</dt>
+                <dd>{details.duration} мин.</dd>
+              </div>
+            )}
+            {!!details?.studios?.length && (
+              <div>
+                <dt>Студия</dt>
+                <dd>{details.studios.join(", ")}</dd>
+              </div>
+            )}
+            {!!details?.airedAt && (
+              <div>
+                <dt>Премьера</dt>
+                <dd>{new Date(details.airedAt).toLocaleDateString("ru-RU")}</dd>
+              </div>
+            )}
+            {!!details?.releasedAt && (
+              <div>
+                <dt>Завершение</dt>
+                <dd>{new Date(details.releasedAt).toLocaleDateString("ru-RU")}</dd>
+              </div>
+            )}
+            {!!details?.ageRating && (
+              <div>
+                <dt>Возраст</dt>
+                <dd>{details.ageRating}</dd>
+              </div>
+            )}
+          </dl>
+          {!!anime.aliases.length && (
+            <p className="anime-aliases">
+              <span>Другие названия:</span> {anime.aliases.join(" · ")}
             </p>
           )}
+          <AnimeReleaseSchedule releases={releases} initialNow={releaseNow} />
           <p className="anime-hero-links">
             {franchise.items.length > 1 && (
               <Link href={`/anime/${anime.slug}/franchise`}>
@@ -103,10 +190,55 @@ export function AnimeDetailPage({
             )}
             <Link href={`/anime/${anime.slug}/community`}>Публикации и обсуждения →</Link>
           </p>
+          {process.env.DEMO_CATALOG === "true" && (
+            <p className="preview-note">
+              Страница из тестового каталога. Серии доступны у аниме из подключённого каталога.
+            </p>
+          )}
         </div>
-      </div>
+      </section>
+      <AnimeSections
+        sections={[
+          ...(screenshots.length || trailer
+            ? [
+                {
+                  id: "media",
+                  label:
+                    screenshots.length && trailer
+                      ? "Кадры и трейлер"
+                      : trailer
+                        ? "Трейлер"
+                        : "Кадры",
+                  ...(screenshots.length ? { count: screenshots.length } : {}),
+                  content: (
+                    // With a trailer: the video and four frames side by side, the rest in the lightbox.
+                    <div className={`anime-media-panel${trailer ? " has-trailer" : ""}`}>
+                      {trailer && <AnimeTrailer key={anime.id} urls={details?.trailerUrls ?? []} />}
+                      {!!screenshots.length && (
+                        <AnimeScreenshots
+                          images={screenshots}
+                          title={anime.title}
+                          {...(trailer ? { limit: 4 } : {})}
+                        />
+                      )}
+                    </div>
+                  ),
+                },
+              ]
+            : []),
+          ...(characters.length
+            ? [
+                {
+                  id: "characters",
+                  label: "Персонажи",
+                  count: characters.length,
+                  content: <AnimeCharacters characters={characters} />,
+                },
+              ]
+            : []),
+        ]}
+      />
       {initialEpisode && <ScrollToWatch />}
-      {/* The player comes right after the title; everything else sits in tabs under it. */}
       <AnimeWatch
         resumeRequested={resumeRequested}
         key={anime.id}
@@ -115,162 +247,19 @@ export function AnimeDetailPage({
         {...(initialEpisode ? { initialEpisode } : {})}
         {...(initialTime === undefined ? {} : { initialTime })}
       />
-      <AnimeSections
-        sections={[
-          {
-            id: "description",
-            label: "Описание",
-            content: (
-              <section className="anime-synopsis" id="anime-description">
-                <h2>Описание</h2>
-                <p>{description || "Описание пока не добавлено."}</p>
-              </section>
-            ),
-          },
-          {
-            id: "information",
-            label: "Информация",
-            content: (
-              <div className="anime-about">
-                <AnimeReleaseSchedule releases={releases} initialNow={releaseNow} />
-                <section className="anime-information" aria-label="Информация об аниме">
-                  <h2>Информация</h2>
-                  <dl className="anime-facts">
-                    <div>
-                      <dt>Тип</dt>
-                      <dd>
-                        <Link href={`/catalog/all?format=${anime.format ?? ""}`}>
-                          {formatLabels[anime.format ?? "unknown"]}
-                        </Link>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Год выпуска</dt>
-                      <dd>
-                        {anime.year > 0 ? (
-                          <Link href={`/catalog/all?from=${anime.year}&to=${anime.year}`}>
-                            {anime.year}
-                          </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Статус</dt>
-                      <dd>
-                        <Link
-                          href={`/catalog/${anime.status === "ongoing" ? "ongoing" : anime.status === "announced" ? "announced" : "completed"}`}
-                        >
-                          {status}
-                        </Link>
-                      </dd>
-                    </div>
-                    {!!count && (
-                      <div>
-                        <dt>Эпизоды</dt>
-                        <dd>
-                          {anime.status === "ongoing" && details?.episodesTotal
-                            ? `${details.episodesAired ?? 0} / ${details.episodesTotal}`
-                            : count}
-                        </dd>
-                      </div>
-                    )}
-                    {!!details?.duration && (
-                      <div>
-                        <dt>Длительность</dt>
-                        <dd>{details.duration} мин.</dd>
-                      </div>
-                    )}
-                    {!!details?.studios?.length && (
-                      <div>
-                        <dt>Студия</dt>
-                        <dd>{details.studios.join(", ")}</dd>
-                      </div>
-                    )}
-                    {!!details?.airedAt && (
-                      <div>
-                        <dt>Премьера</dt>
-                        <dd>{new Date(details.airedAt).toLocaleDateString("ru-RU")}</dd>
-                      </div>
-                    )}
-                    {!!details?.releasedAt && (
-                      <div>
-                        <dt>Завершение</dt>
-                        <dd>{new Date(details.releasedAt).toLocaleDateString("ru-RU")}</dd>
-                      </div>
-                    )}
-                    {!!details?.ageRating && (
-                      <div>
-                        <dt>Возраст</dt>
-                        <dd>{details.ageRating}</dd>
-                      </div>
-                    )}
-                    {!!anime.aliases.length && (
-                      <div className="anime-fact-aliases">
-                        <dt>Другие названия</dt>
-                        <dd>{anime.aliases.join(" · ")}</dd>
-                      </div>
-                    )}
-                  </dl>
-                </section>
-                {process.env.DEMO_CATALOG === "true" && (
-                  <p className="preview-note">
-                    Страница из тестового каталога. Серии доступны у аниме из подключённого
-                    каталога.
-                  </p>
-                )}
-              </div>
-            ),
-          },
-          {
-            id: "characters",
-            label: "Персонажи",
-            count: characters.length,
-            content: <AnimeCharacters characters={characters} />,
-          },
-          ...(details?.screenshots?.length
-            ? [
-                {
-                  id: "screenshots",
-                  label: "Кадры",
-                  count: details.screenshots.length,
-                  content: <AnimeScreenshots images={details.screenshots} title={anime.title} />,
-                },
-              ]
-            : []),
-          ...(details?.trailerUrls?.length
-            ? [
-                {
-                  id: "trailer",
-                  label: "Трейлер",
-                  content: <AnimeTrailer key={anime.id} urls={details.trailerUrls} />,
-                },
-              ]
-            : []),
-          {
-            id: "comments",
-            label: "Комментарии",
-            content: (
-              <section id="anime-comments">
-                <CommentsPanel
-                  key={anime.id + (initialEpisode?.id ?? "")}
-                  target={initialEpisode ? { episodeId: initialEpisode.id } : { animeId: anime.id }}
-                  context={{
-                    anime: { id: anime.id, slug: anime.slug, title: anime.title },
-                    ...(initialEpisode ? { episodeId: initialEpisode.id } : {}),
-                  }}
-                  title={
-                    initialEpisode
-                      ? `Комментарии к серии ${initialEpisode.number}`
-                      : "Комментарии к аниме"
-                  }
-                />
-              </section>
-            ),
-          },
-        ]}
-      />
+      <section className="anime-comments" id="anime-comments" data-compass="Комментарии">
+        <CommentsPanel
+          key={anime.id + (initialEpisode?.id ?? "")}
+          target={initialEpisode ? { episodeId: initialEpisode.id } : { animeId: anime.id }}
+          context={{
+            anime: { id: anime.id, slug: anime.slug, title: anime.title },
+            ...(initialEpisode ? { episodeId: initialEpisode.id } : {}),
+          }}
+          title={
+            initialEpisode ? `Комментарии к серии ${initialEpisode.number}` : "Комментарии к аниме"
+          }
+        />
+      </section>
     </article>
   );
 }

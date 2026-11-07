@@ -2,7 +2,7 @@
 import { usePathname } from "next/navigation";
 import { DetailNavigation } from "./DetailNavigation";
 
-// Description, details, cast, frames, trailer and comments share the "О тайтле" tabs under the player.
+// "О тайтле" is the title block with the frames and characters tabs; all of it is above the player.
 export function AnimeNavigation({ slug }: { slug: string; trailer?: boolean }) {
   const pathname = usePathname();
   const base = `/anime/${slug}`;
@@ -13,9 +13,9 @@ export function AnimeNavigation({ slug }: { slug: string; trailer?: boolean }) {
       board={pathname === `${base}/franchise`}
       attached={pathname === `${base}/community`}
       sections={[
+        { href: "#anime-about", label: "О тайтле" },
         { href: "#anime-watch", label: "Смотреть" },
         { href: "#anime-episodes", label: "Серии" },
-        { href: "#anime-information", label: "О тайтле" },
         { href: `${base}/franchise`, label: "Франшиза" },
         { href: `${base}/community`, label: "Обсуждения" },
       ]}

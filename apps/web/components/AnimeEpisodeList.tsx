@@ -15,7 +15,6 @@ export function AnimeEpisodeList({
   onSeasonChange,
   onEpisodeChange,
   durationMinutes,
-  airedAt,
   nextEpisodeAt,
   totalEpisodes,
 }: {
@@ -27,7 +26,6 @@ export function AnimeEpisodeList({
   onSeasonChange?: (season: string) => void;
   onEpisodeChange?: (episode: Episode) => void;
   durationMinutes?: number | undefined;
-  airedAt?: string | undefined;
   nextEpisodeAt?: string | undefined;
   totalEpisodes?: number | undefined;
 }) {
@@ -219,31 +217,33 @@ export function AnimeEpisodeList({
   }
   return (
     <section className="anime-episodes">
-      <div className="catalog-shelf-heading">
-        <h2>Серии</h2>
-        <span>
-          {visibleEpisodes.length
-            ? `${visibleEpisodes.length} доступно`
-            : "Список появится после загрузки плеера"}
-        </span>
-      </div>
-      <label className="anime-episode-search">
-        <span>Найти серию</span>
-        <input
-          type="search"
-          inputMode="numeric"
-          placeholder="Номер серии"
-          value={episodeQuery}
-          onChange={(event) => setEpisodeQuery(event.target.value)}
-        />
-      </label>
-      <div className="anime-viewing-summary">
-        <div>
-          <strong>
-            {account ? `${watchedCount} / ${visibleEpisodes.length}` : visibleEpisodes.length}
-          </strong>
-          <span>{account ? "серий просмотрено" : "серий доступно"}</span>
+      <div className="anime-episodes-head">
+        <div className="catalog-shelf-heading">
+          <h2>Серии</h2>
+          <span>
+            {visibleEpisodes.length
+              ? `${visibleEpisodes.length} доступно`
+              : "Список появится после загрузки плеера"}
+          </span>
         </div>
+        <label className="anime-episode-search">
+          <input
+            type="search"
+            inputMode="numeric"
+            aria-label="Найти серию"
+            placeholder="Найти серию по номеру"
+            value={episodeQuery}
+            onChange={(event) => setEpisodeQuery(event.target.value)}
+          />
+        </label>
+      </div>
+      <div className={`anime-viewing-summary${account ? "" : " guest"}`}>
+        {account && (
+          <div>
+            <strong>{`${watchedCount} / ${visibleEpisodes.length}`}</strong>
+            <span>серий просмотрено</span>
+          </div>
+        )}
         <p>
           {account
             ? `${remainingEpisodes} осталось посмотреть`
@@ -259,41 +259,33 @@ export function AnimeEpisodeList({
           {!!totalEpisodes && totalEpisodes > episodes.length && (
             <span> · ещё {totalEpisodes - episodes.length} ожидается</span>
           )}
-        </p>
-        <div
-          className="anime-viewing-bar"
-          role="progressbar"
-          aria-label="Просмотр сезона"
-          aria-valuenow={watchedCount}
-          aria-valuemin={0}
-          aria-valuemax={Math.max(1, visibleEpisodes.length)}
-        >
-          <i
-            style={{
-              width: `${visibleEpisodes.length ? (watchedCount / visibleEpisodes.length) * 100 : 0}%`,
-            }}
-          />
-        </div>
-      </div>
-      {(airedAt || nextEpisodeAt) && (
-        <p className="anime-episode-release-note">
-          {airedAt && (
-            <>
-              Премьера тайтла:{" "}
-              <time dateTime={airedAt}>{new Date(airedAt).toLocaleDateString("ru-RU")}</time>
-            </>
-          )}
           {nextEpisodeAt && (
-            <>
+            <span>
               {" "}
               · Следующая серия:{" "}
               <time dateTime={nextEpisodeAt}>
                 {new Date(nextEpisodeAt).toLocaleString("ru-RU", { timeZone: "Europe/Kyiv" })}
               </time>
-            </>
+            </span>
           )}
         </p>
-      )}
+        {account && (
+          <div
+            className="anime-viewing-bar"
+            role="progressbar"
+            aria-label="Просмотр сезона"
+            aria-valuenow={watchedCount}
+            aria-valuemin={0}
+            aria-valuemax={Math.max(1, visibleEpisodes.length)}
+          >
+            <i
+              style={{
+                width: `${visibleEpisodes.length ? (watchedCount / visibleEpisodes.length) * 100 : 0}%`,
+              }}
+            />
+          </div>
+        )}
+      </div>
       {seasons.length > 1 && (
         <div className="anime-internal-seasons" aria-label="Сезоны текущего тайтла">
           {seasons.map((season) => (
@@ -314,27 +306,29 @@ export function AnimeEpisodeList({
       )}
       {activeSeason && (
         <div className="anime-season" data-season={activeSeason}>
-          <div className="anime-season-rating">
-            <span>Оценка сезона</span>
-            {picker("season", activeSeason, "Оценить сезон")}
-            {account && visibleEpisodes.length > 0 && (
-              <button
-                className="anime-mark-all"
-                type="button"
-                disabled={marking}
-                onClick={() =>
-                  void (remainingEpisodes === 0
-                    ? mark(visibleEpisodes, false)
-                    : mark(
-                        visibleEpisodes.filter((e) => !saved(e)?.completed),
-                        true,
-                      ))
-                }
-              >
-                {remainingEpisodes === 0 ? "Снять все отметки" : "Отметить всё просмотренным"}
-              </button>
-            )}
-          </div>
+          {account && (
+            <div className="anime-season-rating">
+              <span>Оценка сезона</span>
+              {picker("season", activeSeason, "Оценить сезон")}
+              {visibleEpisodes.length > 0 && (
+                <button
+                  className="anime-mark-all"
+                  type="button"
+                  disabled={marking}
+                  onClick={() =>
+                    void (remainingEpisodes === 0
+                      ? mark(visibleEpisodes, false)
+                      : mark(
+                          visibleEpisodes.filter((e) => !saved(e)?.completed),
+                          true,
+                        ))
+                  }
+                >
+                  {remainingEpisodes === 0 ? "Снять все отметки" : "Отметить всё просмотренным"}
+                </button>
+              )}
+            </div>
+          )}
           {offer.length > 0 && (
             <p className="anime-mark-offer" role="status">
               <span>Отметить и пропущенные серии до этой?</span>

@@ -72,10 +72,6 @@
 .anime-detail-page [id] {
   scroll-margin-top: calc(var(--anime-navigation-height, 58px) + 8px);
 }
-.anime-facts > .anime-fact-aliases {
-  grid-template-columns: minmax(85px, calc((100% - 56px) * 0.175)) minmax(0, 1fr);
-  align-items: start;
-}
 .anime-screenshot-tools {
   display: flex;
   align-items: center;
@@ -754,9 +750,6 @@
   }
 }
 @media (max-width: 640px) {
-  .anime-facts > .anime-fact-aliases {
-    grid-template-columns: minmax(85px, 0.7fr) minmax(0, 1.3fr);
-  }
   .anime-screenshot-tools {
     flex-wrap: wrap;
   }

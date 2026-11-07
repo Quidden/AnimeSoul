@@ -136,12 +136,13 @@ test("anime and episode SSR keep season titles, select the opened franchise part
     assert.match(html, /noindex/);
     assert.equal(html.includes("watchedSeconds"), false);
     assert.equal(html.includes("csrfToken"), false);
-    assert.ok(
-      html.indexOf('aria-label="Разделы аниме"') < html.indexOf('class="watch-anime-hero"'),
-    );
-    // The player follows the title; screenshots and details come after it.
-    assert.ok(html.indexOf('class="watch-anime-hero"') < html.indexOf('id="anime-watch"'));
-    assert.ok(html.indexOf('id="anime-watch"') < html.indexOf('id="anime-screenshots"'));
+    assert.ok(html.indexOf('aria-label="Разделы аниме"') < html.indexOf('id="anime-about"'));
+    // Everything about the title (details, frames, trailer, characters) is above the player;
+    // only episodes and comments follow it.
+    assert.ok(html.indexOf('id="anime-about"') < html.indexOf('id="anime-screenshots"'));
+    assert.ok(html.indexOf('id="anime-screenshots"') < html.indexOf('id="anime-watch"'));
+    assert.ok(html.indexOf('id="anime-trailer"') < html.indexOf('id="anime-watch"'));
+    assert.ok(html.indexOf('id="anime-watch"') < html.indexOf('id="anime-episodes"'));
     assert.ok(html.indexOf('id="anime-episodes"') < html.indexOf('id="anime-comments"'));
     assert.match(html, /<iframe[^>]*src="https:\/\/www.youtube-nocookie.com\/embed\/7IQM5EPf2Y0"/);
     assert.match(html, /aria-label="Увеличить кадр 1"/);

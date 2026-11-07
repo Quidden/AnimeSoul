@@ -3,14 +3,25 @@ import { useEffect, useId, useRef, useState } from "react";
 import { RailControls } from "./RailControls";
 import { useRailNavigation } from "./useRailNavigation";
 
-export function AnimeScreenshots({ images, title }: { images: string[]; title: string }) {
+// With a `limit`, only that many frames are tiles; the last one shows how many more open in the
+// lightbox, which still steps through every frame.
+export function AnimeScreenshots({
+  images,
+  title,
+  limit,
+}: {
+  images: string[];
+  title: string;
+  limit?: number;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [closing, setClosing] = useState(false);
   const track = useRef<HTMLDivElement>(null);
   const id = useId();
-  const carousel = useRailNavigation(track, "img", images.length);
+  const shown = limit ? images.slice(0, limit) : images;
+  const carousel = useRailNavigation(track, "img", shown.length);
   function scrollFrames(direction: number) {
     const element = track.current;
     element?.scrollBy({
@@ -77,23 +88,33 @@ export function AnimeScreenshots({ images, title }: { images: string[]; title: s
             }
           }}
         >
-          {images.map((src, i) => (
-            <button
-              type="button"
-              key={src}
-              aria-label={`Увеличить кадр ${i + 1}`}
-              onClick={() => setSelected(i)}
-            >
-              <img
-                src={src}
-                alt={`Кадр ${i + 1}: ${title}`}
-                width={480}
-                height={270}
-                loading="lazy"
-              />
-              <span aria-hidden="true">↗</span>
-            </button>
-          ))}
+          {shown.map((src, i) => {
+            const more = i === shown.length - 1 ? images.length - shown.length : 0;
+            return (
+              <button
+                type="button"
+                key={src}
+                className={more ? "has-more" : undefined}
+                aria-label={more ? `Все кадры: ${images.length}` : `Увеличить кадр ${i + 1}`}
+                onClick={() => setSelected(i)}
+              >
+                <img
+                  src={src}
+                  alt={`Кадр ${i + 1}: ${title}`}
+                  width={480}
+                  height={270}
+                  loading="lazy"
+                />
+                {more ? (
+                  <strong className="anime-screenshot-more" aria-hidden="true">
+                    +{more}
+                  </strong>
+                ) : (
+                  <span aria-hidden="true">↗</span>
+                )}
+              </button>
+            );
+          })}
         </div>
         {carousel.enabled && (
           <RailControls
